@@ -1,0 +1,195 @@
+{
+  "entities": {
+    "UserVoicePreferences": {
+      "title": "UserVoicePreferences",
+      "description": "Stores a signed-in user's Google account metadata, saved favorite voices, plan tier, and daily AI usage counter.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth UID of the user.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "displayName": {
+          "type": "string",
+          "description": "User's Google display name.",
+          "maxLength": 120
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "User's verified Google email address.",
+          "maxLength": 254
+        },
+        "photoURL": {
+          "type": "string",
+          "description": "User's Google avatar URL.",
+          "maxLength": 512
+        },
+        "favorites": {
+          "type": "array",
+          "description": "List of favorited voice names (max 50)."
+        },
+        "plan": {
+          "type": "string",
+          "enum": ["free", "pro"],
+          "description": "User access tier. Always initialized as free; only admin can promote to pro.",
+          "maxLength": 10
+        },
+        "dailyCount": {
+          "type": "integer",
+          "description": "Number of AI generations used on lastUsageDate."
+        },
+        "lastUsageDate": {
+          "type": "string",
+          "description": "UTC date string (YYYY-MM-DD) for dailyCount reset.",
+          "maxLength": 10,
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the user document was created."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the user document was last updated."
+        }
+      },
+      "required": ["uid", "favorites", "plan", "dailyCount", "lastUsageDate", "createdAt", "updatedAt"]
+    },
+    "ProUpgradeRequest": {
+      "title": "ProUpgradeRequest",
+      "description": "Stores user payment submission details requesting Pro unlock approval from the admin.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth UID of the requesting user.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userEmail": {
+          "type": "string",
+          "format": "email",
+          "description": "Verified Google email of the requesting user.",
+          "maxLength": 254
+        },
+        "userName": {
+          "type": "string",
+          "description": "Display name of the requesting user.",
+          "maxLength": 120
+        },
+        "paymentMethod": {
+          "type": "string",
+          "enum": ["bKash", "Nagad", "Rocket", "Bank / Other"],
+          "description": "Payment method used to pay the Pro unlock fee.",
+          "maxLength": 32
+        },
+        "senderNumber": {
+          "type": "string",
+          "description": "Sender mobile number or account reference.",
+          "minLength": 4,
+          "maxLength": 30
+        },
+        "transactionId": {
+          "type": "string",
+          "description": "Payment transaction ID / reference.",
+          "minLength": 3,
+          "maxLength": 64
+        },
+        "amountText": {
+          "type": "string",
+          "description": "Fee amount reported paid.",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "note": {
+          "type": "string",
+          "description": "Optional note from the user.",
+          "maxLength": 300
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "approved", "rejected"],
+          "description": "Review status controlled by admin.",
+          "maxLength": 16
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when request was submitted."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when request was last updated."
+        }
+      },
+      "required": ["uid", "paymentMethod", "senderNumber", "transactionId", "amountText", "status", "createdAt", "updatedAt"]
+    },
+    "BillingConfig": {
+      "title": "BillingConfig",
+      "description": "Admin-configured Pro unlock pricing, payment instructions, and free daily quota limit.",
+      "type": "object",
+      "properties": {
+        "feeAmount": {
+          "type": "string",
+          "description": "Display price for Pro unlock (e.g. 50 BDT).",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "paymentMethod": {
+          "type": "string",
+          "description": "Accepted payment method label.",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "paymentAccount": {
+          "type": "string",
+          "description": "Account/mobile number to send payment to.",
+          "maxLength": 80
+        },
+        "instructions": {
+          "type": "string",
+          "description": "Payment instructions displayed to users.",
+          "maxLength": 500
+        },
+        "freeDailyLimit": {
+          "type": "integer",
+          "description": "Daily free generation limit per user (1-100)."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when billing config was last updated."
+        }
+      },
+      "required": ["feeAmount", "paymentMethod", "paymentAccount", "instructions", "freeDailyLimit", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "#/entities/UserVoicePreferences"
+      },
+      "description": "Per-user document storing Google info, favorites, plan tier, and daily AI usage. Owner read/update (except plan) and admin read/plan-update."
+    },
+    "/proRequests/{requestId}": {
+      "schema": {
+        "$ref": "#/entities/ProUpgradeRequest"
+      },
+      "description": "Pro upgrade payment verification requests submitted by users and approved/rejected by admin."
+    },
+    "/appConfig/{configId}": {
+      "schema": {
+        "$ref": "#/entities/BillingConfig"
+      },
+      "description": "Public Pro unlock fee & payment instructions readable by signed-in users, editable only by admin."
+    }
+  }
+}

@@ -5,7 +5,9 @@
 
 import React from 'react';
 import { FilterState } from '../types';
-import { Search, Sparkles, ChevronDown, Mic, LayoutGrid, GalleryHorizontalEnd, Sun, Moon, AudioLines, Heart } from 'lucide-react';
+import { Search, Sparkles, ChevronDown, Mic, LayoutGrid, GalleryHorizontalEnd, Sun, Moon, AudioLines, Heart, LogOut, Crown, Shield } from 'lucide-react';
+import type { User } from 'firebase/auth';
+import type { UserPlan } from '../types';
 
 interface FilterBarProps {
   filters: FilterState;
@@ -18,6 +20,14 @@ interface FilterBarProps {
   favoritesCount: number;
   isDarkMode: boolean;
   toggleTheme: () => void;
+  user?: User | null;
+  onSignOut?: () => void;
+  userPlan?: UserPlan;
+  usedToday?: number;
+  freeDailyLimit?: number;
+  isAdmin?: boolean;
+  onOpenProModal?: () => void;
+  onOpenAdminPanel?: () => void;
 }
 
 const FilterBar: React.FC<FilterBarProps> = ({ 
@@ -30,7 +40,15 @@ const FilterBar: React.FC<FilterBarProps> = ({
   onViewModeChange,
   favoritesCount,
   isDarkMode,
-  toggleTheme
+  toggleTheme,
+  user,
+  onSignOut,
+  userPlan = 'free',
+  usedToday = 0,
+  freeDailyLimit = 5,
+  isAdmin = false,
+  onOpenProModal,
+  onOpenAdminPanel,
 }) => {
   
   const handleGenderChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -56,8 +74,8 @@ const FilterBar: React.FC<FilterBarProps> = ({
                         <div className="w-9 h-9 bg-zinc-900 dark:bg-zinc-100 rounded-xl flex items-center justify-center shadow-lg shadow-zinc-900/10 shrink-0">
                             <Mic size={18} className="text-white dark:text-zinc-900" />
                         </div>
-                        <h1 className="hidden lg:block text-lg font-bold tracking-tight text-zinc-900 dark:text-white font-display whitespace-nowrap">
-                            Gemini Voice Library
+                        <h1 className="hidden md:block text-lg font-bold tracking-tight text-zinc-900 dark:text-white font-display whitespace-nowrap">
+                            Srabon Go
                         </h1>
                     </div>
 
@@ -74,8 +92,8 @@ const FilterBar: React.FC<FilterBarProps> = ({
                 {/* Right: Search, Filters & Actions */}
                 <div className="flex items-center gap-2 justify-end min-w-0 flex-1">
                     
-                    {/* Search Input (Flexible width) */}
-                    <div className="relative group w-full max-w-[120px] sm:max-w-[200px] transition-all">
+                    {/* Search Input (Desktop/Tablet) */}
+                    <div className="relative group hidden sm:block w-full max-w-[180px] md:max-w-[200px] transition-all">
                         <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-zinc-400 dark:text-zinc-500 group-focus-within:text-zinc-600 dark:group-focus-within:text-zinc-300 transition-colors">
                             <Search size={14} />
                         </div>
@@ -163,6 +181,35 @@ const FilterBar: React.FC<FilterBarProps> = ({
                             </button>
                         </div>
 
+                        {/* Pro / Quota / Admin Button */}
+                        {isAdmin && onOpenAdminPanel ? (
+                          <button
+                            type="button"
+                            onClick={onOpenAdminPanel}
+                            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-xs font-semibold transition-colors"
+                            title="Open Admin Panel"
+                          >
+                            <Shield size={13} />
+                            <span className="hidden md:inline">Admin</span>
+                          </button>
+                        ) : onOpenProModal ? (
+                          <button
+                            type="button"
+                            onClick={onOpenProModal}
+                            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-colors ${
+                              userPlan === 'pro'
+                                ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300'
+                                : 'bg-zinc-100 dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-200 hover:border-amber-300 dark:hover:border-amber-700'
+                            }`}
+                            title={userPlan === 'pro' ? 'Pro Plan Active' : `Free usage: ${usedToday}/${freeDailyLimit} today — Click to unlock Pro`}
+                          >
+                            <Crown size={13} className="text-amber-500" />
+                            <span className="hidden sm:inline">
+                              {userPlan === 'pro' ? 'Pro' : `${Math.max(0, freeDailyLimit - usedToday)} Left • Pro`}
+                            </span>
+                          </button>
+                        ) : null}
+
                         {/* Theme Toggle */}
                         <button
                             onClick={toggleTheme}
@@ -171,6 +218,38 @@ const FilterBar: React.FC<FilterBarProps> = ({
                         >
                             {isDarkMode ? <Sun size={14} /> : <Moon size={14} />}
                         </button>
+
+                        {/* User Avatar & Sign Out */}
+                        {user && (
+                          <div className="flex items-center gap-1.5 pl-1">
+                            {user.photoURL ? (
+                              <img
+                                src={user.photoURL}
+                                alt={user.displayName || user.email || 'User'}
+                                title={`${user.displayName || 'Signed in'}${user.email ? ` (${user.email})` : ''}`}
+                                referrerPolicy="no-referrer"
+                                className="w-8 h-8 rounded-full border border-zinc-200 dark:border-zinc-700 object-cover hidden sm:block"
+                              />
+                            ) : (
+                              <div
+                                title={user.email || user.displayName || 'Signed in'}
+                                className="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900/50 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 text-xs font-bold hidden sm:flex items-center justify-center"
+                              >
+                                {(user.displayName || user.email || 'U').charAt(0).toUpperCase()}
+                              </div>
+                            )}
+                            {onSignOut && (
+                              <button
+                                onClick={onSignOut}
+                                className="p-2 rounded-lg bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400 hover:text-red-600 dark:hover:text-red-400 hover:border-red-200 dark:hover:border-red-900/50 transition-colors"
+                                title="Sign Out"
+                                aria-label="Sign Out"
+                              >
+                                <LogOut size={14} />
+                              </button>
+                            )}
+                          </div>
+                        )}
                     </div>
 
                 </div>
@@ -180,11 +259,23 @@ const FilterBar: React.FC<FilterBarProps> = ({
         {/* Mobile Filters Sub-bar */}
         {viewMode !== 'studio' && (
           <div className="xl:hidden border-t border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50">
-              <div className="px-4 py-2 flex gap-2 overflow-x-auto scrollbar-hide">
+              <div className="px-4 py-2 flex items-center gap-2 overflow-x-auto scrollbar-hide">
+                   <div className="relative sm:hidden flex-1 min-w-[120px]">
+                      <div className="absolute inset-y-0 left-0 pl-2 flex items-center pointer-events-none text-zinc-400">
+                          <Search size={12} />
+                      </div>
+                      <input
+                          type="text"
+                          placeholder="Search..."
+                          value={filters.search}
+                          onChange={handleSearchChange}
+                          className="w-full pl-7 pr-2 py-1 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-md text-xs text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none"
+                      />
+                   </div>
                    <select
                       value={filters.gender}
                       onChange={handleGenderChange}
-                      className="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 py-1 px-3 rounded-md text-[10px] font-bold uppercase tracking-wide"
+                      className="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 py-1 px-3 rounded-md text-[10px] font-bold uppercase tracking-wide shrink-0"
                   >
                       <option value="All">All Genders</option>
                       {uniqueGenders.map(g => <option key={g} value={g}>{g}</option>)}
@@ -192,7 +283,7 @@ const FilterBar: React.FC<FilterBarProps> = ({
                   <select
                       value={filters.pitch}
                       onChange={handlePitchChange}
-                      className="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 py-1 px-3 rounded-md text-[10px] font-bold uppercase tracking-wide"
+                      className="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 py-1 px-3 rounded-md text-[10px] font-bold uppercase tracking-wide shrink-0"
                   >
                       <option value="All">All Pitches</option>
                       {uniquePitches.map(p => <option key={p} value={p}>{p}</option>)}

@@ -1,6 +1,5 @@
 /**
- * @license
- * SPDX-License-Identifier: Apache-2.0
+ * © 2026 Srabon Go — All Rights Reserved.
  */
 
 import React, { useState, useRef, useEffect } from 'react';
@@ -20,6 +19,7 @@ import {
 } from 'lucide-react';
 import { Voice } from '../types';
 import AudioVisualizer from './AudioVisualizer';
+import AdBanner from './AdBanner';
 import {
   decodeBase64,
   decodeAudioToBuffer,
@@ -31,6 +31,7 @@ interface TtsStudioProps {
   voices: Voice[];
   selectedVoiceName: string;
   onSelectVoice: (voiceName: string) => void;
+  onBeforeGenerate?: () => Promise<boolean>;
 }
 
 const DEFAULT_SCRIPT =
@@ -90,6 +91,7 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
   voices,
   selectedVoiceName,
   onSelectVoice,
+  onBeforeGenerate,
 }) => {
   const [text, setText] = useState(DEFAULT_SCRIPT);
   const [style, setStyle] = useState(STYLE_PRESETS[0].value);
@@ -221,6 +223,11 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
 
     setIsLoading(true);
     try {
+      if (onBeforeGenerate) {
+        const allowed = await onBeforeGenerate();
+        if (!allowed) return;
+      }
+
       const { audioData } = await generateTtsAudio({
         text: trimmed,
         voiceName: currentVoice?.name || 'Kore',
@@ -255,6 +262,11 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
       setIsLoading(true);
       setError(null);
       try {
+        if (onBeforeGenerate) {
+          const allowed = await onBeforeGenerate();
+          if (!allowed) return;
+        }
+
         const { audioData } = await generateTtsAudio({
           text: trimmed,
           voiceName: currentVoice?.name || 'Kore',
@@ -605,6 +617,16 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
             </div>
           </div>
         </div>
+
+        <AdBanner
+          slotId={import.meta.env.VITE_ADSENSE_SLOT_STUDIO}
+          format="horizontal"
+          className="mt-6"
+        />
+
+        <p className="mt-6 text-center text-[11px] text-zinc-400 dark:text-zinc-500">
+          © 2026 Srabon Go — All Rights Reserved
+        </p>
       </div>
     </div>
   );

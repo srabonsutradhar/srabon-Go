@@ -71,7 +71,10 @@ const Carousel3D: React.FC<Carousel3DProps> = ({
             handleNext();
         } else if (e.key === 'Enter' || e.key === ' ') {
             // Play active
-            onPlayToggle(voices[activeIndex].name);
+            const activeVoice = voices[activeIndex];
+            if (activeVoice) {
+              onPlayToggle(activeVoice.name);
+            }
         }
     };
     window.addEventListener('keydown', handleKeyDown);

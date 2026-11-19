@@ -1,0 +1,181 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isBootstrappedAdmin() {
+      return isVerifiedUser() && request.auth.token.email == 'srabon10010@gmail.com';
+    }
+
+    function isValidUserVoicePreferences(data, expectedUid) {
+      return data.keys().hasAll(['uid', 'favorites', 'plan', 'dailyCount', 'lastUsageDate', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'displayName', 'email', 'photoURL', 'favorites', 'plan', 'dailyCount', 'lastUsageDate', 'createdAt', 'updatedAt'])
+        && data.uid is string
+        && data.uid == expectedUid
+        && data.uid.size() >= 1
+        && data.uid.size() <= 128
+        && data.uid.matches('^[a-zA-Z0-9_\\-]+$')
+        && (!('displayName' in data) || (data.displayName is string && data.displayName.size() <= 120))
+        && (!('email' in data) || (data.email is string && data.email.size() <= 254))
+        && (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() <= 512))
+        && data.favorites is list
+        && data.favorites.size() <= 50
+        && (data.favorites.size() == 0 || (data.favorites[0] is string && data.favorites[0].size() >= 1 && data.favorites[0].size() <= 64))
+        && data.plan is string
+        && data.plan in ['free', 'pro']
+        && data.dailyCount is int
+        && data.dailyCount >= 0
+        && data.dailyCount <= 100000
+        && data.lastUsageDate is string
+        && data.lastUsageDate.size() == 10
+        && data.lastUsageDate.matches('^\\d{4}-\\d{2}-\\d{2}$')
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidProRequest(data) {
+      return data.keys().hasAll(['uid', 'paymentMethod', 'senderNumber', 'transactionId', 'amountText', 'status', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'userEmail', 'userName', 'paymentMethod', 'senderNumber', 'transactionId', 'amountText', 'note', 'status', 'createdAt', 'updatedAt'])
+        && data.uid is string
+        && data.uid.size() >= 1
+        && data.uid.size() <= 128
+        && data.uid.matches('^[a-zA-Z0-9_\\-]+$')
+        && (!('userEmail' in data) || (data.userEmail is string && data.userEmail.size() <= 254))
+        && (!('userName' in data) || (data.userName is string && data.userName.size() <= 120))
+        && data.paymentMethod is string
+        && data.paymentMethod in ['bKash', 'Nagad', 'Rocket', 'Bank / Other']
+        && data.senderNumber is string
+        && data.senderNumber.size() >= 4
+        && data.senderNumber.size() <= 30
+        && data.transactionId is string
+        && data.transactionId.size() >= 3
+        && data.transactionId.size() <= 64
+        && data.amountText is string
+        && data.amountText.size() >= 1
+        && data.amountText.size() <= 40
+        && (!('note' in data) || (data.note is string && data.note.size() <= 300))
+        && data.status is string
+        && data.status in ['pending', 'approved', 'rejected']
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidBillingConfig(data) {
+      return data.keys().hasAll(['feeAmount', 'paymentMethod', 'paymentAccount', 'instructions', 'freeDailyLimit', 'updatedAt'])
+        && data.keys().hasOnly(['feeAmount', 'paymentMethod', 'paymentAccount', 'instructions', 'freeDailyLimit', 'updatedAt'])
+        && data.feeAmount is string
+        && data.feeAmount.size() >= 1
+        && data.feeAmount.size() <= 40
+        && data.paymentMethod is string
+        && data.paymentMethod.size() >= 1
+        && data.paymentMethod.size() <= 60
+        && data.paymentAccount is string
+        && data.paymentAccount.size() <= 80
+        && data.instructions is string
+        && data.instructions.size() <= 500
+        && data.freeDailyLimit is int
+        && data.freeDailyLimit >= 1
+        && data.freeDailyLimit <= 100
+        && data.updatedAt is timestamp;
+    }
+
+    match /users/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && (isOwner(userId) || isBootstrappedAdmin());
+      allow list: if isBootstrappedAdmin();
+      allow create: if isVerifiedUser()
+        && isValidId(userId)
+        && isOwner(userId)
+        && isValidUserVoicePreferences(incoming(), userId)
+        && incoming().plan == 'free'
+        && incoming().dailyCount == 0
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser()
+        && isValidId(userId)
+        && isValidUserVoicePreferences(incoming(), userId)
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          (
+            isOwner(userId)
+            && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'email', 'photoURL', 'favorites', 'dailyCount', 'lastUsageDate', 'plan', 'updatedAt'])
+            && (
+              ('plan' in existing() && incoming().plan == existing().plan)
+              || (!('plan' in existing()) && incoming().plan == 'free')
+            )
+          )
+          ||
+          (
+            isBootstrappedAdmin()
+            && incoming().diff(existing()).affectedKeys().hasOnly(['plan', 'dailyCount', 'lastUsageDate', 'updatedAt'])
+          )
+        );
+      allow delete: if isVerifiedUser() && isValidId(userId) && isOwner(userId);
+    }
+
+    match /proRequests/{requestId} {
+      allow get: if isSignedIn() && isValidId(requestId) && (existing().uid == request.auth.uid || isBootstrappedAdmin());
+      allow list: if isBootstrappedAdmin() || (isVerifiedUser() && existing().uid == request.auth.uid);
+      allow create: if isVerifiedUser()
+        && isValidId(requestId)
+        && isValidProRequest(incoming())
+        && incoming().uid == request.auth.uid
+        && incoming().status == 'pending'
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isBootstrappedAdmin()
+        && isValidId(requestId)
+        && isValidProRequest(incoming())
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && existing().status == 'pending'
+        && incoming().status in ['approved', 'rejected']
+        && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']);
+      allow delete: if isBootstrappedAdmin() && isValidId(requestId);
+    }
+
+    match /appConfig/{configId} {
+      allow get: if isSignedIn() && isValidId(configId);
+      allow list: if false;
+      allow create: if isBootstrappedAdmin()
+        && isValidId(configId)
+        && isValidBillingConfig(incoming())
+        && incoming().updatedAt == request.time;
+      allow update: if isBootstrappedAdmin()
+        && isValidId(configId)
+        && isValidBillingConfig(incoming())
+        && incoming().updatedAt == request.time;
+      allow delete: if false;
+    }
+  }
+}

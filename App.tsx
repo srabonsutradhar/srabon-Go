@@ -11,31 +11,73 @@ import FilterBar from './components/FilterBar';
 import VoiceFinder from './components/VoiceFinder';
 import AiResultCard from './components/AiResultCard';
 import TtsStudio from './components/TtsStudio';
-import { FilterState, AiRecommendation } from './types';
-import { Info, Heart } from 'lucide-react';
+import GoogleLoginGate from './components/GoogleLoginGate';
+import ProUpgradeModal from './components/ProUpgradeModal';
+import AdminPanelModal from './components/AdminPanelModal';
+import { FilterState, AiRecommendation, BillingConfig, UserPlan } from './types';
+import { Info, Heart, Loader2 } from 'lucide-react';
+import { onAuthStateChanged, User } from 'firebase/auth';
+import { doc, onSnapshot, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { auth, db, signOutUser, handleFirestoreError, OperationType } from './firebase';
+import { initGoogleAdsTag } from './utils/googleAds';
+
+const ADMIN_EMAIL = 'srabon10010@gmail.com';
+
+const DEFAULT_BILLING_CONFIG: BillingConfig = {
+  feeAmount: '50 BDT',
+  paymentMethod: 'bKash / Nagad',
+  paymentAccount: '',
+  instructions:
+    'উপরের নম্বরে ফি পাঠিয়ে নিচের ফর্মে আপনার নম্বর ও Transaction ID (TrxID) জমা দিন। অ্যাডমিন যাচাই করেই Pro চালু করে দেবেন।',
+  freeDailyLimit: 5,
+};
+
+function getTodayUtcDate(): string {
+  return new Date().toISOString().slice(0, 10);
+}
 
 const FAVORITES_STORAGE_KEY = 'gemini-voice-favorites';
 
+function sanitizeFavorites(list: unknown): string[] {
+  if (!Array.isArray(list)) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const item of list) {
+    if (typeof item === 'string') {
+      const trimmed = item.trim().slice(0, 64);
+      if (trimmed.length >= 1 && !seen.has(trimmed)) {
+        seen.add(trimmed);
+        out.push(trimmed);
+      }
+    }
+    if (out.length >= 50) break;
+  }
+  return out;
+}
+
 const App: React.FC = () => {
+  const [user, setUser] = useState<User | null>(null);
+  const [authReady, setAuthReady] = useState(false);
   const [playingVoice, setPlayingVoice] = useState<string | null>(null);
   const [aiResult, setAiResult] = useState<AiRecommendation | null>(null);
   const [isAiCardVisible, setIsAiCardVisible] = useState(false);
   const [showVoiceFinder, setShowVoiceFinder] = useState(false);
   const [viewMode, setViewMode] = useState<'studio' | 'carousel' | 'grid' | 'favorites'>('studio');
   const [studioVoiceName, setStudioVoiceName] = useState<string>('Kore');
-  const [favorites, setFavorites] = useState<string[]>(() => {
-    try {
-      const saved = localStorage.getItem(FAVORITES_STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          return parsed.filter((item): item is string => typeof item === 'string');
-        }
-      }
-    } catch {}
-    return [];
-  });
+  const [favorites, setFavorites] = useState<string[]>([]);
+  const [userPlan, setUserPlan] = useState<UserPlan>('free');
+  const [dailyCount, setDailyCount] = useState<number>(0);
+  const [lastUsageDate, setLastUsageDate] = useState<string>(getTodayUtcDate());
+  const [billingConfig, setBillingConfig] = useState<BillingConfig>(DEFAULT_BILLING_CONFIG);
+  const [showProModal, setShowProModal] = useState(false);
+  const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
+
+  const isAdmin = Boolean(
+    user?.emailVerified && user?.email?.toLowerCase() === ADMIN_EMAIL
+  );
+  const todayStr = getTodayUtcDate();
+  const effectiveUsedToday = lastUsageDate === todayStr ? dailyCount : 0;
   
   // Carousel state
   const [activeIndex, setActiveIndex] = useState(0);
@@ -45,6 +87,105 @@ const App: React.FC = () => {
     pitch: 'All',
     search: '',
   });
+
+  // Firebase Auth listener
+  useEffect(() => {
+    initGoogleAdsTag();
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      setAuthReady(true);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Firestore user preferences & favorites sync (only when authenticated)
+  useEffect(() => {
+    if (!authReady || !user) return;
+
+    const userStorageKey = `${FAVORITES_STORAGE_KEY}:${user.uid}`;
+    try {
+      const saved = localStorage.getItem(userStorageKey);
+      if (saved) {
+        setFavorites(sanitizeFavorites(JSON.parse(saved)));
+      }
+    } catch {}
+
+    const userPath = `users/${user.uid}`;
+    const userRef = doc(db, 'users', user.uid);
+    let initializedDoc = false;
+
+    const unsubscribe = onSnapshot(
+      userRef,
+      async (snapshot) => {
+        if (snapshot.exists()) {
+          const data = snapshot.data();
+          setFavorites(sanitizeFavorites(data?.favorites));
+          setUserPlan(data?.plan === 'pro' ? 'pro' : 'free');
+          setDailyCount(typeof data?.dailyCount === 'number' ? data.dailyCount : 0);
+          setLastUsageDate(
+            typeof data?.lastUsageDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(data.lastUsageDate)
+              ? data.lastUsageDate
+              : getTodayUtcDate()
+          );
+        } else if (!initializedDoc) {
+          initializedDoc = true;
+          let localFavs: string[] = [];
+          try {
+            const saved = localStorage.getItem(userStorageKey);
+            if (saved) localFavs = sanitizeFavorites(JSON.parse(saved));
+          } catch {}
+
+          const today = getTodayUtcDate();
+          const payload: Record<string, any> = {
+            uid: user.uid.slice(0, 128),
+            favorites: localFavs,
+            plan: 'free',
+            dailyCount: 0,
+            lastUsageDate: today,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          };
+          if (user.displayName) payload.displayName = user.displayName.slice(0, 120);
+          if (user.email) payload.email = user.email.slice(0, 254);
+          if (user.photoURL) payload.photoURL = user.photoURL.slice(0, 512);
+
+          try {
+            await setDoc(userRef, payload);
+          } catch (error) {
+            handleFirestoreError(error, OperationType.CREATE, userPath);
+          }
+        }
+      },
+      (error) => {
+        handleFirestoreError(error, OperationType.GET, userPath);
+      }
+    );
+
+    const configRef = doc(db, 'appConfig', 'proPlan');
+    const unsubConfig = onSnapshot(
+      configRef,
+      (snap) => {
+        if (snap.exists()) {
+          const d = snap.data();
+          setBillingConfig({
+            feeAmount: typeof d?.feeAmount === 'string' && d.feeAmount ? d.feeAmount : DEFAULT_BILLING_CONFIG.feeAmount,
+            paymentMethod: typeof d?.paymentMethod === 'string' && d.paymentMethod ? d.paymentMethod : DEFAULT_BILLING_CONFIG.paymentMethod,
+            paymentAccount: typeof d?.paymentAccount === 'string' ? d.paymentAccount : '',
+            instructions: typeof d?.instructions === 'string' && d.instructions ? d.instructions : DEFAULT_BILLING_CONFIG.instructions,
+            freeDailyLimit: typeof d?.freeDailyLimit === 'number' && d.freeDailyLimit >= 1 ? d.freeDailyLimit : DEFAULT_BILLING_CONFIG.freeDailyLimit,
+          });
+        }
+      },
+      (error) => {
+        handleFirestoreError(error, OperationType.GET, 'appConfig/proPlan');
+      }
+    );
+
+    return () => {
+      unsubscribe();
+      unsubConfig();
+    };
+  }, [authReady, user]);
 
   // Theme Management
   useEffect(() => {
@@ -56,19 +197,122 @@ const App: React.FC = () => {
   }, [isDarkMode]);
 
   useEffect(() => {
+    if (!user) return;
     try {
-      localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(favorites));
+      localStorage.setItem(`${FAVORITES_STORAGE_KEY}:${user.uid}`, JSON.stringify(favorites));
     } catch {}
-  }, [favorites]);
+  }, [favorites, user]);
 
   const toggleTheme = () => setIsDarkMode(!isDarkMode);
 
-  const toggleFavorite = (voiceName: string) => {
-    setFavorites(prev =>
-      prev.includes(voiceName)
-        ? prev.filter(name => name !== voiceName)
-        : [...prev, voiceName]
+  const toggleFavorite = async (voiceName: string) => {
+    const nextFavorites = sanitizeFavorites(
+      favorites.includes(voiceName)
+        ? favorites.filter(name => name !== voiceName)
+        : [...favorites, voiceName]
     );
+    setFavorites(nextFavorites);
+
+    if (user) {
+      const userPath = `users/${user.uid}`;
+      const userRef = doc(db, 'users', user.uid);
+      const today = getTodayUtcDate();
+      const nextCount = lastUsageDate === today ? dailyCount : 0;
+      try {
+        await updateDoc(userRef, {
+          favorites: nextFavorites,
+          plan: userPlan,
+          dailyCount: nextCount,
+          lastUsageDate: today,
+          updatedAt: serverTimestamp(),
+        });
+      } catch (error: any) {
+        if (error?.code === 'not-found') {
+          const payload: Record<string, any> = {
+            uid: user.uid.slice(0, 128),
+            favorites: nextFavorites,
+            plan: 'free',
+            dailyCount: 0,
+            lastUsageDate: today,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          };
+          if (user.displayName) payload.displayName = user.displayName.slice(0, 120);
+          if (user.email) payload.email = user.email.slice(0, 254);
+          if (user.photoURL) payload.photoURL = user.photoURL.slice(0, 512);
+          try {
+            await setDoc(userRef, payload);
+          } catch (createErr) {
+            handleFirestoreError(createErr, OperationType.CREATE, userPath);
+          }
+        } else {
+          handleFirestoreError(error, OperationType.UPDATE, userPath);
+        }
+      }
+    }
+  };
+
+  const consumeAiQuota = async (): Promise<boolean> => {
+    if (!user) return false;
+    if (isAdmin || userPlan === 'pro') return true;
+
+    const today = getTodayUtcDate();
+    const currentUsed = lastUsageDate === today ? dailyCount : 0;
+    if (currentUsed >= billingConfig.freeDailyLimit) {
+      setShowProModal(true);
+      return false;
+    }
+
+    const nextCount = currentUsed + 1;
+    setDailyCount(nextCount);
+    setLastUsageDate(today);
+
+    const userPath = `users/${user.uid}`;
+    const userRef = doc(db, 'users', user.uid);
+    try {
+      await updateDoc(userRef, {
+        plan: userPlan,
+        dailyCount: nextCount,
+        lastUsageDate: today,
+        updatedAt: serverTimestamp(),
+      });
+    } catch (error: any) {
+      if (error?.code === 'not-found') {
+        const payload: Record<string, any> = {
+          uid: user.uid.slice(0, 128),
+          favorites,
+          plan: 'free',
+          dailyCount: nextCount,
+          lastUsageDate: today,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        };
+        if (user.displayName) payload.displayName = user.displayName.slice(0, 120);
+        if (user.email) payload.email = user.email.slice(0, 254);
+        if (user.photoURL) payload.photoURL = user.photoURL.slice(0, 512);
+        try {
+          await setDoc(userRef, payload);
+        } catch (createErr) {
+          handleFirestoreError(createErr, OperationType.CREATE, userPath);
+        }
+      } else {
+        handleFirestoreError(error, OperationType.UPDATE, userPath);
+      }
+    }
+    return true;
+  };
+
+  const handleSignOut = async () => {
+    setPlayingVoice(null);
+    setShowVoiceFinder(false);
+    setIsAiCardVisible(false);
+    setAiResult(null);
+    setFavorites([]);
+    setUserPlan('free');
+    setDailyCount(0);
+    setShowProModal(false);
+    setShowAdminPanel(false);
+    await signOutUser();
   };
 
   const uniqueGenders = useMemo(() => Array.from(new Set(VOICE_DATA.map(v => v.analysis.gender))).sort(), []);
@@ -104,7 +348,7 @@ const App: React.FC = () => {
 
   useEffect(() => {
     setActiveIndex(0);
-  }, [filteredVoices.length]);
+  }, [filteredVoices]);
 
   const handlePlayToggle = (voiceName: string) => {
     setPlayingVoice(current => current === voiceName ? null : voiceName);
@@ -129,7 +373,22 @@ const App: React.FC = () => {
     setFilters({ ...filters, search: '' });
   };
 
-  const isModalOpen = showVoiceFinder || (aiResult && isAiCardVisible);
+  const isModalOpen = Boolean(showVoiceFinder || showProModal || showAdminPanel || (aiResult && isAiCardVisible));
+
+  if (!authReady) {
+    return (
+      <div className="h-screen w-screen bg-[#FDFDFD] dark:bg-[#09090b] text-zinc-900 dark:text-zinc-100 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3 text-zinc-500 dark:text-zinc-400">
+          <Loader2 size={28} className="animate-spin text-indigo-600 dark:text-indigo-400" />
+          <p className="text-sm font-medium">Checking Google sign-in...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <GoogleLoginGate isDarkMode={isDarkMode} toggleTheme={toggleTheme} />;
+  }
 
   return (
     <div className="h-screen w-screen bg-[#FDFDFD] dark:bg-[#09090b] text-zinc-900 dark:text-zinc-100 font-sans overflow-hidden flex flex-col relative transition-colors duration-300">
@@ -144,8 +403,7 @@ const App: React.FC = () => {
       <div 
         className="flex flex-col flex-1 overflow-hidden" 
         aria-hidden={isModalOpen}
-        // @ts-ignore - 'inert' is a standard attribute but might not be in all TS types yet
-        inert={isModalOpen ? '' : undefined}
+        inert={isModalOpen}
         style={isModalOpen ? { pointerEvents: 'none' } : {}}
       >
         <FilterBar 
@@ -164,6 +422,14 @@ const App: React.FC = () => {
           favoritesCount={favorites.length}
           isDarkMode={isDarkMode}
           toggleTheme={toggleTheme}
+          user={user}
+          onSignOut={handleSignOut}
+          userPlan={userPlan}
+          usedToday={effectiveUsedToday}
+          freeDailyLimit={billingConfig.freeDailyLimit}
+          isAdmin={isAdmin}
+          onOpenProModal={() => setShowProModal(true)}
+          onOpenAdminPanel={() => setShowAdminPanel(true)}
         />
 
         <main className="flex-1 relative flex flex-col overflow-hidden">
@@ -172,6 +438,7 @@ const App: React.FC = () => {
                   voices={VOICE_DATA}
                   selectedVoiceName={studioVoiceName}
                   onSelectVoice={setStudioVoiceName}
+                  onBeforeGenerate={consumeAiQuota}
                 />
               ) : filteredVoices.length > 0 ? (
                   viewMode === 'carousel' ? (
@@ -272,6 +539,25 @@ const App: React.FC = () => {
                 setShowVoiceFinder(false);
             }}
             onClose={() => setShowVoiceFinder(false)}
+            onBeforeGenerate={consumeAiQuota}
+        />
+      )}
+
+      {showProModal && user && (
+        <ProUpgradeModal
+          user={user}
+          userPlan={userPlan}
+          usedToday={effectiveUsedToday}
+          billingConfig={billingConfig}
+          isAdmin={isAdmin}
+          onClose={() => setShowProModal(false)}
+        />
+      )}
+
+      {showAdminPanel && isAdmin && (
+        <AdminPanelModal
+          billingConfig={billingConfig}
+          onClose={() => setShowAdminPanel(false)}
         />
       )}
 
@@ -287,7 +573,8 @@ const App: React.FC = () => {
                  <AiResultCard 
                     result={aiResult} 
                     voices={filteredVoices} 
-                    onClose={clearAiResult} 
+                    onClose={clearAiResult}
+                    onBeforeGenerate={consumeAiQuota}
                  />
              </div>
           </div>

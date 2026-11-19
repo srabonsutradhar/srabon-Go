@@ -12,9 +12,10 @@ import { decodeBase64, decodeAudioToBuffer, createWavBlob, generateTtsAudio } fr
 interface AiTtsPreviewProps {
   text: string;
   voices: Voice[];
+  onBeforeGenerate?: () => Promise<boolean>;
 }
 
-const AiTtsPreview: React.FC<AiTtsPreviewProps> = ({ text, voices }) => {
+const AiTtsPreview: React.FC<AiTtsPreviewProps> = ({ text, voices, onBeforeGenerate }) => {
   const [selectedVoiceName, setSelectedVoiceName] = useState(voices[0]?.name || '');
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -69,6 +70,13 @@ const AiTtsPreview: React.FC<AiTtsPreviewProps> = ({ text, voices }) => {
     setError(null);
 
     try {
+      if (onBeforeGenerate) {
+        const allowed = await onBeforeGenerate();
+        if (!allowed) {
+          return;
+        }
+      }
+
       const { audioData } = await generateTtsAudio({
         text,
         voiceName: selectedVoiceName,

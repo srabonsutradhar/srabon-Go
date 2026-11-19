@@ -104,6 +104,9 @@ function serializeGenerateContentResponse(r: any) {
 
 const chats = new BoundedMap<string, any>(200);
 const videoOps = new BoundedMap<string, { op: any; ownerKey: string }>(100);
+const apiRateLimits = new BoundedMap<string, { count: number; resetAt: number }>(1000);
+const RATE_LIMIT_WINDOW_MS = 60_000;
+const RATE_LIMIT_MAX_REQUESTS = 45;
 
 function getClientKey(req: any): string {
   const raw = req?.headers?.["x-client-id"];
@@ -116,6 +119,23 @@ function getClientKey(req: any): string {
     .filter(Boolean);
   const xff = xffParts.length >= 2 ? xffParts[xffParts.length - 2] : (xffParts[0] || "");
   return `ip:${xff || req?.ip || req?.socket?.remoteAddress || "unknown"}`;
+}
+
+function aiRateLimitMiddleware(req: any, res: any, next: any) {
+  const key = getClientKey(req);
+  const now = Date.now();
+  const entry = apiRateLimits.get(key);
+  if (!entry || now >= entry.resetAt) {
+    apiRateLimits.set(key, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+    return next();
+  }
+  if (entry.count >= RATE_LIMIT_MAX_REQUESTS) {
+    return res.status(429).json({
+      error: "Too many requests. Please wait a moment before generating again.",
+    });
+  }
+  entry.count += 1;
+  return next();
 }
 
 async function startServer() {
@@ -143,6 +163,14 @@ async function startServer() {
     res.json({ status: "ok" });
   });
 
+  app.use("/api/tts", aiRateLimitMiddleware);
+  app.use("/api/generate-content", aiRateLimitMiddleware);
+  app.use("/api/generate-content-stream", aiRateLimitMiddleware);
+  app.use("/api/chat-message", aiRateLimitMiddleware);
+  app.use("/api/chat-stream", aiRateLimitMiddleware);
+  app.use("/api/generate-images", aiRateLimitMiddleware);
+  app.use("/api/generate-videos", aiRateLimitMiddleware);
+
   app.post("/api/tts", async (req, res): Promise<any> => {
     try {
       const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
@@ -154,12 +182,15 @@ async function startServer() {
 
       const text = typeof req.body?.text === "string" ? req.body.text.trim() : "";
       const voiceName = typeof req.body?.voiceName === "string" && req.body.voiceName.trim()
-        ? req.body.voiceName.trim()
+        ? req.body.voiceName.trim().slice(0, 50)
         : "Kore";
-      const style = typeof req.body?.style === "string" ? req.body.style.trim() : "";
+      const style = typeof req.body?.style === "string" ? req.body.style.trim().slice(0, 200) : "";
 
       if (!text) {
         return res.status(400).json({ error: "Text is required for speech generation." });
+      }
+      if (text.length > 5000) {
+        return res.status(400).json({ error: "Text is too long (maximum 5,000 characters)." });
       }
 
       const ai = createAiClient(apiKey);
@@ -414,6 +445,10 @@ async function startServer() {
 
   app.get("/api/video-download", (_req, res) => {
     res.status(404).json({ error: "Video download is not enabled for this applet." });
+  });
+
+  app.use("/api", (_req, res) => {
+    res.status(404).json({ error: "API route not found." });
   });
 
   if (process.env.NODE_ENV !== "production") {

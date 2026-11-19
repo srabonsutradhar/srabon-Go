@@ -6,6 +6,7 @@
 import React from 'react';
 import { Voice } from '../types';
 import VoiceCard from './VoiceCard';
+import AdBanner from './AdBanner';
 
 interface GridViewProps {
   voices: Voice[];
@@ -40,6 +41,12 @@ const GridView: React.FC<GridViewProps> = ({
                     />
                 ))}
             </div>
+
+            <AdBanner
+              slotId={import.meta.env.VITE_ADSENSE_SLOT_GRID}
+              format="auto"
+              className="mt-10"
+            />
             
             {/* Spacer for bottom control bar */}
             <div className="h-32"></div>

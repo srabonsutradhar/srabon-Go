@@ -12,9 +12,10 @@ interface VoiceFinderProps {
   voices: Voice[];
   onRecommendation: (rec: AiRecommendation | null) => void;
   onClose: () => void;
+  onBeforeGenerate?: () => Promise<boolean>;
 }
 
-const VoiceFinder: React.FC<VoiceFinderProps> = ({ voices, onRecommendation, onClose }) => {
+const VoiceFinder: React.FC<VoiceFinderProps> = ({ voices, onRecommendation, onClose, onBeforeGenerate }) => {
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -71,6 +72,14 @@ const VoiceFinder: React.FC<VoiceFinderProps> = ({ voices, onRecommendation, onC
     setError(null);
 
     try {
+      if (onBeforeGenerate) {
+        const allowed = await onBeforeGenerate();
+        if (!allowed) {
+          setLoading(false);
+          return;
+        }
+      }
+
       const ai = new GoogleGenAI({ apiKey: "server-side" });
       
       const simplifiedVoices = voices.map(v => ({
