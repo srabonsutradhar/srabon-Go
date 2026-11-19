@@ -5,7 +5,7 @@
 
 import React from 'react';
 import { FilterState } from '../types';
-import { Search, Sparkles, ChevronDown, Mic, LayoutGrid, GalleryHorizontalEnd, Sun, Moon, AudioLines, Heart, LogOut, Crown, Shield } from 'lucide-react';
+import { Search, Sparkles, ChevronDown, Mic, LayoutGrid, GalleryHorizontalEnd, Sun, Moon, AudioLines, Heart, LogOut, Crown, Shield, Gift } from 'lucide-react';
 import type { User } from 'firebase/auth';
 import type { UserPlan } from '../types';
 
@@ -25,8 +25,9 @@ interface FilterBarProps {
   userPlan?: UserPlan;
   usedToday?: number;
   freeDailyLimit?: number;
+  bonusCredits?: number;
   isAdmin?: boolean;
-  onOpenProModal?: () => void;
+  onOpenProModal?: (tab?: 'refer' | 'pro') => void;
   onOpenAdminPanel?: () => void;
 }
 
@@ -46,6 +47,7 @@ const FilterBar: React.FC<FilterBarProps> = ({
   userPlan = 'free',
   usedToday = 0,
   freeDailyLimit = 5,
+  bonusCredits = 0,
   isAdmin = false,
   onOpenProModal,
   onOpenAdminPanel,
@@ -181,7 +183,23 @@ const FilterBar: React.FC<FilterBarProps> = ({
                             </button>
                         </div>
 
-                        {/* Pro / Quota / Admin Button */}
+                        {/* Pro / Refer Credits / Admin Button */}
+                        {onOpenProModal && !isAdmin && (
+                          <button
+                            type="button"
+                            onClick={() => onOpenProModal('refer')}
+                            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-xs font-semibold transition-colors"
+                            title="Refer friends to earn +10 Credits each"
+                          >
+                            <Gift size={13} />
+                            <span className="hidden lg:inline">Refer +10</span>
+                            {bonusCredits > 0 && (
+                              <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-indigo-200/80 dark:bg-indigo-900 text-indigo-800 dark:text-indigo-200">
+                                {bonusCredits} Cr
+                              </span>
+                            )}
+                          </button>
+                        )}
                         {isAdmin && onOpenAdminPanel ? (
                           <button
                             type="button"
@@ -195,17 +213,19 @@ const FilterBar: React.FC<FilterBarProps> = ({
                         ) : onOpenProModal ? (
                           <button
                             type="button"
-                            onClick={onOpenProModal}
+                            onClick={() => onOpenProModal('pro')}
                             className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-colors ${
                               userPlan === 'pro'
                                 ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300'
                                 : 'bg-zinc-100 dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-200 hover:border-amber-300 dark:hover:border-amber-700'
                             }`}
-                            title={userPlan === 'pro' ? 'Pro Plan Active' : `Free usage: ${usedToday}/${freeDailyLimit} today — Click to unlock Pro`}
+                            title={userPlan === 'pro' ? 'Pro Plan Active' : `Free usage: ${usedToday}/${freeDailyLimit} today • Bonus: ${bonusCredits} Credits`}
                           >
                             <Crown size={13} className="text-amber-500" />
                             <span className="hidden sm:inline">
-                              {userPlan === 'pro' ? 'Pro' : `${Math.max(0, freeDailyLimit - usedToday)} Left • Pro`}
+                              {userPlan === 'pro'
+                                ? 'Pro'
+                                : `${Math.max(0, freeDailyLimit - usedToday)} Left • Pro`}
                             </span>
                           </button>
                         ) : null}

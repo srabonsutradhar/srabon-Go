@@ -20,6 +20,7 @@ import {
 import { Voice } from '../types';
 import AudioVisualizer from './AudioVisualizer';
 import AdBanner from './AdBanner';
+import type { LegalTab } from './SiteLegalModal';
 import {
   decodeBase64,
   decodeAudioToBuffer,
@@ -32,6 +33,7 @@ interface TtsStudioProps {
   selectedVoiceName: string;
   onSelectVoice: (voiceName: string) => void;
   onBeforeGenerate?: () => Promise<boolean>;
+  onOpenLegal?: (tab: LegalTab) => void;
 }
 
 const DEFAULT_SCRIPT =
@@ -92,6 +94,7 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
   selectedVoiceName,
   onSelectVoice,
   onBeforeGenerate,
+  onOpenLegal,
 }) => {
   const [text, setText] = useState(DEFAULT_SCRIPT);
   const [style, setStyle] = useState(STYLE_PRESETS[0].value);
@@ -401,16 +404,23 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
                   id="tts-script-input"
                   value={text}
                   onChange={(e) => {
+                    if (isPlaying) stopPlayback();
                     setText(e.target.value);
                     setError(null);
+                  }}
+                  onKeyDown={(e) => {
+                    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+                      e.preventDefault();
+                      handleGenerateAndPlay();
+                    }
                   }}
                   rows={4}
                   placeholder="Enter or paste text in Bengali, English, or any language..."
                   className="w-full rounded-2xl bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 p-4 text-lg sm:text-xl leading-relaxed text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:focus:ring-indigo-900 focus:border-indigo-400 dark:focus:border-indigo-600 transition-all resize-none"
                 />
                 <div className="flex justify-between items-center text-xs text-zinc-400 dark:text-zinc-500 px-1">
-                  <span>Supports expressive multilingual synthesis</span>
-                  <span>{text.length} chars</span>
+                  <span>Supports Bengali, English &amp; multilingual speech · Ctrl/Cmd+Enter to play</span>
+                  <span className="tabular-nums">{text.length} chars</span>
                 </div>
               </div>
 
@@ -420,7 +430,7 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
                   htmlFor="tts-style-input"
                   className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400"
                 >
-                  Delivery Tone & Style
+                  Delivery Tone &amp; Style
                 </label>
                 <div className="flex flex-wrap gap-1.5">
                   {STYLE_PRESETS.map((preset) => {
@@ -429,7 +439,10 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
                       <button
                         key={preset.id}
                         type="button"
-                        onClick={() => setStyle(preset.value)}
+                        onClick={() => {
+                          if (isPlaying) stopPlayback();
+                          setStyle(preset.value);
+                        }}
                         className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${
                           selected
                             ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800'
@@ -445,7 +458,10 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
                   id="tts-style-input"
                   type="text"
                   value={style}
-                  onChange={(e) => setStyle(e.target.value)}
+                  onChange={(e) => {
+                    if (isPlaying) stopPlayback();
+                    setStyle(e.target.value);
+                  }}
                   placeholder="Optional vocal direction (e.g. Cheerful morning host)..."
                   className="w-full rounded-xl bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 px-3.5 py-2 text-sm text-zinc-800 dark:text-zinc-200 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:focus:ring-indigo-900"
                 />
@@ -624,9 +640,17 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
           className="mt-6"
         />
 
-        <p className="mt-6 text-center text-[11px] text-zinc-400 dark:text-zinc-500">
-          © 2026 Srabon Go — All Rights Reserved
-        </p>
+        <footer className="mt-8 pt-6 border-t border-zinc-200/70 dark:border-zinc-800/80 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-zinc-400 dark:text-zinc-500">
+          <span>© 2026 Srabon Go — All Rights Reserved</span>
+          {onOpenLegal && (
+            <div className="flex items-center gap-4">
+              <button type="button" onClick={() => onOpenLegal('about')} className="hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors">About</button>
+              <button type="button" onClick={() => onOpenLegal('privacy')} className="hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors">Privacy Policy</button>
+              <button type="button" onClick={() => onOpenLegal('terms')} className="hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors">Terms</button>
+              <button type="button" onClick={() => onOpenLegal('contact')} className="hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors">Contact</button>
+            </div>
+          )}
+        </footer>
       </div>
     </div>
   );

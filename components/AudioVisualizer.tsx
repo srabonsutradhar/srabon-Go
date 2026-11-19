@@ -53,16 +53,28 @@ const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ isPlaying, color = '#
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Set canvas size for retina displays
-    const dpr = window.devicePixelRatio || 1;
-    const rect = canvas.getBoundingClientRect();
-    canvas.width = rect.width * dpr;
-    canvas.height = rect.height * dpr;
-    ctx.scale(dpr, dpr);
+    const prefersReducedMotion =
+      typeof window !== 'undefined' &&
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    let rect = canvas.getBoundingClientRect();
+    const syncCanvasSize = () => {
+      const dpr = window.devicePixelRatio || 1;
+      rect = canvas.getBoundingClientRect();
+      canvas.width = Math.max(1, Math.floor(rect.width * dpr));
+      canvas.height = Math.max(1, Math.floor(rect.height * dpr));
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    };
+    syncCanvasSize();
+
+    const resizeObserver =
+      typeof ResizeObserver !== 'undefined' ? new ResizeObserver(syncCanvasSize) : null;
+    resizeObserver?.observe(canvas);
 
     const draw = () => {
       if (!ctx || !canvas) return;
-      
+
       const width = rect.width;
       const height = rect.height;
       const centerY = height / 2;
@@ -70,7 +82,6 @@ const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ isPlaying, color = '#
       ctx.clearRect(0, 0, width, height);
 
       if (!isPlaying) {
-        // Draw a flat line when not playing
         ctx.beginPath();
         ctx.moveTo(0, centerY);
         ctx.lineTo(width, centerY);
@@ -81,18 +92,18 @@ const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ isPlaying, color = '#
         return;
       }
 
-      phaseRef.current += 0.15;
-      
-      // Calculate current color based on phase
-      // Slow down the color cycle relative to the wave animation
-      const colorPhase = phaseRef.current * 0.05; 
+      if (!prefersReducedMotion) {
+        phaseRef.current += 0.15;
+      }
+
+      const colorPhase = phaseRef.current * 0.05;
       const colorIndex = Math.floor(colorPhase) % GOOGLE_COLORS.length;
       const nextColorIndex = (colorIndex + 1) % GOOGLE_COLORS.length;
       const colorFactor = colorPhase % 1;
-      
+
       const currentColor = interpolateColor(
-        GOOGLE_COLORS[colorIndex], 
-        GOOGLE_COLORS[nextColorIndex], 
+        GOOGLE_COLORS[colorIndex],
+        GOOGLE_COLORS[nextColorIndex],
         colorFactor
       );
 
@@ -102,16 +113,12 @@ const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ isPlaying, color = '#
       const points = 100;
       for (let i = 0; i <= points; i++) {
         const x = (i / points) * width;
-        
-        // Combine multiple sine waves for a more complex "voice" look
-        // We modulate the amplitude based on x to taper the ends
-        const envelope = Math.sin((i / points) * Math.PI); 
-        
-        const y = centerY + 
+        const envelope = Math.sin((i / points) * Math.PI);
+        const y =
+          centerY +
           Math.sin(i * 0.2 + phaseRef.current) * 15 * envelope +
           Math.sin(i * 0.5 - phaseRef.current * 2) * 8 * envelope +
           Math.sin(i * 0.1 + phaseRef.current * 0.5) * 5 * envelope;
-
         ctx.lineTo(x, y);
       }
 
@@ -121,15 +128,13 @@ const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ isPlaying, color = '#
       ctx.lineJoin = 'round';
       ctx.globalAlpha = 0.8;
       ctx.stroke();
-      
-      // Add a second, fainter line for depth
+
       ctx.beginPath();
       ctx.moveTo(0, centerY);
       for (let i = 0; i <= points; i++) {
         const x = (i / points) * width;
-        const envelope = Math.sin((i / points) * Math.PI); 
-        const y = centerY + 
-          Math.sin(i * 0.2 + phaseRef.current + 1) * 15 * envelope;
+        const envelope = Math.sin((i / points) * Math.PI);
+        const y = centerY + Math.sin(i * 0.2 + phaseRef.current + 1) * 15 * envelope;
         ctx.lineTo(x, y);
       }
       ctx.strokeStyle = currentColor;
@@ -137,13 +142,16 @@ const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ isPlaying, color = '#
       ctx.globalAlpha = 0.3;
       ctx.stroke();
 
-      animationRef.current = requestAnimationFrame(draw);
+      if (!prefersReducedMotion) {
+        animationRef.current = requestAnimationFrame(draw);
+      }
     };
 
     draw();
 
     return () => {
       cancelAnimationFrame(animationRef.current);
+      resizeObserver?.disconnect();
     };
   }, [isPlaying, color]);
 

@@ -92,6 +92,23 @@ export function createWavBlob(
   return new Blob([buffer], { type: 'audio/wav' });
 }
 
+function getAppletClientId(): string {
+  try {
+    if (typeof sessionStorage !== 'undefined') {
+      let id = sessionStorage.getItem('__ais_cid');
+      if (!id || !/^[a-zA-Z0-9_-]{8,128}$/.test(id)) {
+        id =
+          typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+            ? crypto.randomUUID()
+            : Array.from({ length: 24 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
+        sessionStorage.setItem('__ais_cid', id);
+      }
+      return id;
+    }
+  } catch {}
+  return 'anonclient0001';
+}
+
 export async function generateTtsAudio(params: {
   text: string;
   voiceName: string;
@@ -99,7 +116,10 @@ export async function generateTtsAudio(params: {
 }): Promise<{ audioData: string; mimeType: string }> {
   const response = await fetch('/api/tts', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'x-client-id': getAppletClientId(),
+    },
     body: JSON.stringify(params),
   });
 

@@ -150,16 +150,25 @@ const VoiceFinder: React.FC<VoiceFinderProps> = ({ voices, onRecommendation, onC
         }
       });
 
-      const result = JSON.parse(response.text || '{}');
-      
-      if (result.recommendedVoices && result.recommendedVoices.length > 0) {
+      const rawText = (response.text || '{}')
+        .trim()
+        .replace(/^```(?:json)?\s*/i, '')
+        .replace(/```\s*$/i, '')
+        .trim();
+      const result = JSON.parse(rawText);
+      const validVoiceSet = new Set(voices.map(v => v.name));
+      const matchedVoices = Array.isArray(result.recommendedVoices)
+        ? result.recommendedVoices.filter((name: unknown): name is string => typeof name === 'string' && validVoiceSet.has(name))
+        : [];
+
+      if (matchedVoices.length > 0) {
         onRecommendation({
-          voiceNames: result.recommendedVoices,
-          systemInstruction: result.systemInstruction,
-          sampleText: result.sampleText
+          voiceNames: matchedVoices,
+          systemInstruction: typeof result.systemInstruction === 'string' ? result.systemInstruction : '',
+          sampleText: typeof result.sampleText === 'string' && result.sampleText.trim() ? result.sampleText : query.trim(),
         });
       } else {
-        setError("No matching voices found.");
+        setError("No matching voices found. Please try refining your description.");
       }
 
     } catch (err) {

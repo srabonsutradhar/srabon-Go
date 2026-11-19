@@ -71,4 +71,7 @@ export interface UserAccountRecord {
   dailyCount: number;
   lastUsageDate: string;
   favorites: string[];
+  referralCode?: string;
+  bonusCredits?: number;
+  referralCount?: number;
 }

@@ -2,7 +2,7 @@
   "entities": {
     "UserVoicePreferences": {
       "title": "UserVoicePreferences",
-      "description": "Stores a signed-in user's Google account metadata, saved favorite voices, plan tier, and daily AI usage counter.",
+      "description": "Stores a signed-in user's Google account metadata, saved favorite voices, plan tier, daily AI usage counter, and referral credits.",
       "type": "object",
       "properties": {
         "uid": {
@@ -48,6 +48,21 @@
           "maxLength": 10,
           "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
         },
+        "referralCode": {
+          "type": "string",
+          "description": "Unique uppercase alphanumeric referral code for this user.",
+          "minLength": 6,
+          "maxLength": 16,
+          "pattern": "^[A-Z0-9]+$"
+        },
+        "bonusCredits": {
+          "type": "integer",
+          "description": "Referral bonus AI credits earned (+10 per referred friend). Never self-increasable by owner."
+        },
+        "referralCount": {
+          "type": "integer",
+          "description": "Total number of friends successfully referred by this user."
+        },
         "createdAt": {
           "type": "string",
           "format": "date-time",
@@ -60,6 +75,71 @@
         }
       },
       "required": ["uid", "favorites", "plan", "dailyCount", "lastUsageDate", "createdAt", "updatedAt"]
+    },
+    "ReferralCodeMap": {
+      "title": "ReferralCodeMap",
+      "description": "Public non-PII mapping from a short referral code to the owning user's UID.",
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string",
+          "description": "Referral code matching document ID.",
+          "minLength": 6,
+          "maxLength": 16,
+          "pattern": "^[A-Z0-9]+$"
+        },
+        "uid": {
+          "type": "string",
+          "description": "Owner UID of this referral code.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when code was registered."
+        }
+      },
+      "required": ["code", "uid", "createdAt"]
+    },
+    "ReferralClaim": {
+      "title": "ReferralClaim",
+      "description": "One-time immutable record created when a referred user claims a friend's referral code, granting +10 credits atomically to the referrer.",
+      "type": "object",
+      "properties": {
+        "referredUid": {
+          "type": "string",
+          "description": "UID of the user who signed up via referral (matches document ID).",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "referrerUid": {
+          "type": "string",
+          "description": "UID of the referring user who receives +10 bonusCredits.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "referralCode": {
+          "type": "string",
+          "description": "Validated referral code used.",
+          "minLength": 6,
+          "maxLength": 16,
+          "pattern": "^[A-Z0-9]+$"
+        },
+        "rewardCredits": {
+          "type": "integer",
+          "description": "Fixed reward amount (10 credits)."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when referral was claimed."
+        }
+      },
+      "required": ["referredUid", "referrerUid", "referralCode", "rewardCredits", "createdAt"]
     },
     "ProUpgradeRequest": {
       "title": "ProUpgradeRequest",
@@ -177,7 +257,19 @@
       "schema": {
         "$ref": "#/entities/UserVoicePreferences"
       },
-      "description": "Per-user document storing Google info, favorites, plan tier, and daily AI usage. Owner read/update (except plan) and admin read/plan-update."
+      "description": "Per-user document storing Google info, favorites, plan tier, daily AI usage, and referral bonusCredits."
+    },
+    "/referralCodes/{code}": {
+      "schema": {
+        "$ref": "#/entities/ReferralCodeMap"
+      },
+      "description": "Non-PII lookup table mapping a referral code to its owner UID."
+    },
+    "/referrals/{referredUid}": {
+      "schema": {
+        "$ref": "#/entities/ReferralClaim"
+      },
+      "description": "One-time referral claim record preventing self-referral or duplicate claims."
     },
     "/proRequests/{requestId}": {
       "schema": {

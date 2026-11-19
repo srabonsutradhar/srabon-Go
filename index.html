@@ -3,14 +3,36 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Srabon Go</title>
-    <meta name="description" content="Srabon Go — Multilingual AI Voice Studio, Text-to-Speech, and Voice Casting Library." />
-    <meta property="og:title" content="Srabon Go" />
-    <meta property="og:description" content="Srabon Go — Multilingual AI Voice Studio, Text-to-Speech, and Voice Casting Library." />
+    <title>Srabon Go – AI Voice Studio & Multilingual Text-to-Speech</title>
+    <meta name="description" content="Create natural Bengali and global voiceovers with Srabon Go. Preview 30 studio voices, cast characters with AI, earn +10 referral credits, and download WAV audio." />
+    <meta name="theme-color" content="#18181b" />
+    <meta property="og:title" content="Srabon Go – AI Voice Studio & Multilingual Text-to-Speech" />
+    <meta property="og:description" content="Preview 30 AI studio voices, speak Bengali and global scripts aloud, cast characters with AI, and download crisp WAV audio on Srabon Go." />
     <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Srabon Go" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Srabon Go – AI Voice Studio & Multilingual Text-to-Speech" />
+    <meta name="twitter:description" content="Preview 30 AI studio voices, speak Bengali and global scripts aloud, cast characters with AI, and download crisp WAV audio on Srabon Go." />
     <meta name="author" content="Srabon Go" />
     <meta name="copyright" content="© 2026 Srabon Go — All Rights Reserved" />
+    <link rel="manifest" href="/site.webmanifest" />
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2318181b'/%3E%3Cpath d='M16 7a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0v-6a3 3 0 0 0-3-3Zm-6 8a1 1 0 1 0-2 0 8 8 0 0 0 7 7.93V25h-2a1 1 0 1 0 0 2h6a1 1 0 1 0 0-2h-2v-2.07A8 8 0 0 0 24 15a1 1 0 1 0-2 0 6 6 0 0 1-12 0Z' fill='%23ffffff'/%3E%3C/svg%3E" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "Srabon Go",
+        "alternateName": "Srabon Go Voice Library",
+        "applicationCategory": "MultimediaApplication",
+        "operatingSystem": "All",
+        "description": "Multilingual AI Voice Studio, Text-to-Speech generator, and Voice Casting Library supporting Bengali and global languages.",
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "BDT"
+        }
+      }
+    </script>
     <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
     <script>
       tailwind.config = {
@@ -70,13 +92,26 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;400;500;600;700&family=Noto+Sans+Bengali:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
     <style>
+      html {
+        scroll-behavior: smooth;
+      }
       body {
         font-family: "DM Sans", "Noto Sans Bengali", sans-serif;
-        background-color: #fcfcfc; /* Slightly brighter white */
+        background-color: #fcfcfc;
         color: #18181b;
         -webkit-font-smoothing: antialiased;
         -moz-osx-font-smoothing: grayscale;
-        overflow: hidden; /* Prevent body scroll, let app handle it */
+        overflow-x: hidden;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        html {
+          scroll-behavior: auto;
+        }
+        *, *::before, *::after {
+          animation-duration: 0.01ms !important;
+          animation-iteration-count: 1 !important;
+          transition-duration: 0.01ms !important;
+        }
       }
       /* Hide scrollbar for cleaner look */
       ::-webkit-scrollbar {

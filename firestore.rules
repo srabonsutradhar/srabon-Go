@@ -11,6 +11,10 @@ service cloud.firestore {
       return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
+    function isValidReferralCode(code) {
+      return code is string && code.size() >= 6 && code.size() <= 16 && code.matches('^[A-Z0-9]+$');
+    }
+
     function incoming() {
       return request.resource.data;
     }
@@ -37,7 +41,12 @@ service cloud.firestore {
 
     function isValidUserVoicePreferences(data, expectedUid) {
       return data.keys().hasAll(['uid', 'favorites', 'plan', 'dailyCount', 'lastUsageDate', 'createdAt', 'updatedAt'])
-        && data.keys().hasOnly(['uid', 'displayName', 'email', 'photoURL', 'favorites', 'plan', 'dailyCount', 'lastUsageDate', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly([
+          'uid', 'displayName', 'email', 'photoURL', 'favorites',
+          'plan', 'dailyCount', 'lastUsageDate',
+          'referralCode', 'bonusCredits', 'referralCount',
+          'createdAt', 'updatedAt'
+        ])
         && data.uid is string
         && data.uid == expectedUid
         && data.uid.size() >= 1
@@ -57,8 +66,36 @@ service cloud.firestore {
         && data.lastUsageDate is string
         && data.lastUsageDate.size() == 10
         && data.lastUsageDate.matches('^\\d{4}-\\d{2}-\\d{2}$')
+        && (!('referralCode' in data) || isValidReferralCode(data.referralCode))
+        && (!('bonusCredits' in data) || (data.bonusCredits is int && data.bonusCredits >= 0 && data.bonusCredits <= 1000000))
+        && (!('referralCount' in data) || (data.referralCount is int && data.referralCount >= 0 && data.referralCount <= 100000))
         && data.createdAt is timestamp
         && data.updatedAt is timestamp;
+    }
+
+    function isValidReferralCodeMap(data, expectedCode) {
+      return data.keys().hasAll(['code', 'uid', 'createdAt'])
+        && data.keys().hasOnly(['code', 'uid', 'createdAt'])
+        && isValidReferralCode(data.code)
+        && data.code == expectedCode
+        && data.uid is string
+        && data.uid == request.auth.uid
+        && isValidId(data.uid)
+        && data.createdAt is timestamp;
+    }
+
+    function isValidReferralClaim(data, expectedReferredUid) {
+      return data.keys().hasAll(['referredUid', 'referrerUid', 'referralCode', 'rewardCredits', 'createdAt'])
+        && data.keys().hasOnly(['referredUid', 'referrerUid', 'referralCode', 'rewardCredits', 'createdAt'])
+        && isValidId(data.referredUid)
+        && data.referredUid == expectedReferredUid
+        && data.referredUid == request.auth.uid
+        && isValidId(data.referrerUid)
+        && data.referrerUid != request.auth.uid
+        && isValidReferralCode(data.referralCode)
+        && data.rewardCredits is int
+        && data.rewardCredits == 10
+        && data.createdAt is timestamp;
     }
 
     function isValidProRequest(data) {
@@ -116,30 +153,96 @@ service cloud.firestore {
         && isValidUserVoicePreferences(incoming(), userId)
         && incoming().plan == 'free'
         && incoming().dailyCount == 0
+        && (!('bonusCredits' in incoming()) || incoming().bonusCredits == 0)
+        && (!('referralCount' in incoming()) || incoming().referralCount == 0)
         && incoming().createdAt == request.time
         && incoming().updatedAt == request.time;
       allow update: if isVerifiedUser()
         && isValidId(userId)
         && isValidUserVoicePreferences(incoming(), userId)
-        && incoming().uid == existing().uid
-        && incoming().createdAt == existing().createdAt
+        && (
+          ('uid' in existing() && incoming().uid == existing().uid)
+          || (!('uid' in existing()) && incoming().uid == userId)
+        )
+        && (
+          ('createdAt' in existing() && incoming().createdAt == existing().createdAt)
+          || (!('createdAt' in existing()) && incoming().createdAt == request.time)
+        )
         && incoming().updatedAt == request.time
         && (
+          // Action 1: Owner updates profile, favorites, daily usage, referralCode, or consumes 1 bonusCredit
           (
             isOwner(userId)
-            && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'email', 'photoURL', 'favorites', 'dailyCount', 'lastUsageDate', 'plan', 'updatedAt'])
+            && incoming().diff(existing()).affectedKeys().hasOnly(['uid', 'displayName', 'email', 'photoURL', 'favorites', 'dailyCount', 'lastUsageDate', 'plan', 'referralCode', 'bonusCredits', 'createdAt', 'updatedAt'])
             && (
               ('plan' in existing() && incoming().plan == existing().plan)
               || (!('plan' in existing()) && incoming().plan == 'free')
             )
+            && (
+              !('referralCode' in existing())
+              || ('referralCode' in incoming() && incoming().referralCode == existing().referralCode)
+            )
+            && (
+              (!('bonusCredits' in existing()) && (!('bonusCredits' in incoming()) || incoming().bonusCredits == 0))
+              || (
+                'bonusCredits' in existing()
+                && 'bonusCredits' in incoming()
+                && (incoming().bonusCredits == existing().bonusCredits || incoming().bonusCredits == existing().bonusCredits - 1)
+              )
+            )
           )
           ||
+          // Action 2: Referred friend atomically grants +10 bonusCredits & +1 referralCount to referrer
+          (
+            request.auth.uid != userId
+            && incoming().diff(existing()).affectedKeys().hasOnly(['bonusCredits', 'referralCount', 'updatedAt'])
+            && (
+              ('bonusCredits' in existing() && incoming().bonusCredits == existing().bonusCredits + 10)
+              || (!('bonusCredits' in existing()) && incoming().bonusCredits == 10)
+            )
+            && (
+              ('referralCount' in existing() && incoming().referralCount == existing().referralCount + 1)
+              || (!('referralCount' in existing()) && incoming().referralCount == 1)
+            )
+            && !exists(/databases/$(database)/documents/referrals/$(request.auth.uid))
+            && existsAfter(/databases/$(database)/documents/referrals/$(request.auth.uid))
+            && getAfter(/databases/$(database)/documents/referrals/$(request.auth.uid)).data.referrerUid == userId
+          )
+          ||
+          // Action 3: Admin updates user plan or bonusCredits
           (
             isBootstrappedAdmin()
-            && incoming().diff(existing()).affectedKeys().hasOnly(['plan', 'dailyCount', 'lastUsageDate', 'updatedAt'])
+            && incoming().diff(existing()).affectedKeys().hasOnly(['plan', 'dailyCount', 'lastUsageDate', 'bonusCredits', 'updatedAt'])
           )
         );
       allow delete: if isVerifiedUser() && isValidId(userId) && isOwner(userId);
+    }
+
+    match /referralCodes/{code} {
+      allow get: if isSignedIn() && isValidReferralCode(code);
+      allow list: if false;
+      allow create: if isVerifiedUser()
+        && isValidReferralCode(code)
+        && isValidReferralCodeMap(incoming(), code)
+        && incoming().createdAt == request.time
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    match /referrals/{referredUid} {
+      allow get: if isSignedIn() && isValidId(referredUid) && (isOwner(referredUid) || isBootstrappedAdmin());
+      allow list: if isBootstrappedAdmin();
+      allow create: if isVerifiedUser()
+        && isValidId(referredUid)
+        && isOwner(referredUid)
+        && isValidReferralClaim(incoming(), referredUid)
+        && incoming().createdAt == request.time
+        && exists(/databases/$(database)/documents/users/$(incoming().referrerUid))
+        && exists(/databases/$(database)/documents/referralCodes/$(incoming().referralCode))
+        && get(/databases/$(database)/documents/referralCodes/$(incoming().referralCode)).data.uid == incoming().referrerUid;
+      allow update: if false;
+      allow delete: if false;
     }
 
     match /proRequests/{requestId} {

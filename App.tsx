@@ -14,12 +14,21 @@ import TtsStudio from './components/TtsStudio';
 import GoogleLoginGate from './components/GoogleLoginGate';
 import ProUpgradeModal from './components/ProUpgradeModal';
 import AdminPanelModal from './components/AdminPanelModal';
+import SiteLegalModal, { LegalTab } from './components/SiteLegalModal';
 import { FilterState, AiRecommendation, BillingConfig, UserPlan } from './types';
 import { Info, Heart, Loader2 } from 'lucide-react';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { doc, onSnapshot, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db, signOutUser, handleFirestoreError, OperationType } from './firebase';
 import { initGoogleAdsTag } from './utils/googleAds';
+import {
+  buildReferralCode,
+  capturePendingReferralFromUrl,
+  claimReferralCode,
+  clearPendingReferral,
+  ensureReferralCodeRegistered,
+  hasUserClaimedReferral,
+} from './utils/referral';
 
 const ADMIN_EMAIL = 'srabon10010@gmail.com';
 
@@ -70,8 +79,24 @@ const App: React.FC = () => {
   const [lastUsageDate, setLastUsageDate] = useState<string>(getTodayUtcDate());
   const [billingConfig, setBillingConfig] = useState<BillingConfig>(DEFAULT_BILLING_CONFIG);
   const [showProModal, setShowProModal] = useState(false);
+  const [proModalTab, setProModalTab] = useState<'refer' | 'pro'>('refer');
   const [showAdminPanel, setShowAdminPanel] = useState(false);
-  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [referralCode, setReferralCode] = useState<string>('');
+  const [bonusCredits, setBonusCredits] = useState<number>(0);
+  const [referralCount, setReferralCount] = useState<number>(0);
+  const [alreadyClaimedReferral, setAlreadyClaimedReferral] = useState<boolean>(false);
+  const [legalTab, setLegalTab] = useState<LegalTab | null>(null);
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    try {
+      const saved = localStorage.getItem('srabon_theme');
+      if (saved === 'dark') return true;
+      if (saved === 'light') return false;
+      return window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false;
+    } catch {
+      return false;
+    }
+  });
 
   const isAdmin = Boolean(
     user?.emailVerified && user?.email?.toLowerCase() === ADMIN_EMAIL
@@ -88,9 +113,10 @@ const App: React.FC = () => {
     search: '',
   });
 
-  // Firebase Auth listener
+  // Firebase Auth listener + capture pending ?ref= before login
   useEffect(() => {
     initGoogleAdsTag();
+    capturePendingReferralFromUrl();
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       setAuthReady(true);
@@ -113,20 +139,109 @@ const App: React.FC = () => {
     const userPath = `users/${user.uid}`;
     const userRef = doc(db, 'users', user.uid);
     let initializedDoc = false;
+    let isMigratingSchema = false;
+    let registeredCodeForUid = false;
+    let checkedClaimForUid = false;
+
+    const handleReferralLifecycle = async (myCode: string) => {
+      if (!registeredCodeForUid) {
+        registeredCodeForUid = true;
+        await ensureReferralCodeRegistered(user.uid, myCode);
+      }
+      if (!checkedClaimForUid) {
+        checkedClaimForUid = true;
+        const claimed = await hasUserClaimedReferral(user.uid);
+        setAlreadyClaimedReferral(claimed);
+        if (!claimed) {
+          const pendingCode = capturePendingReferralFromUrl();
+          if (pendingCode && pendingCode !== myCode) {
+            const res = await claimReferralCode(user.uid, pendingCode);
+            if (res.status === 'claimed' || res.status === 'already_claimed') {
+              setAlreadyClaimedReferral(true);
+            } else if (res.status === 'invalid_code') {
+              clearPendingReferral();
+            }
+          }
+        }
+      }
+    };
 
     const unsubscribe = onSnapshot(
       userRef,
       async (snapshot) => {
         if (snapshot.exists()) {
           const data = snapshot.data();
-          setFavorites(sanitizeFavorites(data?.favorites));
-          setUserPlan(data?.plan === 'pro' ? 'pro' : 'free');
-          setDailyCount(typeof data?.dailyCount === 'number' ? data.dailyCount : 0);
-          setLastUsageDate(
+          const safeFavorites = sanitizeFavorites(data?.favorites);
+          const safePlan: UserPlan = data?.plan === 'pro' ? 'pro' : 'free';
+          const safeDailyCount =
+            typeof data?.dailyCount === 'number' && Number.isInteger(data.dailyCount) && data.dailyCount >= 0
+              ? data.dailyCount
+              : 0;
+          const safeLastUsageDate =
             typeof data?.lastUsageDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(data.lastUsageDate)
               ? data.lastUsageDate
-              : getTodayUtcDate()
-          );
+              : getTodayUtcDate();
+
+          setFavorites(safeFavorites);
+          setUserPlan(safePlan);
+          setDailyCount(safeDailyCount);
+          setLastUsageDate(safeLastUsageDate);
+
+          const currentBonus =
+            typeof data?.bonusCredits === 'number' && Number.isInteger(data.bonusCredits) && data.bonusCredits >= 0
+              ? data.bonusCredits
+              : 0;
+          setBonusCredits(currentBonus);
+          setReferralCount(typeof data?.referralCount === 'number' ? data.referralCount : 0);
+
+          const code =
+            typeof data?.referralCode === 'string' && data.referralCode.length >= 6
+              ? data.referralCode
+              : buildReferralCode(user.uid);
+          setReferralCode(code);
+
+          const needsSchemaMigration =
+            typeof data?.uid !== 'string' ||
+            !data?.createdAt ||
+            typeof data?.referralCode !== 'string' ||
+            typeof data?.plan !== 'string' ||
+            typeof data?.dailyCount !== 'number' ||
+            typeof data?.lastUsageDate !== 'string' ||
+            !Array.isArray(data?.favorites);
+
+          if (needsSchemaMigration && !isMigratingSchema) {
+            isMigratingSchema = true;
+            const patch: Record<string, any> = {
+              plan: safePlan,
+              dailyCount: safeDailyCount,
+              lastUsageDate: safeLastUsageDate,
+              updatedAt: serverTimestamp(),
+            };
+            if (typeof data?.uid !== 'string') {
+              patch.uid = user.uid.slice(0, 128);
+            }
+            if (!data?.createdAt) {
+              patch.createdAt = serverTimestamp();
+            }
+            if (!Array.isArray(data?.favorites)) {
+              patch.favorites = safeFavorites;
+            }
+            if (typeof data?.referralCode !== 'string') {
+              patch.referralCode = code;
+            }
+            if (typeof data?.bonusCredits !== 'number') {
+              patch.bonusCredits = 0;
+            }
+            try {
+              await updateDoc(userRef, patch);
+            } catch (error) {
+              handleFirestoreError(error, OperationType.UPDATE, userPath);
+            } finally {
+              isMigratingSchema = false;
+            }
+          }
+
+          await handleReferralLifecycle(code);
         } else if (!initializedDoc) {
           initializedDoc = true;
           let localFavs: string[] = [];
@@ -136,12 +251,20 @@ const App: React.FC = () => {
           } catch {}
 
           const today = getTodayUtcDate();
+          const myCode = buildReferralCode(user.uid);
+          setReferralCode(myCode);
+          setBonusCredits(0);
+          setReferralCount(0);
+
           const payload: Record<string, any> = {
             uid: user.uid.slice(0, 128),
             favorites: localFavs,
             plan: 'free',
             dailyCount: 0,
             lastUsageDate: today,
+            referralCode: myCode,
+            bonusCredits: 0,
+            referralCount: 0,
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
           };
@@ -151,6 +274,7 @@ const App: React.FC = () => {
 
           try {
             await setDoc(userRef, payload);
+            await handleReferralLifecycle(myCode);
           } catch (error) {
             handleFirestoreError(error, OperationType.CREATE, userPath);
           }
@@ -187,13 +311,20 @@ const App: React.FC = () => {
     };
   }, [authReady, user]);
 
-  // Theme Management
+  // Theme Management (persisted)
   useEffect(() => {
     if (isDarkMode) {
-        document.documentElement.classList.add('dark');
+      document.documentElement.classList.add('dark');
     } else {
-        document.documentElement.classList.remove('dark');
+      document.documentElement.classList.remove('dark');
     }
+    try {
+      localStorage.setItem('srabon_theme', isDarkMode ? 'dark' : 'light');
+      const meta = document.querySelector('meta[name="theme-color"]');
+      if (meta) {
+        meta.setAttribute('content', isDarkMode ? '#09090b' : '#18181b');
+      }
+    } catch {}
   }, [isDarkMode]);
 
   useEffect(() => {
@@ -228,12 +359,16 @@ const App: React.FC = () => {
         });
       } catch (error: any) {
         if (error?.code === 'not-found') {
+          const myCode = referralCode || buildReferralCode(user.uid);
           const payload: Record<string, any> = {
             uid: user.uid.slice(0, 128),
             favorites: nextFavorites,
             plan: 'free',
             dailyCount: 0,
             lastUsageDate: today,
+            referralCode: myCode,
+            bonusCredits: 0,
+            referralCount: 0,
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
           };
@@ -242,6 +377,7 @@ const App: React.FC = () => {
           if (user.photoURL) payload.photoURL = user.photoURL.slice(0, 512);
           try {
             await setDoc(userRef, payload);
+            await ensureReferralCodeRegistered(user.uid, myCode);
           } catch (createErr) {
             handleFirestoreError(createErr, OperationType.CREATE, userPath);
           }
@@ -258,48 +394,75 @@ const App: React.FC = () => {
 
     const today = getTodayUtcDate();
     const currentUsed = lastUsageDate === today ? dailyCount : 0;
-    if (currentUsed >= billingConfig.freeDailyLimit) {
-      setShowProModal(true);
-      return false;
-    }
 
-    const nextCount = currentUsed + 1;
-    setDailyCount(nextCount);
-    setLastUsageDate(today);
+    if (currentUsed < billingConfig.freeDailyLimit) {
+      const nextCount = currentUsed + 1;
+      setDailyCount(nextCount);
+      setLastUsageDate(today);
 
-    const userPath = `users/${user.uid}`;
-    const userRef = doc(db, 'users', user.uid);
-    try {
-      await updateDoc(userRef, {
-        plan: userPlan,
-        dailyCount: nextCount,
-        lastUsageDate: today,
-        updatedAt: serverTimestamp(),
-      });
-    } catch (error: any) {
-      if (error?.code === 'not-found') {
-        const payload: Record<string, any> = {
-          uid: user.uid.slice(0, 128),
-          favorites,
-          plan: 'free',
+      const userPath = `users/${user.uid}`;
+      const userRef = doc(db, 'users', user.uid);
+      try {
+        await updateDoc(userRef, {
+          plan: userPlan,
           dailyCount: nextCount,
           lastUsageDate: today,
-          createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
-        };
-        if (user.displayName) payload.displayName = user.displayName.slice(0, 120);
-        if (user.email) payload.email = user.email.slice(0, 254);
-        if (user.photoURL) payload.photoURL = user.photoURL.slice(0, 512);
-        try {
-          await setDoc(userRef, payload);
-        } catch (createErr) {
-          handleFirestoreError(createErr, OperationType.CREATE, userPath);
+        });
+      } catch (error: any) {
+        if (error?.code === 'not-found') {
+          const myCode = referralCode || buildReferralCode(user.uid);
+          const payload: Record<string, any> = {
+            uid: user.uid.slice(0, 128),
+            favorites,
+            plan: 'free',
+            dailyCount: nextCount,
+            lastUsageDate: today,
+            referralCode: myCode,
+            bonusCredits: 0,
+            referralCount: 0,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          };
+          if (user.displayName) payload.displayName = user.displayName.slice(0, 120);
+          if (user.email) payload.email = user.email.slice(0, 254);
+          if (user.photoURL) payload.photoURL = user.photoURL.slice(0, 512);
+          try {
+            await setDoc(userRef, payload);
+            await ensureReferralCodeRegistered(user.uid, myCode);
+          } catch (createErr) {
+            handleFirestoreError(createErr, OperationType.CREATE, userPath);
+          }
+        } else {
+          handleFirestoreError(error, OperationType.UPDATE, userPath);
         }
-      } else {
+      }
+      return true;
+    }
+
+    if (bonusCredits > 0) {
+      const nextCredits = bonusCredits - 1;
+      setBonusCredits(nextCredits);
+
+      const userPath = `users/${user.uid}`;
+      const userRef = doc(db, 'users', user.uid);
+      try {
+        await updateDoc(userRef, {
+          plan: userPlan,
+          dailyCount: currentUsed,
+          lastUsageDate: today,
+          bonusCredits: nextCredits,
+          updatedAt: serverTimestamp(),
+        });
+      } catch (error) {
         handleFirestoreError(error, OperationType.UPDATE, userPath);
       }
+      return true;
     }
-    return true;
+
+    setProModalTab('refer');
+    setShowProModal(true);
+    return false;
   };
 
   const handleSignOut = async () => {
@@ -310,8 +473,14 @@ const App: React.FC = () => {
     setFavorites([]);
     setUserPlan('free');
     setDailyCount(0);
+    setReferralCode('');
+    setBonusCredits(0);
+    setReferralCount(0);
+    setAlreadyClaimedReferral(false);
+    setProModalTab('refer');
     setShowProModal(false);
     setShowAdminPanel(false);
+    setLegalTab(null);
     await signOutUser();
   };
 
@@ -373,7 +542,9 @@ const App: React.FC = () => {
     setFilters({ ...filters, search: '' });
   };
 
-  const isModalOpen = Boolean(showVoiceFinder || showProModal || showAdminPanel || (aiResult && isAiCardVisible));
+  const isModalOpen = Boolean(
+    showVoiceFinder || showProModal || showAdminPanel || legalTab || (aiResult && isAiCardVisible)
+  );
 
   if (!authReady) {
     return (
@@ -427,8 +598,12 @@ const App: React.FC = () => {
           userPlan={userPlan}
           usedToday={effectiveUsedToday}
           freeDailyLimit={billingConfig.freeDailyLimit}
+          bonusCredits={bonusCredits}
           isAdmin={isAdmin}
-          onOpenProModal={() => setShowProModal(true)}
+          onOpenProModal={(tab = 'refer') => {
+            setProModalTab(tab);
+            setShowProModal(true);
+          }}
           onOpenAdminPanel={() => setShowAdminPanel(true)}
         />
 
@@ -439,6 +614,7 @@ const App: React.FC = () => {
                   selectedVoiceName={studioVoiceName}
                   onSelectVoice={setStudioVoiceName}
                   onBeforeGenerate={consumeAiQuota}
+                  onOpenLegal={setLegalTab}
                 />
               ) : filteredVoices.length > 0 ? (
                   viewMode === 'carousel' ? (
@@ -464,6 +640,7 @@ const App: React.FC = () => {
                           favorites={favorites}
                           onToggleFavorite={toggleFavorite}
                           onUseInStudio={handleUseInStudio}
+                          onOpenLegal={setLegalTab}
                       />
                     </div>
                   )
@@ -550,6 +727,12 @@ const App: React.FC = () => {
           usedToday={effectiveUsedToday}
           billingConfig={billingConfig}
           isAdmin={isAdmin}
+          referralCode={referralCode}
+          bonusCredits={bonusCredits}
+          referralCount={referralCount}
+          alreadyClaimedReferral={alreadyClaimedReferral}
+          onReferralClaimed={() => setAlreadyClaimedReferral(true)}
+          initialTab={proModalTab}
           onClose={() => setShowProModal(false)}
         />
       )}
@@ -578,6 +761,13 @@ const App: React.FC = () => {
                  />
              </div>
           </div>
+      )}
+
+      {legalTab && (
+        <SiteLegalModal
+          initialTab={legalTab}
+          onClose={() => setLegalTab(null)}
+        />
       )}
 
     </div>

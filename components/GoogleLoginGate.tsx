@@ -2,19 +2,94 @@
  * © 2026 Srabon Go — All Rights Reserved.
  */
 
-import React, { useState } from 'react';
-import { Mic, Loader2, AlertCircle, Sun, Moon, ShieldCheck, AudioLines } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+  Loader2,
+  AlertCircle,
+  Sun,
+  Moon,
+  Play,
+  Pause,
+  ChevronDown,
+  Gift,
+  AudioLines,
+  Sparkles,
+  Check,
+  ShieldCheck,
+} from 'lucide-react';
 import { signInWithGoogle } from '../firebase';
+import { VOICE_DATA } from '../constants';
+import AudioVisualizer from './AudioVisualizer';
+import AdBanner from './AdBanner';
+import SiteLegalModal, { LegalTab } from './SiteLegalModal';
 
 interface GoogleLoginGateProps {
   isDarkMode: boolean;
   toggleTheme: () => void;
 }
 
+const FEATURED_VOICE_NAMES = ['Kore', 'Zephyr', 'Fenrir', 'Aoede', 'Puck', 'Charon'];
+
+const FAQ_ITEMS = [
+  {
+    q: 'কোন কোন ভাষায় ভয়েস ও অডিও তৈরি করা যাবে?',
+    a: 'Srabon Go বাংলা, ইংরেজি এবং বিশ্বের বিভিন্ন ভাষার স্ক্রিপ্ট প্রাকৃতিক উচ্চারণ ও নির্দিষ্ট টোন (যেমন: সকালের অ্যালার্ম, নিউজ রিডিং বা গল্প বলার ভঙ্গি) অনুযায়ী ভয়েসওভার তৈরি করতে পারে।',
+  },
+  {
+    q: 'বন্ধুদের রেফার করে কীভাবে +১০টি ফ্রি ক্রেডিট পাবেন?',
+    a: 'লগইন করার পর উপরের "Refer +10" বাটন থেকে আপনার নিজস্ব রেফার কোড বা লিংক শেয়ার করুন। প্রতিটি নতুন বন্ধু আপনার লিংকে ঢুকে গুগল সাইন-ইন করলে আপনি স্বয়ংক্রিয়ভাবে +১০টি বোনাস ক্রেডিট পাবেন।',
+  },
+  {
+    q: 'দৈনিক ফ্রি কোটা শেষ হলে কী হবে?',
+    a: 'প্রতিদিনের ফ্রি সীমা শেষ হয়ে গেলে আপনার জমা থাকা বোনাস রেফার ক্রেডিট থেকে ১টি করে ক্রেডিট স্বয়ংক্রিয়ভাবে ব্যবহার হবে। পাশাপাশি চাইলে যেকোনো সময় Pro প্ল্যান আনলক করে আনলিমিটেড ব্যবহার করতে পারবেন।',
+  },
+  {
+    q: 'তৈরি করা অডিও কি WAV ফরম্যাটে ডাউনলোড করা যায়?',
+    a: 'হ্যাঁ, Voice Studio ও AI Casting রেজাল্ট থেকে প্রতিটি জেনারেটেড অডিও সরাসরি ২৪ kHz ক্রিস্টাল-ক্লিয়ার WAV ফরম্যাটে ডাউনলোড এবং Alarm Loop মোডে শোনা যায়।',
+  },
+];
+
 const GoogleLoginGate: React.FC<GoogleLoginGateProps> = ({ isDarkMode, toggleTheme }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showPrivacy, setShowPrivacy] = useState(false);
+  const [playingVoice, setPlayingVoice] = useState<string | null>(null);
+  const [openFaq, setOpenFaq] = useState<number | null>(0);
+  const [legalTab, setLegalTab] = useState<LegalTab | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const featuredVoices = FEATURED_VOICE_NAMES.map((name) =>
+    VOICE_DATA.find((v) => v.name === name)
+  ).filter((v): v is (typeof VOICE_DATA)[number] => Boolean(v));
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.pause();
+    audio.currentTime = 0;
+
+    if (playingVoice) {
+      const target = VOICE_DATA.find((v) => v.name === playingVoice);
+      if (target) {
+        audio.src = target.audioSampleUrl;
+        audio.play().catch((err) => {
+          console.error('Sample playback failed:', err);
+          setPlayingVoice(null);
+        });
+      }
+    }
+  }, [playingVoice]);
+
+  useEffect(() => {
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+      }
+    };
+  }, []);
+
+  const handleToggleSample = (voiceName: string) => {
+    setPlayingVoice((curr) => (curr === voiceName ? null : voiceName));
+  };
 
   const handleGoogleSignIn = async () => {
     if (loading) return;
@@ -40,155 +115,595 @@ const GoogleLoginGate: React.FC<GoogleLoginGateProps> = ({ isDarkMode, toggleThe
   };
 
   return (
-    <div className="h-screen w-screen bg-[#FDFDFD] dark:bg-[#09090b] text-zinc-900 dark:text-zinc-100 font-sans relative overflow-y-auto flex items-center justify-center p-4 transition-colors duration-300">
-      {/* Background Ambience */}
-      <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
-        <div className="absolute top-[-20%] right-[-10%] w-[600px] h-[600px] rounded-full bg-blue-50 dark:bg-blue-900/20 blur-3xl opacity-70" />
-        <div className="absolute bottom-[-10%] left-[-10%] w-[500px] h-[500px] rounded-full bg-purple-50 dark:bg-purple-900/20 blur-3xl opacity-60" />
-      </div>
+    <div className="min-h-screen w-full bg-[#fcfcfc] dark:bg-[#09090b] text-zinc-900 dark:text-zinc-100 font-sans relative transition-colors duration-300">
+      <audio
+        ref={audioRef}
+        onEnded={() => setPlayingVoice(null)}
+        preload="none"
+      />
 
-      {/* Theme Toggle */}
-      <button
-        type="button"
-        onClick={toggleTheme}
-        className="absolute top-5 right-5 z-20 p-2.5 rounded-xl bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md border border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors shadow-sm"
-        title={isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
-        aria-label={isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
-      >
-        {isDarkMode ? <Sun size={16} /> : <Moon size={16} />}
-      </button>
-
-      {/* Login Card */}
-      <div className="relative z-10 w-full max-w-md bg-white/90 dark:bg-zinc-900/90 backdrop-blur-xl rounded-3xl border border-zinc-200/80 dark:border-zinc-800 shadow-2xl overflow-hidden animate-fade-in">
-        <div className="h-1.5 w-full bg-gradient-to-r from-[#4285F4] via-[#EA4335] via-[#FBBC04] to-[#34A853]" />
-
-        <div className="p-8 sm:p-10 text-center space-y-6">
-          {/* Brand Icon */}
-          <div className="flex flex-col items-center gap-3">
-            <div className="w-14 h-14 bg-zinc-900 dark:bg-zinc-100 rounded-2xl flex items-center justify-center shadow-lg shadow-zinc-900/15">
-              <Mic size={26} className="text-white dark:text-zinc-900" />
-            </div>
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-100 dark:border-indigo-900 text-indigo-600 dark:text-indigo-300 text-xs font-semibold">
-              <AudioLines size={12} />
-              <span>Srabon Go</span>
-            </div>
-          </div>
-
-          {/* Headings */}
-          <div className="space-y-2.5">
-            <h1 className="text-2xl sm:text-3xl font-serif font-medium tracking-tight text-zinc-900 dark:text-white">
-              প্রথমে গুগলে লগইন করুন
-            </h1>
-            <p className="text-sm text-zinc-500 dark:text-zinc-400 leading-relaxed">
-              এই পেজে প্রবেশ করতে এবং ভয়েস স্টুডিও ও আপনার পছন্দের ভয়েসগুলো ব্যবহার করতে অনুগ্রহ করে গুগল অ্যাকাউন্ট দিয়ে সাইন ইন করুন।
-            </p>
-            <p className="text-xs text-zinc-400 dark:text-zinc-500">
-              Sign in with Google to access Voice Studio, Casting Director, and synced favorites.
-            </p>
-          </div>
-
-          {/* Error Banner */}
-          {error && (
-            <div
-              role="alert"
-              className="flex items-start gap-2.5 p-3.5 rounded-2xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/60 text-red-600 dark:text-red-300 text-xs text-left"
-            >
-              <AlertCircle size={16} className="shrink-0 mt-0.5" />
-              <span>{error}</span>
-            </div>
-          )}
-
-          {/* Google Sign-In Button */}
-          <button
-            type="button"
-            onClick={handleGoogleSignIn}
-            disabled={loading}
-            className="w-full flex items-center justify-center gap-3 py-3.5 px-6 rounded-2xl bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 font-semibold text-sm shadow-lg hover:bg-zinc-800 dark:hover:bg-zinc-100 transition-all active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed"
+      {/* Top Navigation Bar (Clean 3-Zone Contract) */}
+      <header className="sticky top-0 z-40 w-full bg-white/85 dark:bg-zinc-950/85 backdrop-blur-xl border-b border-zinc-200/80 dark:border-zinc-800/80">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-8">
+          {/* Zone 1: Brand Wordmark */}
+          <a
+            href="#top"
+            className="text-lg font-bold tracking-tight text-zinc-900 dark:text-white whitespace-nowrap shrink-0"
           >
-            {loading ? (
-              <Loader2 size={18} className="animate-spin" />
-            ) : (
-              <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
-                <path
-                  fill="#4285F4"
-                  d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17Z"
-                />
-                <path
-                  fill="#34A853"
-                  d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.11-6.72-4.96H1.29v3.14C3.26 21.3 7.31 24 12 24Z"
-                />
-                <path
-                  fill="#FBBC04"
-                  d="M5.28 14.24c-.24-.72-.38-1.49-.38-2.24s.14-1.52.38-2.24V6.62H1.29C.47 8.24 0 10.06 0 12s.47 3.76 1.29 5.38l3.99-3.14Z"
-                />
-                <path
-                  fill="#EA4335"
-                  d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.7 1.29 6.62l3.99 3.14c.95-2.85 3.6-4.96 6.72-4.96Z"
-                />
-              </svg>
-            )}
-            <span>{loading ? 'Signing in with Google...' : 'Continue with Google'}</span>
-          </button>
+            Srabon Go
+          </a>
 
-          {/* Footer Note */}
-          <div className="space-y-2 pt-1">
-            <div className="flex items-center justify-center gap-1.5 text-[11px] text-zinc-400 dark:text-zinc-500">
-              <ShieldCheck size={13} className="text-emerald-500" />
-              <span>Secured by Firebase Google Authentication</span>
-            </div>
-            <div className="flex items-center justify-center gap-2 text-[11px] text-zinc-400 dark:text-zinc-500">
-              <button
-                type="button"
-                onClick={() => setShowPrivacy(true)}
-                className="hover:text-zinc-700 dark:hover:text-zinc-200 underline underline-offset-2 transition-colors"
-              >
-                Privacy Policy & Terms
-              </button>
-              <span>•</span>
-              <span>© 2026 Srabon Go — All Rights Reserved</span>
-            </div>
+          {/* Zone 2: Clean Single-Line Nav Links */}
+          <nav
+            aria-label="Primary"
+            className="hidden md:flex items-center gap-7 text-sm font-medium text-zinc-600 dark:text-zinc-400"
+          >
+            <a
+              href="#features"
+              className="hover:text-zinc-900 dark:hover:text-white hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0"
+            >
+              Features
+            </a>
+            <a
+              href="#voices"
+              className="hover:text-zinc-900 dark:hover:text-white hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0"
+            >
+              Voice Library
+            </a>
+            <a
+              href="#pricing"
+              className="hover:text-zinc-900 dark:hover:text-white hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0"
+            >
+              Plans &amp; Refer
+            </a>
+            <a
+              href="#faq"
+              className="hover:text-zinc-900 dark:hover:text-white hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0"
+            >
+              FAQ
+            </a>
+          </nav>
+
+          {/* Zone 3: Primary Action + Theme */}
+          <div className="flex items-center gap-2.5 shrink-0">
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className="p-2.5 rounded-lg bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors"
+              title={isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+              aria-label={isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+            >
+              {isDarkMode ? <Sun size={16} /> : <Moon size={16} />}
+            </button>
+            <button
+              type="button"
+              onClick={handleGoogleSignIn}
+              disabled={loading}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-zinc-900 dark:bg-indigo-600 text-white text-xs sm:text-sm font-semibold hover:bg-zinc-800 dark:hover:bg-indigo-500 transition-colors whitespace-nowrap shrink-0 disabled:opacity-60"
+            >
+              {loading && <Loader2 size={14} className="animate-spin" />}
+              <span>Sign In</span>
+            </button>
           </div>
         </div>
-      </div>
+      </header>
 
-      {/* Privacy & Terms Modal */}
-      {showPrivacy && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-900/60 backdrop-blur-sm animate-fade-in"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="privacy-modal-title"
-        >
-          <div className="absolute inset-0" onClick={() => setShowPrivacy(false)} />
-          <div className="relative w-full max-w-md bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 shadow-2xl space-y-4 text-left">
-            <h2 id="privacy-modal-title" className="text-lg font-serif font-medium text-zinc-900 dark:text-white">
-              Srabon Go — Privacy Policy & Terms
+      <main id="top">
+        {/* Hero Section */}
+        <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-12 pb-16 sm:pt-20 sm:pb-24">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-12 items-stretch">
+            {/* Left: Proposition & Google Sign-In CTA */}
+            <div className="lg:col-span-6 flex flex-col justify-center space-y-6">
+              <div className="flex items-center gap-2 text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                <span>AI Voice Studio</span>
+                <span aria-hidden="true">·</span>
+                <span>30 Studio Voices</span>
+                <span aria-hidden="true">·</span>
+                <span>Bengali &amp; Global TTS</span>
+              </div>
+
+              <h1
+                className="text-4xl sm:text-5xl lg:text-[52px] font-serif font-medium tracking-tight text-zinc-900 dark:text-white leading-[1.12]"
+                style={{ textWrap: 'balance' }}
+              >
+                Speak any script in natural Bengali and global voices.
+              </h1>
+
+              <p className="text-base sm:text-lg text-zinc-600 dark:text-zinc-300 leading-relaxed max-w-xl">
+                প্রাকৃতিক কণ্ঠে বাংলা ও ইংরেজি ভয়েসওভার তৈরি করুন, পছন্দের ভয়েস কাস্টিং করুন এবং ক্রিস্টাল-ক্লিয়ার WAV অডিও ডাউনলোড করুন। বন্ধুদের রেফার করে প্রতিদিন ফ্রি কোটার সাথে প্রতি রেফারে +১০ ক্রেডিট জিতুন।
+              </p>
+
+              {error && (
+                <div
+                  role="alert"
+                  className="flex items-start gap-2.5 p-3.5 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/60 text-red-600 dark:text-red-300 text-xs max-w-md"
+                >
+                  <AlertCircle size={16} className="shrink-0 mt-0.5" />
+                  <span>{error}</span>
+                </div>
+              )}
+
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-1">
+                <button
+                  type="button"
+                  onClick={handleGoogleSignIn}
+                  disabled={loading}
+                  className="inline-flex items-center justify-center gap-3 py-3.5 px-6 rounded-xl bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 font-semibold text-sm shadow-sm hover:bg-zinc-800 dark:hover:bg-zinc-100 transition-all active:scale-[0.99] whitespace-nowrap shrink-0 disabled:opacity-60"
+                >
+                  {loading ? (
+                    <Loader2 size={18} className="animate-spin" />
+                  ) : (
+                    <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
+                      <path
+                        fill="#4285F4"
+                        d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17Z"
+                      />
+                      <path
+                        fill="#34A853"
+                        d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.11-6.72-4.96H1.29v3.14C3.26 21.3 7.31 24 12 24Z"
+                      />
+                      <path
+                        fill="#FBBC04"
+                        d="M5.28 14.24c-.24-.72-.38-1.49-.38-2.24s.14-1.52.38-2.24V6.62H1.29C.47 8.24 0 10.06 0 12s.47 3.76 1.29 5.38l3.99-3.14Z"
+                      />
+                      <path
+                        fill="#EA4335"
+                        d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.7 1.29 6.62l3.99 3.14c.95-2.85 3.6-4.96 6.72-4.96Z"
+                      />
+                    </svg>
+                  )}
+                  <span>{loading ? 'Signing in with Google...' : 'Continue with Google'}</span>
+                </button>
+
+                <a
+                  href="#voices"
+                  className="inline-flex items-center justify-center gap-2 py-3.5 px-6 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-200 font-medium text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors whitespace-nowrap shrink-0"
+                >
+                  <AudioLines size={16} />
+                  <span>Listen to Voice Samples</span>
+                </a>
+              </div>
+
+              <div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
+                <ShieldCheck size={14} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
+                <span>Secured by Google Sign-In · Daily free quota included · Instant referral rewards</span>
+              </div>
+            </div>
+
+            {/* Right: Interactive Live Voice Preview Console */}
+            <div className="lg:col-span-6 flex flex-col justify-between rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-6 sm:p-8 space-y-6">
+              <div className="flex items-center justify-between gap-4 border-b border-zinc-100 dark:border-zinc-800 pb-4">
+                <div>
+                  <h2 className="text-base font-semibold text-zinc-900 dark:text-white">
+                    Live Studio Voice Preview
+                  </h2>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                    Click any voice below to audition sample audio before signing in
+                  </p>
+                </div>
+                <span className="text-xs font-mono tabular-nums text-zinc-500 dark:text-zinc-400">
+                  {VOICE_DATA.length} voices
+                </span>
+              </div>
+
+              {/* Waveform Box */}
+              <div className="h-28 rounded-xl bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 overflow-hidden relative flex items-center justify-center">
+                {playingVoice ? (
+                  <AudioVisualizer
+                    isPlaying={true}
+                    color={isDarkMode ? '#a5b4fc' : '#18181b'}
+                  />
+                ) : (
+                  <p className="text-xs text-zinc-400 dark:text-zinc-500">
+                    Select a voice sample below to visualize playback
+                  </p>
+                )}
+              </div>
+
+              {/* 4 Playable Voice Rows */}
+              <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                {featuredVoices.slice(0, 4).map((voice) => {
+                  const active = playingVoice === voice.name;
+                  return (
+                    <div
+                      key={voice.name}
+                      className="py-3 first:pt-0 last:pb-0 flex items-center justify-between gap-4"
+                    >
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-semibold text-zinc-900 dark:text-white">
+                            {voice.name}
+                          </span>
+                          <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                            {voice.analysis.gender} · {voice.pitch} pitch
+                          </span>
+                        </div>
+                        <p className="text-xs text-zinc-500 dark:text-zinc-400 truncate mt-0.5">
+                          {voice.analysis.characteristics.join(', ')}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleToggleSample(voice.name)}
+                        aria-label={active ? `Pause ${voice.name}` : `Play ${voice.name}`}
+                        className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
+                          active
+                            ? 'bg-indigo-600 text-white'
+                            : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-700'
+                        }`}
+                      >
+                        {active ? <Pause size={13} /> : <Play size={13} />}
+                        <span>{active ? 'Stop' : 'Preview'}</span>
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* 4-Column Key Platform Metrics Strip */}
+          <div className="mt-12 grid grid-cols-2 lg:grid-cols-4 gap-4 border-t border-b border-zinc-200 dark:border-zinc-800 py-6">
+            <div>
+              <p className="text-2xl sm:text-3xl font-semibold tabular-nums text-zinc-900 dark:text-white">
+                30
+              </p>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+                Studio Voices Across Pitches
+              </p>
+            </div>
+            <div>
+              <p className="text-2xl sm:text-3xl font-semibold tabular-nums text-zinc-900 dark:text-white">
+                24 kHz
+              </p>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+                Direct WAV Audio Export
+              </p>
+            </div>
+            <div>
+              <p className="text-2xl sm:text-3xl font-semibold tabular-nums text-zinc-900 dark:text-white">
+                +10 Cr
+              </p>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+                Bonus Credits per Friend Referral
+              </p>
+            </div>
+            <div>
+              <p className="text-2xl sm:text-3xl font-semibold tabular-nums text-zinc-900 dark:text-white">
+                Multi-Lang
+              </p>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+                Bengali, English &amp; Global Scripts
+              </p>
+            </div>
+          </div>
+        </section>
+
+        {/* Capabilities Bento Section */}
+        <section id="features" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14 sm:py-20">
+          <div className="max-w-2xl mb-10 space-y-2">
+            <h2
+              className="text-2xl sm:text-4xl font-serif font-medium text-zinc-900 dark:text-white"
+              style={{ textWrap: 'balance' }}
+            >
+              Everything needed for voice synthesis, casting, and sharing.
             </h2>
-            <div className="space-y-2.5 text-xs text-zinc-600 dark:text-zinc-300 leading-relaxed">
-              <p>
-                <strong>Google Sign-In:</strong> We collect your Google name, email address, and profile photo solely to authenticate your account and sync your favorite voices across sessions.
+            <p className="text-sm sm:text-base text-zinc-600 dark:text-zinc-400">
+              Built for creators, educators, and daily study routines with synchronized cloud preferences.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <article className="md:col-span-2 rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-6 sm:p-8 flex flex-col justify-between gap-6">
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-xs font-semibold text-indigo-600 dark:text-indigo-400">
+                  <AudioLines size={15} />
+                  <span>01. Multilingual Text-to-Speech Studio</span>
+                </div>
+                <h3 className="text-xl sm:text-2xl font-serif font-medium text-zinc-900 dark:text-white">
+                  Custom Vocal Direction &amp; Alarm Loop
+                </h3>
+                <p className="text-sm text-zinc-600 dark:text-zinc-300 leading-relaxed max-w-xl">
+                  Write scripts in Bengali, English, or any language, pair them with delivery tone instructions (e.g., energetic morning wake-up, warm mentor, or calm narrator), preview waveforms in real time, and download ready-to-use WAV files.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-x-6 gap-y-2 text-xs text-zinc-500 dark:text-zinc-400 border-t border-zinc-100 dark:border-zinc-800 pt-4">
+                <span>Quick Bengali &amp; English presets</span>
+                <span aria-hidden="true">·</span>
+                <span>Continuous Alarm Loop playback</span>
+                <span aria-hidden="true">·</span>
+                <span>Zero-latency WAV export</span>
+              </div>
+            </article>
+
+            <article className="rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-6 sm:p-8 flex flex-col justify-between gap-6">
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-xs font-semibold text-indigo-600 dark:text-indigo-400">
+                  <Sparkles size={15} />
+                  <span>02. AI Casting Director</span>
+                </div>
+                <h3 className="text-xl font-serif font-medium text-zinc-900 dark:text-white">
+                  Instant Character Matching
+                </h3>
+                <p className="text-sm text-zinc-600 dark:text-zinc-300 leading-relaxed">
+                  Describe the speaker persona or paste dialogue—AI selects the best 3 voices and writes a full Director System Prompt with sample playback.
+                </p>
+              </div>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 border-t border-zinc-100 dark:border-zinc-800 pt-4">
+                3D Carousel, Filter Grid &amp; Cloud Favorites
               </p>
-              <p>
-                <strong>Data Storage:</strong> Your preferences are securely stored in Firebase Firestore under owner-only access rules. We never sell or share your personal information with third parties.
-              </p>
-              <p>
-                <strong>Text-to-Speech & Ads:</strong> Scripts you enter in Voice Studio are processed to synthesize audio and are not saved to your profile. If advertising is enabled, third-party vendors such as Google may use cookies to serve relevant ads.
-              </p>
-              <p>
-                <strong>Ownership & Rights:</strong> © 2026 Srabon Go — All Rights Reserved. Unauthorized copying, redistribution, or claiming ownership of Srabon Go branding, configuration, or proprietary code is prohibited.
-              </p>
-            </div>
-            <div className="flex justify-end pt-2">
+            </article>
+
+            <article className="md:col-span-3 rounded-2xl bg-zinc-50 dark:bg-zinc-900/70 border border-zinc-200 dark:border-zinc-800 p-6 sm:p-8 flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+              <div className="space-y-2 max-w-2xl">
+                <div className="flex items-center gap-2 text-xs font-semibold text-indigo-600 dark:text-indigo-400">
+                  <Gift size={15} />
+                  <span>03. Refer &amp; Earn Program</span>
+                </div>
+                <h3 className="text-xl font-serif font-medium text-zinc-900 dark:text-white">
+                  Invite friends and get +10 bonus credits per sign-in
+                </h3>
+                <p className="text-sm text-zinc-600 dark:text-zinc-300 leading-relaxed">
+                  Every member gets a personal referral code and shareable link. When a friend joins with Google using your link, 10 bonus credits are credited automatically and activate whenever your daily free limit is reached.
+                </p>
+              </div>
               <button
                 type="button"
-                onClick={() => setShowPrivacy(false)}
-                className="px-4 py-2 rounded-full bg-zinc-900 dark:bg-indigo-600 text-white text-xs font-medium hover:bg-zinc-800 dark:hover:bg-indigo-500 transition-colors"
+                onClick={handleGoogleSignIn}
+                disabled={loading}
+                className="px-5 py-3 rounded-xl bg-zinc-900 dark:bg-indigo-600 text-white text-xs sm:text-sm font-semibold hover:bg-zinc-800 dark:hover:bg-indigo-500 transition-colors whitespace-nowrap shrink-0"
               >
-                Close
+                Get Your Referral Link
+              </button>
+            </article>
+          </div>
+        </section>
+
+        {/* Voice Library Preview Grid */}
+        <section id="voices" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14 sm:py-20 border-t border-zinc-200/70 dark:border-zinc-800/70">
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-10">
+            <div className="space-y-2">
+              <h2 className="text-2xl sm:text-4xl font-serif font-medium text-zinc-900 dark:text-white">
+                Explore Voice Personalities
+              </h2>
+              <p className="text-sm text-zinc-600 dark:text-zinc-400">
+                Audition 6 featured voices now—sign in to unlock all {VOICE_DATA.length} voices, 3D Carousel, and custom TTS Studio.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleGoogleSignIn}
+              disabled={loading}
+              className="text-sm font-semibold text-indigo-600 dark:text-indigo-400 hover:underline underline-offset-4 whitespace-nowrap shrink-0 self-start sm:self-auto"
+            >
+              Open Full Library →
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            {featuredVoices.map((voice) => {
+              const active = playingVoice === voice.name;
+              return (
+                <div
+                  key={voice.name}
+                  className="rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-5 flex flex-col justify-between gap-4"
+                >
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <h3 className="text-lg font-medium text-zinc-900 dark:text-white">
+                        {voice.name}
+                      </h3>
+                      <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                        {voice.analysis.gender} · {voice.pitch}
+                      </span>
+                    </div>
+                    <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed">
+                      {voice.analysis.characteristics.join(', ')}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleToggleSample(voice.name)}
+                    className={`w-full inline-flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-semibold border transition-colors ${
+                      active
+                        ? 'bg-indigo-600 text-white border-indigo-600'
+                        : 'bg-zinc-50 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-700'
+                    }`}
+                  >
+                    {active ? <Pause size={14} /> : <Play size={14} />}
+                    <span>{active ? 'Stop Sample' : 'Play Sample'}</span>
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
+        {/* Plans & Referral Section */}
+        <section id="pricing" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14 sm:py-20 border-t border-zinc-200/70 dark:border-zinc-800/70">
+          <div className="max-w-2xl mb-10 space-y-2">
+            <h2 className="text-2xl sm:text-4xl font-serif font-medium text-zinc-900 dark:text-white">
+              Start Free, Earn Credits, or Go Unlimited
+            </h2>
+            <p className="text-sm sm:text-base text-zinc-600 dark:text-zinc-400">
+              Use daily free credits, grow your balance by inviting friends (+10 per friend), or upgrade to Pro anytime.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-6 sm:p-8 flex flex-col justify-between gap-6">
+              <div className="space-y-4">
+                <div>
+                  <p className="text-xs font-semibold text-zinc-500 dark:text-zinc-400">
+                    For creators getting started
+                  </p>
+                  <h3 className="text-2xl font-serif font-medium text-zinc-900 dark:text-white mt-1">
+                    Free + Refer &amp; Earn
+                  </h3>
+                  <p className="text-sm text-zinc-600 dark:text-zinc-400 mt-1">
+                    0 BDT · Daily quota reset + bonus referral credits
+                  </p>
+                </div>
+                <ul className="space-y-2.5 text-sm text-zinc-700 dark:text-zinc-300">
+                  <li className="flex items-start gap-2.5">
+                    <Check size={16} className="text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                    <span>Daily free AI TTS &amp; Voice Casting generations</span>
+                  </li>
+                  <li className="flex items-start gap-2.5">
+                    <Check size={16} className="text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                    <span>+10 Bonus Credits for every friend who signs in with your link</span>
+                  </li>
+                  <li className="flex items-start gap-2.5">
+                    <Check size={16} className="text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                    <span>Full access to all 30 voice previews, Favorites &amp; WAV downloads</span>
+                  </li>
+                </ul>
+              </div>
+              <button
+                type="button"
+                onClick={handleGoogleSignIn}
+                disabled={loading}
+                className="w-full py-3 px-5 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white text-sm font-semibold hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
+              >
+                Start Free with Google
+              </button>
+            </div>
+
+            <div className="rounded-2xl bg-white dark:bg-zinc-900 border border-indigo-200 dark:border-indigo-900 p-6 sm:p-8 flex flex-col justify-between gap-6">
+              <div className="space-y-4">
+                <div>
+                  <p className="text-xs font-semibold text-indigo-600 dark:text-indigo-400">
+                    For high-volume voice studios
+                  </p>
+                  <h3 className="text-2xl font-serif font-medium text-zinc-900 dark:text-white mt-1">
+                    Srabon Go Pro
+                  </h3>
+                  <p className="text-sm text-zinc-600 dark:text-zinc-400 mt-1">
+                    Simple bKash / Nagad verification inside your account
+                  </p>
+                </div>
+                <ul className="space-y-2.5 text-sm text-zinc-700 dark:text-zinc-300">
+                  <li className="flex items-start gap-2.5">
+                    <Check size={16} className="text-indigo-600 dark:text-indigo-400 shrink-0 mt-0.5" />
+                    <span>Unlimited daily Voice Studio TTS generations</span>
+                  </li>
+                  <li className="flex items-start gap-2.5">
+                    <Check size={16} className="text-indigo-600 dark:text-indigo-400 shrink-0 mt-0.5" />
+                    <span>Unlimited AI Casting Director prompts &amp; character matches</span>
+                  </li>
+                  <li className="flex items-start gap-2.5">
+                    <Check size={16} className="text-indigo-600 dark:text-indigo-400 shrink-0 mt-0.5" />
+                    <span>In-app TrxID request &amp; fast admin activation</span>
+                  </li>
+                </ul>
+              </div>
+              <button
+                type="button"
+                onClick={handleGoogleSignIn}
+                disabled={loading}
+                className="w-full py-3 px-5 rounded-xl bg-zinc-900 dark:bg-indigo-600 text-white text-sm font-semibold hover:bg-zinc-800 dark:hover:bg-indigo-500 transition-colors"
+              >
+                Sign In to Upgrade
               </button>
             </div>
           </div>
+        </section>
+
+        {/* FAQ Accordion */}
+        <section id="faq" className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-14 sm:py-20 border-t border-zinc-200/70 dark:border-zinc-800/70">
+          <div className="mb-8 space-y-2">
+            <h2 className="text-2xl sm:text-4xl font-serif font-medium text-zinc-900 dark:text-white">
+              Frequently Asked Questions
+            </h2>
+            <p className="text-sm text-zinc-600 dark:text-zinc-400">
+              Quick answers about Voice Studio, referral credits, and downloads.
+            </p>
+          </div>
+
+          <div className="divide-y divide-zinc-200 dark:divide-zinc-800 border-t border-b border-zinc-200 dark:border-zinc-800">
+            {FAQ_ITEMS.map((item, idx) => {
+              const isOpen = openFaq === idx;
+              return (
+                <div key={item.q} className="py-4">
+                  <button
+                    type="button"
+                    onClick={() => setOpenFaq(isOpen ? null : idx)}
+                    aria-expanded={isOpen}
+                    className="w-full flex items-center justify-between gap-4 text-left text-sm sm:text-base font-medium text-zinc-900 dark:text-white py-1"
+                  >
+                    <span>{item.q}</span>
+                    <ChevronDown
+                      size={18}
+                      className={`shrink-0 text-zinc-400 transition-transform duration-200 ${
+                        isOpen ? 'rotate-180' : ''
+                      }`}
+                    />
+                  </button>
+                  {isOpen && (
+                    <p className="mt-2.5 text-sm text-zinc-600 dark:text-zinc-300 leading-relaxed">
+                      {item.a}
+                    </p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          <AdBanner
+            slotId={import.meta.env.VITE_ADSENSE_SLOT_DEFAULT}
+            format="horizontal"
+            className="mt-10"
+          />
+        </section>
+      </main>
+
+      {/* Full Website Footer */}
+      <footer className="border-t border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+          <div className="space-y-1">
+            <span className="text-base font-bold text-zinc-900 dark:text-white">
+              Srabon Go
+            </span>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+              Multilingual AI Voice Studio &amp; Casting Library · © 2026 Srabon Go — All Rights Reserved
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-5 text-xs font-medium text-zinc-600 dark:text-zinc-400">
+            <button
+              type="button"
+              onClick={() => setLegalTab('about')}
+              className="hover:text-zinc-900 dark:hover:text-white transition-colors"
+            >
+              About
+            </button>
+            <button
+              type="button"
+              onClick={() => setLegalTab('privacy')}
+              className="hover:text-zinc-900 dark:hover:text-white transition-colors"
+            >
+              Privacy Policy
+            </button>
+            <button
+              type="button"
+              onClick={() => setLegalTab('terms')}
+              className="hover:text-zinc-900 dark:hover:text-white transition-colors"
+            >
+              Terms of Service
+            </button>
+            <button
+              type="button"
+              onClick={() => setLegalTab('contact')}
+              className="hover:text-zinc-900 dark:hover:text-white transition-colors"
+            >
+              Contact
+            </button>
+          </div>
         </div>
+      </footer>
+
+      {legalTab && (
+        <SiteLegalModal initialTab={legalTab} onClose={() => setLegalTab(null)} />
       )}
     </div>
   );

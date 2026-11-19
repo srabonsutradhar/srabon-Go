@@ -112,6 +112,9 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
             dailyCount: typeof data?.dailyCount === 'number' ? data.dailyCount : 0,
             lastUsageDate: typeof data?.lastUsageDate === 'string' ? data.lastUsageDate : getTodayUtcDate(),
             favorites: Array.isArray(data?.favorites) ? data.favorites : [],
+            referralCode: typeof data?.referralCode === 'string' ? data.referralCode : undefined,
+            bonusCredits: typeof data?.bonusCredits === 'number' ? data.bonusCredits : 0,
+            referralCount: typeof data?.referralCount === 'number' ? data.referralCount : 0,
           };
         });
         setUsersList(list);
@@ -191,6 +194,33 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
           plan: nextPlan,
           updatedAt: serverTimestamp(),
         };
+        if (typeof existingData?.dailyCount !== 'number') payload.dailyCount = 0;
+        if (typeof existingData?.lastUsageDate !== 'string') {
+          payload.lastUsageDate = getTodayUtcDate();
+        }
+        await updateDoc(userRef, payload);
+      }
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `users/${target.uid}`);
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleGrantTenCredits = async (target: UserAccountRecord) => {
+    if (busyId) return;
+    setBusyId(`cr_${target.uid}`);
+    const userRef = doc(db, 'users', target.uid);
+    try {
+      const userSnap = await getDoc(userRef);
+      if (userSnap.exists()) {
+        const existingData = userSnap.data();
+        const currentCredits = typeof existingData?.bonusCredits === 'number' ? existingData.bonusCredits : 0;
+        const payload: Record<string, any> = {
+          bonusCredits: currentCredits + 10,
+          updatedAt: serverTimestamp(),
+        };
+        if (typeof existingData?.plan !== 'string') payload.plan = 'free';
         if (typeof existingData?.dailyCount !== 'number') payload.dailyCount = 0;
         if (typeof existingData?.lastUsageDate !== 'string') {
           payload.lastUsageDate = getTodayUtcDate();
@@ -429,27 +459,42 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                         </span>
                       </div>
                       <p className="text-xs text-zinc-500 dark:text-zinc-400 truncate">
-                        {u.email || u.uid} • Usage ({u.lastUsageDate}): {u.dailyCount}
+                        {u.email || u.uid} • Usage ({u.lastUsageDate}): {u.dailyCount} • Credits: {u.bonusCredits ?? 0} • Refs: {u.referralCount ?? 0}
                       </p>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() => handleToggleUserPlan(u)}
-                      disabled={busyId === u.uid}
-                      className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors disabled:opacity-50 ${
-                        u.plan === 'pro'
-                          ? 'bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-300 dark:hover:bg-zinc-600'
-                          : 'bg-indigo-600 hover:bg-indigo-500 text-white'
-                      }`}
-                    >
-                      {busyId === u.uid ? (
-                        <Loader2 size={13} className="animate-spin" />
-                      ) : (
-                        <Crown size={13} />
-                      )}
-                      <span>{u.plan === 'pro' ? 'Set Free' : 'Make Pro'}</span>
-                    </button>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => handleGrantTenCredits(u)}
+                        disabled={busyId === `cr_${u.uid}`}
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 text-xs font-semibold transition-colors disabled:opacity-50"
+                        title="Add +10 Bonus Credits"
+                      >
+                        {busyId === `cr_${u.uid}` ? (
+                          <Loader2 size={12} className="animate-spin" />
+                        ) : (
+                          <span>+10 Cr</span>
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleToggleUserPlan(u)}
+                        disabled={busyId === u.uid}
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors disabled:opacity-50 ${
+                          u.plan === 'pro'
+                            ? 'bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-300 dark:hover:bg-zinc-600'
+                            : 'bg-indigo-600 hover:bg-indigo-500 text-white'
+                        }`}
+                      >
+                        {busyId === u.uid ? (
+                          <Loader2 size={13} className="animate-spin" />
+                        ) : (
+                          <Crown size={13} />
+                        )}
+                        <span>{u.plan === 'pro' ? 'Set Free' : 'Make Pro'}</span>
+                      </button>
+                    </div>
                   </div>
                 ))
               )}
