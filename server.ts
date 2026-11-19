@@ -159,6 +159,19 @@ async function startServer() {
     }
   }
 
+  app.use("/api", (req, res, next): any => {
+    const origin = req.headers.origin;
+    if (origin) {
+      res.setHeader("Access-Control-Allow-Origin", origin);
+      res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+      res.setHeader("Access-Control-Allow-Headers", "Content-Type,x-client-id");
+    }
+    if (req.method === "OPTIONS") {
+      return res.sendStatus(204);
+    }
+    return next();
+  });
+
   app.get("/api/health", (_req, res) => {
     res.json({ status: "ok" });
   });

@@ -2,7 +2,7 @@
   "name": "Srabon Go Voice Library",
   "short_name": "Srabon Go",
   "description": "Multilingual AI Voice Studio, Text-to-Speech, and Voice Casting Library.",
-  "start_url": "/",
+  "start_url": "./",
   "display": "standalone",
   "background_color": "#fcfcfc",
   "theme_color": "#18181b",

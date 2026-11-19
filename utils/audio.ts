@@ -109,12 +109,17 @@ function getAppletClientId(): string {
   return 'anonclient0001';
 }
 
+function resolveApiUrl(path: string): string {
+  const base = ((import.meta as any).env?.VITE_API_BASE_URL || '').trim().replace(/\/+$/, '');
+  return base ? `${base}${path}` : path;
+}
+
 export async function generateTtsAudio(params: {
   text: string;
   voiceName: string;
   style?: string;
 }): Promise<{ audioData: string; mimeType: string }> {
-  const response = await fetch('/api/tts', {
+  const response = await fetch(resolveApiUrl('/api/tts'), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -125,6 +130,11 @@ export async function generateTtsAudio(params: {
 
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
+    if (response.status === 404 && !data.error) {
+      throw new Error(
+        'TTS API সার্ভার পাওয়া যায়নি (404)। লাইভ AI ভয়েস জেনারেশনের জন্য পূর্ণাঙ্গ Node সার্ভার বা AI Studio লিংক ব্যবহার করুন।'
+      );
+    }
     throw new Error(data.error || `TTS request failed with status ${response.status}`);
   }
   if (!data.audioData) {

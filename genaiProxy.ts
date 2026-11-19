@@ -92,27 +92,38 @@ function __getAppletClientId(): string {
   return "anonclient0001";
 }
 
+function resolveApiUrl(path: string): string {
+  const base = ((import.meta as any).env?.VITE_API_BASE_URL || "").trim().replace(/\/+$/, "");
+  return base ? `${base}${path}` : path;
+}
+
 async function postJson(url: string, body: any) {
-  const response = await fetch(url, {
+  const response = await fetch(resolveApiUrl(url), {
     method: "POST",
     headers: { "Content-Type": "application/json", "x-client-id": __getAppletClientId() },
     body: JSON.stringify(body),
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
+    if (response.status === 404 && !data.error) {
+      throw new Error("AI API সার্ভার পাওয়া যায়নি (404)। অনুগ্রহ করে ব্যাকএন্ড সার্ভার বা AI Studio লিংক ব্যবহার করুন।");
+    }
     throw new Error(data.error || `Request failed with status ${response.status}`);
   }
   return data;
 }
 
 async function createNdjsonStream(url: string, body: any) {
-  const response = await fetch(url, {
+  const response = await fetch(resolveApiUrl(url), {
     method: "POST",
     headers: { "Content-Type": "application/json", "x-client-id": __getAppletClientId() },
     body: JSON.stringify(body),
   });
   if (!response.ok) {
     const data = await response.json().catch(() => ({}));
+    if (response.status === 404 && !data.error) {
+      throw new Error("AI API সার্ভার পাওয়া যায়নি (404)। অনুগ্রহ করে ব্যাকএন্ড সার্ভার বা AI Studio লিংক ব্যবহার করুন।");
+    }
     throw new Error(data.error || `Request failed with status ${response.status}`);
   }
   async function* generator() {
