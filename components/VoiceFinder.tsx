@@ -7,6 +7,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { GoogleGenAI, Type } from "../genaiProxy";
 import { Sparkles, Loader2, X, ArrowRight, Wand2 } from 'lucide-react';
 import { Voice, AiRecommendation } from '../types';
+import { checkBackendHealth } from '../utils/audio';
 
 interface VoiceFinderProps {
   voices: Voice[];
@@ -72,6 +73,15 @@ const VoiceFinder: React.FC<VoiceFinderProps> = ({ voices, onRecommendation, onC
     setError(null);
 
     try {
+      const hasBackend = await checkBackendHealth();
+      if (!hasBackend) {
+        setError(
+          'AI Casting সার্ভার সক্রিয় নেই (Static Host)। এটি ব্যবহার করতে Node সার্ভার বা VITE_API_BASE_URL যুক্ত করুন।'
+        );
+        setLoading(false);
+        return;
+      }
+
       if (onBeforeGenerate) {
         const allowed = await onBeforeGenerate();
         if (!allowed) {
@@ -125,7 +135,7 @@ const VoiceFinder: React.FC<VoiceFinderProps> = ({ voices, onRecommendation, onC
       `;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-4-hydrogen',
+        model: 'gemini-3.1-flash-lite',
         contents: prompt,
         config: {
           responseMimeType: "application/json",
@@ -171,9 +181,9 @@ const VoiceFinder: React.FC<VoiceFinderProps> = ({ voices, onRecommendation, onC
         setError("No matching voices found. Please try refining your description.");
       }
 
-    } catch (err) {
+    } catch (err: any) {
       console.error("AI Error:", err);
-      setError("Analysis failed. Please try again.");
+      setError(err?.message || "Analysis failed. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -250,7 +260,7 @@ const VoiceFinder: React.FC<VoiceFinderProps> = ({ voices, onRecommendation, onC
                   {error ? (
                     <span className="text-red-500 dark:text-red-400 flex items-center gap-1"><X size={14}/> {error}</span>
                   ) : (
-                    <>Powered by <span className="text-indigo-500 dark:text-indigo-400">Gemini 4 Hydrogen</span></>
+                    <>Powered by <span className="text-indigo-500 dark:text-indigo-400">Gemini 3.1 Flash Lite</span></>
                   )}
               </span>
               

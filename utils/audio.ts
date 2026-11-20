@@ -109,9 +109,25 @@ function getAppletClientId(): string {
   return 'anonclient0001';
 }
 
-function resolveApiUrl(path: string): string {
+export function resolveApiUrl(path: string): string {
   const base = ((import.meta as any).env?.VITE_API_BASE_URL || '').trim().replace(/\/+$/, '');
   return base ? `${base}${path}` : path;
+}
+
+export async function checkBackendHealth(): Promise<boolean> {
+  try {
+    const res = await fetch(resolveApiUrl('/api/health'), {
+      method: 'GET',
+      cache: 'no-store',
+    });
+    if (!res.ok) return false;
+    const contentType = res.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) return false;
+    const data = await res.json().catch(() => null);
+    return data?.status === 'ok';
+  } catch {
+    return false;
+  }
 }
 
 export async function generateTtsAudio(params: {
@@ -130,9 +146,9 @@ export async function generateTtsAudio(params: {
 
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    if (response.status === 404 && !data.error) {
+    if ((response.status === 404 || response.status === 405) && !data.error) {
       throw new Error(
-        'TTS API সার্ভার পাওয়া যায়নি (404)। লাইভ AI ভয়েস জেনারেশনের জন্য পূর্ণাঙ্গ Node সার্ভার বা AI Studio লিংক ব্যবহার করুন।'
+        `ব্যাকএন্ড সার্ভার সক্রিয় নেই (Status ${response.status})। GitHub Pages শুধু স্ট্যাটিক ফাইল চালায়—তাই Gemini AI TTS ব্যবহার করতে পূর্ণাঙ্গ সার্ভার (Node.js) বা VITE_API_BASE_URL যুক্ত করুন।`
       );
     }
     throw new Error(data.error || `TTS request failed with status ${response.status}`);

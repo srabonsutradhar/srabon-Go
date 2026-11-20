@@ -105,7 +105,10 @@ const GoogleLoginGate: React.FC<GoogleLoginGateProps> = ({ isDarkMode, toggleThe
       } else if (code === 'auth/popup-blocked') {
         setError('ব্রাউজারে পপআপ ব্লক করা আছে। অনুগ্রহ করে পপআপ অনুমতি দিন। (Please allow popups to sign in.)');
       } else if (code === 'auth/unauthorized-domain') {
-        setError('এই ডোমেইনটি Firebase Authentication-এ অনুমোদিত নয়। Firebase Console > Authentication > Settings > Authorized domains-এ ডোমেইনটি যোগ করুন।');
+        const host = typeof window !== 'undefined' ? window.location.hostname : '';
+        setError(
+          `এই ডোমেইন (${host}) Firebase Authentication-এ অনুমোদিত নয়। Firebase Console > Authentication > Settings > Authorized domains-এ "${host}" যোগ করুন।`
+        );
       } else {
         setError(err?.message || 'Google sign-in failed. Please try again.');
       }

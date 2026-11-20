@@ -5,7 +5,7 @@
 
 import React from 'react';
 import { FilterState } from '../types';
-import { Search, Sparkles, ChevronDown, Mic, LayoutGrid, GalleryHorizontalEnd, Sun, Moon, AudioLines, Heart, LogOut, Crown, Shield, Gift } from 'lucide-react';
+import { Search, Sparkles, ChevronDown, Mic, LayoutGrid, GalleryHorizontalEnd, Sun, Moon, AudioLines, Heart, LogOut, Crown, Shield, Gift, TrendingUp } from 'lucide-react';
 import type { User } from 'firebase/auth';
 import type { UserPlan } from '../types';
 
@@ -15,8 +15,8 @@ interface FilterBarProps {
   uniqueGenders: string[];
   uniquePitches: string[];
   onOpenAiCasting: () => void;
-  viewMode: 'studio' | 'carousel' | 'grid' | 'favorites';
-  onViewModeChange: (mode: 'studio' | 'carousel' | 'grid' | 'favorites') => void;
+  viewMode: 'studio' | 'ideas' | 'carousel' | 'grid' | 'favorites';
+  onViewModeChange: (mode: 'studio' | 'ideas' | 'carousel' | 'grid' | 'favorites') => void;
   favoritesCount: number;
   isDarkMode: boolean;
   toggleTheme: () => void;
@@ -147,11 +147,20 @@ const FilterBar: React.FC<FilterBarProps> = ({
                         <div className="flex bg-zinc-100 dark:bg-zinc-800 p-1 rounded-lg border border-zinc-200 dark:border-zinc-700">
                             <button
                                 onClick={() => onViewModeChange('studio')}
-                                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all ${viewMode === 'studio' ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white shadow-sm' : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200'}`}
+                                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all whitespace-nowrap shrink-0 ${viewMode === 'studio' ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white shadow-sm' : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200'}`}
                                 title="Voice Studio (Custom TTS)"
                             >
                                 <AudioLines size={14} />
                                 <span className="hidden sm:inline">Studio</span>
+                            </button>
+                            <button
+                                onClick={() => onViewModeChange('ideas')}
+                                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all whitespace-nowrap shrink-0 ${viewMode === 'ideas' ? 'bg-white dark:bg-zinc-700 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-zinc-500 dark:text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400'}`}
+                                title="AI Trending Audio Ideas"
+                                aria-label="AI Trending Audio Ideas"
+                            >
+                                <TrendingUp size={14} />
+                                <span className="hidden sm:inline">Ideas</span>
                             </button>
                             <button
                                 onClick={() => onViewModeChange('carousel')}
@@ -277,7 +286,7 @@ const FilterBar: React.FC<FilterBarProps> = ({
         </div>
         
         {/* Mobile Filters Sub-bar */}
-        {viewMode !== 'studio' && (
+        {viewMode !== 'studio' && viewMode !== 'ideas' && (
           <div className="xl:hidden border-t border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50">
               <div className="px-4 py-2 flex items-center gap-2 overflow-x-auto scrollbar-hide">
                    <div className="relative sm:hidden flex-1 min-w-[120px]">

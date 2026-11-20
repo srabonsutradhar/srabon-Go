@@ -7,7 +7,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Play, Square, Loader2, Volume2, AlertCircle, ChevronDown, Download } from 'lucide-react';
 import { Voice } from '../types';
 import AudioVisualizer from './AudioVisualizer';
-import { decodeBase64, decodeAudioToBuffer, createWavBlob, generateTtsAudio } from '../utils/audio';
+import { decodeBase64, decodeAudioToBuffer, createWavBlob, generateTtsAudio, checkBackendHealth } from '../utils/audio';
 
 interface AiTtsPreviewProps {
   text: string;
@@ -70,6 +70,11 @@ const AiTtsPreview: React.FC<AiTtsPreviewProps> = ({ text, voices, onBeforeGener
     setError(null);
 
     try {
+      const hasBackend = await checkBackendHealth();
+      if (!hasBackend) {
+        throw new Error('ব্যাকএন্ড সার্ভার সক্রিয় নেই (GitHub Pages স্ট্যাটিক হোস্ট)। AI Studio লিংক বা Node সার্ভার ব্যবহার করুন।');
+      }
+
       if (onBeforeGenerate) {
         const allowed = await onBeforeGenerate();
         if (!allowed) {

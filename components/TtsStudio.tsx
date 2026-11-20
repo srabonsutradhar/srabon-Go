@@ -16,6 +16,7 @@ import {
   RotateCcw,
   Sun,
   Check,
+  TrendingUp,
 } from 'lucide-react';
 import { Voice } from '../types';
 import AudioVisualizer from './AudioVisualizer';
@@ -26,6 +27,7 @@ import {
   decodeAudioToBuffer,
   createWavBlob,
   generateTtsAudio,
+  checkBackendHealth,
 } from '../utils/audio';
 
 interface TtsStudioProps {
@@ -34,6 +36,8 @@ interface TtsStudioProps {
   onSelectVoice: (voiceName: string) => void;
   onBeforeGenerate?: () => Promise<boolean>;
   onOpenLegal?: (tab: LegalTab) => void;
+  incomingDraft?: { text: string; style: string; revision: number } | null;
+  onOpenIdeas?: () => void;
 }
 
 const DEFAULT_SCRIPT =
@@ -95,6 +99,8 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
   onSelectVoice,
   onBeforeGenerate,
   onOpenLegal,
+  incomingDraft,
+  onOpenIdeas,
 }) => {
   const [text, setText] = useState(DEFAULT_SCRIPT);
   const [style, setStyle] = useState(STYLE_PRESETS[0].value);
@@ -105,6 +111,8 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
   const [cachedKey, setCachedKey] = useState<string | null>(null);
   const [cachedBytes, setCachedBytes] = useState<Uint8Array | null>(null);
   const [downloaded, setDownloaded] = useState(false);
+  const [backendAvailable, setBackendAvailable] = useState<boolean | null>(null);
+  const [isUsingDeviceSpeech, setIsUsingDeviceSpeech] = useState(false);
 
   const audioContextRef = useRef<AudioContext | null>(null);
   const sourceNodeRef = useRef<AudioBufferSourceNode | null>(null);
@@ -119,6 +127,9 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
 
   useEffect(() => {
     isMountedRef.current = true;
+    checkBackendHealth().then((ok) => {
+      if (isMountedRef.current) setBackendAvailable(ok);
+    });
     return () => {
       isMountedRef.current = false;
       stopPlayback();
@@ -127,6 +138,14 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (!incomingDraft) return;
+    stopPlayback();
+    setText(incomingDraft.text);
+    setStyle(incomingDraft.style);
+    setError(null);
+  }, [incomingDraft?.revision]);
 
   const currentVoice =
     voices.find((v) => v.name === selectedVoiceName) || voices[0];
@@ -143,6 +162,11 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
   const stopPlayback = () => {
     activeRunIdRef.current += 1;
     clearLoopTimer();
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      try {
+        window.speechSynthesis.cancel();
+      } catch {}
+    }
     if (sourceNodeRef.current) {
       try {
         sourceNodeRef.current.onended = null;
@@ -152,7 +176,54 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
     }
     if (isMountedRef.current) {
       setIsPlaying(false);
+      setIsUsingDeviceSpeech(false);
     }
+  };
+
+  const speakWithDeviceVoice = (trimmedText: string, runId: number) => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+      setError('এই ব্রাউজারে Device Speech সাপোর্ট করে না। Gemini AI TTS ব্যবহার করতে Node সার্ভার বা VITE_API_BASE_URL সেট করুন।');
+      return;
+    }
+
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(trimmedText);
+    const hasBengali = /[\u0980-\u09FF]/.test(trimmedText);
+    const targetLang = hasBengali ? 'bn-BD' : 'en-US';
+    utterance.lang = targetLang;
+
+    const availableVoices = window.speechSynthesis.getVoices();
+    const preferredVoice =
+      availableVoices.find((v) => v.lang.toLowerCase().startsWith(hasBengali ? 'bn' : 'en')) ||
+      null;
+    if (preferredVoice) {
+      utterance.voice = preferredVoice;
+    }
+
+    utterance.onend = () => {
+      if (!isMountedRef.current || activeRunIdRef.current !== runId) return;
+      if (isLoopingRef.current) {
+        loopTimerRef.current = window.setTimeout(() => {
+          if (isMountedRef.current && activeRunIdRef.current === runId && isLoopingRef.current) {
+            speakWithDeviceVoice(trimmedText, runId);
+          }
+        }, 1200);
+      } else {
+        setIsPlaying(false);
+        setIsUsingDeviceSpeech(false);
+      }
+    };
+
+    utterance.onerror = () => {
+      if (!isMountedRef.current || activeRunIdRef.current !== runId) return;
+      setIsPlaying(false);
+      setIsUsingDeviceSpeech(false);
+      setError('Device Speech প্লেব্যাক শুরু করা যায়নি।');
+    };
+
+    setIsUsingDeviceSpeech(true);
+    setIsPlaying(true);
+    window.speechSynthesis.speak(utterance);
   };
 
   const playBytes = async (bytes: Uint8Array, runId: number) => {
@@ -226,6 +297,15 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
 
     setIsLoading(true);
     try {
+      const hasBackend = backendAvailable === true ? true : await checkBackendHealth();
+      if (isMountedRef.current) setBackendAvailable(hasBackend);
+
+      if (!hasBackend) {
+        if (isMountedRef.current) setIsLoading(false);
+        speakWithDeviceVoice(trimmed, runId);
+        return;
+      }
+
       if (onBeforeGenerate) {
         const allowed = await onBeforeGenerate();
         if (!allowed) return;
@@ -265,6 +345,14 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
       setIsLoading(true);
       setError(null);
       try {
+        const hasBackend = backendAvailable === true ? true : await checkBackendHealth();
+        if (isMountedRef.current) setBackendAvailable(hasBackend);
+        if (!hasBackend) {
+          throw new Error(
+            'WAV ডাউনলোডের জন্য Gemini ব্যাকএন্ড সার্ভার প্রয়োজন (GitHub Pages স্ট্যাটিক হোস্টে সরাসরি WAV জেনারেট হয় না)।'
+          );
+        }
+
         if (onBeforeGenerate) {
           const allowed = await onBeforeGenerate();
           if (!allowed) return;
@@ -347,9 +435,21 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
             <div className="lg:col-span-7 space-y-5">
               {/* Quick Presets */}
               <div className="space-y-2">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
-                  Quick Scripts
-                </span>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
+                    Quick Scripts
+                  </span>
+                  {onOpenIdeas && (
+                    <button
+                      type="button"
+                      onClick={onOpenIdeas}
+                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors"
+                    >
+                      <TrendingUp size={13} />
+                      <span>AI Trending Ideas</span>
+                    </button>
+                  )}
+                </div>
                 <div className="flex flex-wrap gap-2">
                   {SCRIPT_PRESETS.map((preset) => {
                     const isActive = text.trim() === preset.text;
@@ -625,9 +725,19 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
                   </button>
                 </div>
 
+                {backendAvailable === false && (
+                  <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/70 text-xs text-amber-800 dark:text-amber-200 leading-relaxed">
+                    <strong>Static Host Mode:</strong> এই সাইটটি এখন ব্যাকএন্ড সার্ভার ছাড়া চলছে (যেমন GitHub Pages)। তাই আপনার ব্রাউজারের <strong>Device Voice</strong> ব্যবহার করে প্লে হবে। স্টুডিও Gemini ভয়েস ও WAV ডাউনলোডের জন্য Node সার্ভার বা <code className="font-mono">VITE_API_BASE_URL</code> যুক্ত করুন।
+                  </div>
+                )}
+
                 <div className="flex items-center justify-center gap-1.5 text-[11px] text-zinc-400 dark:text-zinc-500 pt-1">
                   <Sparkles size={12} className="text-indigo-500" />
-                  <span>Powered by Gemini 3.8 Flash Lite TTS</span>
+                  <span>
+                    {isUsingDeviceSpeech
+                      ? 'Playing via Browser Device Speech (Static Fallback)'
+                      : 'Powered by Gemini 3.8 Flash Lite TTS'}
+                  </span>
                 </div>
               </div>
             </div>

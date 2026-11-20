@@ -59,6 +59,7 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   const [freeDailyLimit, setFreeDailyLimit] = useState(String(billingConfig.freeDailyLimit));
   const [savingConfig, setSavingConfig] = useState(false);
   const [savedBanner, setSavedBanner] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
     setFeeAmount(billingConfig.feeAmount);
@@ -158,7 +159,8 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
       }
 
       await batch.commit();
-    } catch (error) {
+    } catch (error: any) {
+      setActionError(error?.message || 'Pro request অনুমোদন করা যায়নি।');
       handleFirestoreError(error, OperationType.UPDATE, `proRequests/${req.id}`);
     } finally {
       setBusyId(null);
@@ -227,7 +229,8 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
         }
         await updateDoc(userRef, payload);
       }
-    } catch (error) {
+    } catch (error: any) {
+      setActionError(error?.message || 'বোনাস ক্রেডিট যোগ করা যায়নি।');
       handleFirestoreError(error, OperationType.UPDATE, `users/${target.uid}`);
     } finally {
       setBusyId(null);
@@ -353,6 +356,18 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
 
         {/* Body */}
         <div className="p-6 overflow-y-auto flex-1 space-y-4">
+          {actionError && (
+            <div className="p-3 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 text-xs text-red-600 dark:text-red-300 flex items-center justify-between gap-2">
+              <span>{actionError}</span>
+              <button
+                type="button"
+                onClick={() => setActionError(null)}
+                className="underline font-semibold shrink-0"
+              >
+                Dismiss
+              </button>
+            </div>
+          )}
           {activeTab === 'requests' && (
             <div className="space-y-3">
               {requests.length === 0 ? (

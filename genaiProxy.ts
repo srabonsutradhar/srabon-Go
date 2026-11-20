@@ -105,8 +105,10 @@ async function postJson(url: string, body: any) {
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    if (response.status === 404 && !data.error) {
-      throw new Error("AI API সার্ভার পাওয়া যায়নি (404)। অনুগ্রহ করে ব্যাকএন্ড সার্ভার বা AI Studio লিংক ব্যবহার করুন।");
+    if ((response.status === 404 || response.status === 405) && !data.error) {
+      throw new Error(
+        `AI API সার্ভার সক্রিয় নেই (Status ${response.status})। GitHub Pages শুধু স্ট্যাটিক ফাইল চালায়—লাইভ AI ব্যবহারের জন্য Node সার্ভার বা VITE_API_BASE_URL প্রয়োজন।`
+      );
     }
     throw new Error(data.error || `Request failed with status ${response.status}`);
   }
@@ -121,8 +123,10 @@ async function createNdjsonStream(url: string, body: any) {
   });
   if (!response.ok) {
     const data = await response.json().catch(() => ({}));
-    if (response.status === 404 && !data.error) {
-      throw new Error("AI API সার্ভার পাওয়া যায়নি (404)। অনুগ্রহ করে ব্যাকএন্ড সার্ভার বা AI Studio লিংক ব্যবহার করুন।");
+    if ((response.status === 404 || response.status === 405) && !data.error) {
+      throw new Error(
+        `AI API সার্ভার সক্রিয় নেই (Status ${response.status})। GitHub Pages শুধু স্ট্যাটিক ফাইল চালায়—লাইভ AI ব্যবহারের জন্য Node সার্ভার বা VITE_API_BASE_URL প্রয়োজন।`
+      );
     }
     throw new Error(data.error || `Request failed with status ${response.status}`);
   }

@@ -11,6 +11,7 @@ import FilterBar from './components/FilterBar';
 import VoiceFinder from './components/VoiceFinder';
 import AiResultCard from './components/AiResultCard';
 import TtsStudio from './components/TtsStudio';
+import TrendingIdeas from './components/TrendingIdeas';
 import GoogleLoginGate from './components/GoogleLoginGate';
 import ProUpgradeModal from './components/ProUpgradeModal';
 import AdminPanelModal from './components/AdminPanelModal';
@@ -71,8 +72,9 @@ const App: React.FC = () => {
   const [aiResult, setAiResult] = useState<AiRecommendation | null>(null);
   const [isAiCardVisible, setIsAiCardVisible] = useState(false);
   const [showVoiceFinder, setShowVoiceFinder] = useState(false);
-  const [viewMode, setViewMode] = useState<'studio' | 'carousel' | 'grid' | 'favorites'>('studio');
+  const [viewMode, setViewMode] = useState<'studio' | 'ideas' | 'carousel' | 'grid' | 'favorites'>('studio');
   const [studioVoiceName, setStudioVoiceName] = useState<string>('Kore');
+  const [studioDraft, setStudioDraft] = useState<{ text: string; style: string; revision: number } | null>(null);
   const [favorites, setFavorites] = useState<string[]>([]);
   const [userPlan, setUserPlan] = useState<UserPlan>('free');
   const [dailyCount, setDailyCount] = useState<number>(0);
@@ -209,7 +211,7 @@ const App: React.FC = () => {
             typeof data?.lastUsageDate !== 'string' ||
             !Array.isArray(data?.favorites);
 
-          if (needsSchemaMigration && !isMigratingSchema) {
+          if (needsSchemaMigration && !isMigratingSchema && !snapshot.metadata.hasPendingWrites) {
             isMigratingSchema = true;
             const patch: Record<string, any> = {
               plan: safePlan,
@@ -241,7 +243,13 @@ const App: React.FC = () => {
             }
           }
 
-          await handleReferralLifecycle(code);
+          if (!snapshot.metadata.hasPendingWrites) {
+            try {
+              await handleReferralLifecycle(code);
+            } catch (err) {
+              console.error('Referral lifecycle error:', err);
+            }
+          }
         } else if (!initializedDoc) {
           initializedDoc = true;
           let localFavs: string[] = [];
@@ -481,6 +489,7 @@ const App: React.FC = () => {
     setShowProModal(false);
     setShowAdminPanel(false);
     setLegalTab(null);
+    setStudioDraft(null);
     await signOutUser();
   };
 
@@ -529,8 +538,8 @@ const App: React.FC = () => {
     setViewMode('studio');
   };
 
-  const handleViewModeChange = (mode: 'studio' | 'carousel' | 'grid' | 'favorites') => {
-    if (mode === 'studio') {
+  const handleViewModeChange = (mode: 'studio' | 'ideas' | 'carousel' | 'grid' | 'favorites') => {
+    if (mode === 'studio' || mode === 'ideas') {
       setPlayingVoice(null);
     }
     setViewMode(mode);
@@ -581,7 +590,7 @@ const App: React.FC = () => {
           filters={filters}
           onFilterChange={(next) => {
             setFilters(next);
-            if (viewMode === 'studio' && (next.search || next.gender !== 'All' || next.pitch !== 'All')) {
+            if ((viewMode === 'studio' || viewMode === 'ideas') && (next.search || next.gender !== 'All' || next.pitch !== 'All')) {
               setViewMode('grid');
             }
           }}
@@ -613,6 +622,24 @@ const App: React.FC = () => {
                   voices={VOICE_DATA}
                   selectedVoiceName={studioVoiceName}
                   onSelectVoice={setStudioVoiceName}
+                  onBeforeGenerate={consumeAiQuota}
+                  onOpenLegal={setLegalTab}
+                  incomingDraft={studioDraft}
+                  onOpenIdeas={() => handleViewModeChange('ideas')}
+                />
+              ) : viewMode === 'ideas' ? (
+                <TrendingIdeas
+                  voices={VOICE_DATA}
+                  onUseIdeaInStudio={(idea) => {
+                    setPlayingVoice(null);
+                    setStudioVoiceName(idea.voiceName);
+                    setStudioDraft((prev) => ({
+                      text: idea.text,
+                      style: idea.style,
+                      revision: (prev?.revision ?? 0) + 1,
+                    }));
+                    setViewMode('studio');
+                  }}
                   onBeforeGenerate={consumeAiQuota}
                   onOpenLegal={setLegalTab}
                 />

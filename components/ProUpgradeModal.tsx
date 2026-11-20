@@ -98,7 +98,7 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
 
   const referralLink =
     typeof window !== 'undefined' && referralCode
-      ? `${window.location.origin}/?ref=${referralCode}`
+      ? `${window.location.origin}${window.location.pathname}?ref=${referralCode}`
       : '';
 
   useEffect(() => {
