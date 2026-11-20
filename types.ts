@@ -35,12 +35,16 @@ export interface AiRecommendation {
 
 export type UserPlan = 'free' | 'pro';
 
+export type ProPackageType = 'monthly' | 'yearly';
+
 export type PaymentMethod = 'bKash' | 'Nagad' | 'Rocket' | 'Bank / Other';
 
 export type ProRequestStatus = 'pending' | 'approved' | 'rejected';
 
 export interface BillingConfig {
   feeAmount: string;
+  monthlyFee?: string;
+  yearlyFee?: string;
   paymentMethod: string;
   paymentAccount: string;
   instructions: string;
@@ -53,6 +57,7 @@ export interface ProUpgradeRequest {
   uid: string;
   userEmail?: string;
   userName?: string;
+  packageType?: ProPackageType;
   paymentMethod: PaymentMethod;
   senderNumber: string;
   transactionId: string;
@@ -69,6 +74,8 @@ export interface UserAccountRecord {
   email?: string;
   photoURL?: string;
   plan: UserPlan;
+  proPackageType?: ProPackageType;
+  proExpiresAt?: any;
   dailyCount: number;
   lastUsageDate: string;
   favorites: string[];
@@ -171,4 +178,44 @@ export interface AppIssueRecord {
   origin?: 'firestore' | 'session';
   createdAt?: any;
   updatedAt?: any;
+}
+
+export type ChatPageScope = 'studio' | 'salon';
+export type CommunityRoomId = 'general' | 'studio' | 'salon';
+export type ChatSenderRole = 'user' | 'admin';
+
+export interface AdminFeedbackThread {
+  threadId: string;
+  uid: string;
+  userName: string;
+  pageScope: ChatPageScope;
+  lastMessage: string;
+  lastSenderRole: ChatSenderRole;
+  unreadByAdmin: boolean;
+  unreadByUser: boolean;
+  createdAt?: any;
+  updatedAt?: any;
+}
+
+export interface AdminFeedbackMessage {
+  id: string;
+  threadId: string;
+  threadOwnerUid: string;
+  uid: string;
+  senderName: string;
+  senderRole: ChatSenderRole;
+  pageScope: ChatPageScope;
+  text: string;
+  createdAt?: any;
+}
+
+export interface CommunityMessage {
+  id: string;
+  roomId: CommunityRoomId;
+  uid: string;
+  senderName: string;
+  senderRole: ChatSenderRole;
+  originPage: 'home' | 'studio' | 'ideas' | 'salon' | 'library';
+  text: string;
+  createdAt?: any;
 }

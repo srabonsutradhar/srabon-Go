@@ -17,7 +17,7 @@ import {
   Check,
   ShieldCheck,
 } from 'lucide-react';
-import { signInWithGoogle } from '../firebase';
+import { auth, signInWithGoogle } from '../firebase';
 import { reportAppIssue } from '../utils/appIssues';
 import { VOICE_DATA } from '../constants';
 import AudioVisualizer from './AudioVisualizer';
@@ -57,6 +57,7 @@ const GoogleLoginGate: React.FC<GoogleLoginGateProps> = ({ isDarkMode, toggleThe
   const [openFaq, setOpenFaq] = useState<number | null>(0);
   const [legalTab, setLegalTab] = useState<LegalTab | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const signingInRef = useRef(false);
 
   const featuredVoices = FEATURED_VOICE_NAMES.map((name) =>
     VOICE_DATA.find((v) => v.name === name)
@@ -93,18 +94,32 @@ const GoogleLoginGate: React.FC<GoogleLoginGateProps> = ({ isDarkMode, toggleThe
   };
 
   const handleGoogleSignIn = async () => {
-    if (loading) return;
+    if (loading || signingInRef.current) return;
+    signingInRef.current = true;
     setLoading(true);
     setError(null);
 
     try {
       await signInWithGoogle();
     } catch (err: any) {
+      if (auth.currentUser) {
+        return;
+      }
       const code = err?.code || '';
+      const rawMessage = typeof err?.message === 'string' ? err.message : '';
       if (code === 'auth/popup-closed-by-user') {
         setError('লগইন পপআপ বন্ধ করা হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন। (Sign-in popup was closed.)');
+      } else if (code === 'auth/cancelled-popup-request' || rawMessage.includes('Pending promise was never set')) {
+        setError('লগইন প্রক্রিয়াটি সম্পূর্ণ হয়নি। অনুগ্রহ করে আবার "Continue with Google" বাটনে ক্লিক করুন।');
       } else if (code === 'auth/popup-blocked') {
         setError('ব্রাউজারে পপআপ ব্লক করা আছে। অনুগ্রহ করে পপআপ অনুমতি দিন। (Please allow popups to sign in.)');
+      } else if (
+        code === 'auth/web-storage-unsupported' ||
+        code === 'auth/operation-not-supported-in-this-environment'
+      ) {
+        setError('এই ব্রাউজারে তৃতীয়-পক্ষ কুকি/স্টোরেজ বন্ধ আছে। অনুগ্রহ করে Chrome বা Safari-তে সরাসরি ওপেন করে আবার চেষ্টা করুন।');
+      } else if (code === 'auth/network-request-failed') {
+        setError('ইন্টারনেট সংযোগ দুর্বল থাকায় লগইন সম্পন্ন হয়নি। অনুগ্রহ করে আবার চেষ্টা করুন।');
       } else if (code === 'auth/unauthorized-domain') {
         const host = typeof window !== 'undefined' ? window.location.hostname : '';
         reportAppIssue({
@@ -118,12 +133,13 @@ const GoogleLoginGate: React.FC<GoogleLoginGateProps> = ({ isDarkMode, toggleThe
         reportAppIssue({
           source: 'GoogleSignIn',
           severity: 'error',
-          message: err?.message || 'Google sign-in failed',
+          message: rawMessage || 'Google sign-in failed',
           details: code ? `Firebase Auth code: ${code}` : undefined,
         });
         setError('লগইন সম্পন্ন করা যায়নি। অনুগ্রহ করে পরে আবার চেষ্টা করুন।');
       }
     } finally {
+      signingInRef.current = false;
       setLoading(false);
     }
   };

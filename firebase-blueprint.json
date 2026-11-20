@@ -38,6 +38,17 @@
           "description": "User access tier. Always initialized as free; only admin can promote to pro.",
           "maxLength": 10
         },
+        "proPackageType": {
+          "type": "string",
+          "enum": ["monthly", "yearly"],
+          "description": "Optional active Voice Studio Pro subscription cycle set by admin.",
+          "maxLength": 16
+        },
+        "proExpiresAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Optional expiration timestamp for monthly/yearly Pro subscription."
+        },
         "dailyCount": {
           "type": "integer",
           "description": "Number of AI generations used on lastUsageDate."
@@ -164,6 +175,12 @@
           "description": "Display name of the requesting user.",
           "maxLength": 120
         },
+        "packageType": {
+          "type": "string",
+          "enum": ["monthly", "yearly"],
+          "description": "Requested Voice Studio Pro package duration (monthly or yearly).",
+          "maxLength": 16
+        },
         "paymentMethod": {
           "type": "string",
           "enum": ["bKash", "Nagad", "Rocket", "Bank / Other"],
@@ -220,6 +237,18 @@
         "feeAmount": {
           "type": "string",
           "description": "Display price for Pro unlock (e.g. 50 BDT).",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "monthlyFee": {
+          "type": "string",
+          "description": "Display price for Voice Studio Monthly Pro package (e.g. 50 BDT).",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "yearlyFee": {
+          "type": "string",
+          "description": "Display price for Voice Studio Yearly Pro package (e.g. 480 BDT).",
           "minLength": 1,
           "maxLength": 40
         },
@@ -615,6 +644,199 @@
         "createdAt",
         "updatedAt"
       ]
+    },
+    "AdminFeedbackThread": {
+      "title": "AdminFeedbackThread",
+      "description": "Direct feedback conversation thread between a customer (from Voice Studio or Salon page) and the Admin.",
+      "type": "object",
+      "properties": {
+        "threadId": {
+          "type": "string",
+          "description": "Document ID formatted as <uid>__<pageScope>.",
+          "minLength": 3,
+          "maxLength": 140,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth UID of the customer.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userName": {
+          "type": "string",
+          "description": "Display name of the customer (non-PII).",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "pageScope": {
+          "type": "string",
+          "enum": ["studio", "salon"],
+          "description": "Which app section the feedback thread belongs to."
+        },
+        "lastMessage": {
+          "type": "string",
+          "description": "Preview snippet of the latest message.",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "lastSenderRole": {
+          "type": "string",
+          "enum": ["user", "admin"],
+          "description": "Role of the sender who sent the latest message."
+        },
+        "unreadByAdmin": {
+          "type": "boolean",
+          "description": "Whether Admin has unread replies in this thread."
+        },
+        "unreadByUser": {
+          "type": "boolean",
+          "description": "Whether the customer has unread Admin replies."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when thread started."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when thread was last active."
+        }
+      },
+      "required": [
+        "threadId",
+        "uid",
+        "userName",
+        "pageScope",
+        "lastMessage",
+        "lastSenderRole",
+        "unreadByAdmin",
+        "unreadByUser",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "AdminFeedbackMessage": {
+      "title": "AdminFeedbackMessage",
+      "description": "Individual message inside an AdminFeedbackThread between a customer and Admin.",
+      "type": "object",
+      "properties": {
+        "threadId": {
+          "type": "string",
+          "description": "Parent AdminFeedbackThread ID.",
+          "minLength": 3,
+          "maxLength": 140,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "threadOwnerUid": {
+          "type": "string",
+          "description": "Owner UID of the parent thread for secure list filtering without get().",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth UID of the message author.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "senderName": {
+          "type": "string",
+          "description": "Display name of the sender.",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "senderRole": {
+          "type": "string",
+          "enum": ["user", "admin"],
+          "description": "Whether the message was sent by a user or Admin."
+        },
+        "pageScope": {
+          "type": "string",
+          "enum": ["studio", "salon"],
+          "description": "App page context for this message."
+        },
+        "text": {
+          "type": "string",
+          "description": "Message text content.",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when message was sent."
+        }
+      },
+      "required": [
+        "threadId",
+        "threadOwnerUid",
+        "uid",
+        "senderName",
+        "senderRole",
+        "pageScope",
+        "text",
+        "createdAt"
+      ]
+    },
+    "CommunityMessage": {
+      "title": "CommunityMessage",
+      "description": "Public user-to-user opinion message inside the shared Community Chat rooms (non-PII).",
+      "type": "object",
+      "properties": {
+        "roomId": {
+          "type": "string",
+          "enum": ["general", "studio", "salon"],
+          "description": "Community chat room identifier."
+        },
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth UID of the message author.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "senderName": {
+          "type": "string",
+          "description": "Public display name of the sender (no email or phone).",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "senderRole": {
+          "type": "string",
+          "enum": ["user", "admin"],
+          "description": "Role of the sender."
+        },
+        "originPage": {
+          "type": "string",
+          "enum": ["home", "studio", "ideas", "salon", "library"],
+          "description": "Page where the user wrote the opinion."
+        },
+        "text": {
+          "type": "string",
+          "description": "Opinion/chat message text.",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when message was posted."
+        }
+      },
+      "required": [
+        "roomId",
+        "uid",
+        "senderName",
+        "senderRole",
+        "originPage",
+        "text",
+        "createdAt"
+      ]
     }
   },
   "firestore": {
@@ -671,6 +893,24 @@
         "$ref": "#/entities/SalonCoupon"
       },
       "description": "Single lifetime AI-generated salon coupon per verified Gmail user, atomically marked used on booking."
+    },
+    "/adminFeedbackThreads/{threadId}": {
+      "schema": {
+        "$ref": "#/entities/AdminFeedbackThread"
+      },
+      "description": "Direct feedback conversation threads between customers of Voice Studio / Salon pages and Admin."
+    },
+    "/adminFeedbackThreads/{threadId}/messages/{messageId}": {
+      "schema": {
+        "$ref": "#/entities/AdminFeedbackMessage"
+      },
+      "description": "Messages inside each direct customer-to-admin feedback thread."
+    },
+    "/communityMessages/{messageId}": {
+      "schema": {
+        "$ref": "#/entities/CommunityMessage"
+      },
+      "description": "Public user-to-user chat messages across General, Voice Studio, and Salon discussion rooms."
     }
   }
 }

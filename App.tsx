@@ -18,11 +18,12 @@ import GoogleLoginGate from './components/GoogleLoginGate';
 import ProUpgradeModal from './components/ProUpgradeModal';
 import AdminPanelModal, { AdminPanelTab } from './components/AdminPanelModal';
 import AdminNotificationsBox from './components/AdminNotificationsBox';
+import ChatHubModal from './components/ChatHubModal';
 import SiteLegalModal, { LegalTab } from './components/SiteLegalModal';
-import { AppIssueRecord, AppViewMode, FilterState, AiRecommendation, BillingConfig, SalonConfig, UserPlan } from './types';
-import { Info, Heart, Loader2, Bell, AlertTriangle, X } from 'lucide-react';
+import { AppIssueRecord, AppViewMode, FilterState, AiRecommendation, BillingConfig, ProPackageType, SalonConfig, UserPlan } from './types';
+import { Info, Heart, Loader2, Bell, AlertTriangle, X, MessageSquare } from 'lucide-react';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { collection, doc, onSnapshot, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, doc, onSnapshot, query, setDoc, updateDoc, where, serverTimestamp } from 'firebase/firestore';
 import { auth, db, signOutUser, handleFirestoreError, OperationType } from './firebase';
 import { initGoogleAdsTag } from './utils/googleAds';
 import { setDynamicApiBaseUrl } from './utils/audio';
@@ -41,10 +42,12 @@ const ADMIN_EMAIL = 'srabon10010@gmail.com';
 
 const DEFAULT_BILLING_CONFIG: BillingConfig = {
   feeAmount: '50 BDT',
+  monthlyFee: '50 BDT',
+  yearlyFee: '480 BDT',
   paymentMethod: 'bKash / Nagad',
   paymentAccount: '',
   instructions:
-    'উপরের নম্বরে ফি পাঠিয়ে নিচের ফর্মে আপনার নম্বর ও Transaction ID (TrxID) জমা দিন। অ্যাডমিন যাচাই করেই Pro চালু করে দেবেন।',
+    'উপরের নম্বরে নির্বাচিত প্যাকেজ অনুযায়ী ফি পাঠিয়ে নিচের ফর্মে আপনার নম্বর ও Transaction ID (TrxID) জমা দিন। অ্যাডমিন যাচাই করেই প্যাকেজ চালু করে দেবেন।',
   freeDailyLimit: 5,
   apiBaseUrl: '',
 };
@@ -84,15 +87,20 @@ const App: React.FC = () => {
   const [studioDraft, setStudioDraft] = useState<{ text: string; style: string; revision: number } | null>(null);
   const [favorites, setFavorites] = useState<string[]>([]);
   const [userPlan, setUserPlan] = useState<UserPlan>('free');
+  const [proPackageType, setProPackageType] = useState<ProPackageType | null>(null);
+  const [proExpiresAtMs, setProExpiresAtMs] = useState<number | null>(null);
   const [dailyCount, setDailyCount] = useState<number>(0);
   const [lastUsageDate, setLastUsageDate] = useState<string>(getTodayUtcDate());
   const [billingConfig, setBillingConfig] = useState<BillingConfig>(DEFAULT_BILLING_CONFIG);
   const [salonConfig, setSalonConfig] = useState<SalonConfig>(DEFAULT_SALON_CONFIG);
   const [showProModal, setShowProModal] = useState(false);
   const [proModalTab, setProModalTab] = useState<'refer' | 'pro'>('refer');
+  const [proSelectedPackage, setProSelectedPackage] = useState<ProPackageType>('monthly');
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [adminInitialTab, setAdminInitialTab] = useState<AdminPanelTab>('requests');
   const [showAdminNotifications, setShowAdminNotifications] = useState(false);
+  const [showChatHub, setShowChatHub] = useState(false);
+  const [unreadChatCount, setUnreadChatCount] = useState(0);
   const [floatingNoticeHidden, setFloatingNoticeHidden] = useState(false);
   const [sessionIssues, setSessionIssues] = useState<AppIssueRecord[]>([]);
   const [firestoreIssues, setFirestoreIssues] = useState<AppIssueRecord[]>([]);
@@ -116,6 +124,9 @@ const App: React.FC = () => {
   const isAdmin = Boolean(
     user?.emailVerified && user?.email?.toLowerCase() === ADMIN_EMAIL
   );
+  const isProSubscriptionActive =
+    userPlan === 'pro' && (!proExpiresAtMs || proExpiresAtMs > Date.now());
+  const effectiveUserPlan: UserPlan = isProSubscriptionActive ? 'pro' : 'free';
   const todayStr = getTodayUtcDate();
   const effectiveUsedToday = lastUsageDate === todayStr ? dailyCount : 0;
   
@@ -156,7 +167,13 @@ const App: React.FC = () => {
 
     const onWindowError = (event: ErrorEvent) => {
       const message = event?.message || event?.error?.message || 'Unexpected runtime error';
-      if (message.includes('ResizeObserver') || message.includes('WebSocket')) return;
+      if (
+        message.includes('ResizeObserver') ||
+        message.includes('WebSocket') ||
+        message.includes('Pending promise was never set')
+      ) {
+        return;
+      }
       reportAppIssue({
         source: 'Runtime',
         severity: 'error',
@@ -174,6 +191,10 @@ const App: React.FC = () => {
           ? reason
           : 'Unhandled promise rejection';
       if (message.includes('WebSocket')) return;
+      if (message.includes('Pending promise was never set')) {
+        event.preventDefault();
+        return;
+      }
       reportAppIssue({
         source: 'AsyncTask',
         severity: 'error',
@@ -216,6 +237,44 @@ const App: React.FC = () => {
     );
 
     return () => unsubIssues();
+  }, [authReady, user, isAdmin]);
+
+  // Real-time unread count listener for Global Chat Hub (admin feedback threads)
+  useEffect(() => {
+    if (!authReady || !user) {
+      setUnreadChatCount(0);
+      return;
+    }
+
+    const safeUid = user.uid.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 128);
+    if (!safeUid) return;
+
+    const threadsQuery = isAdmin
+      ? collection(db, 'adminFeedbackThreads')
+      : query(collection(db, 'adminFeedbackThreads'), where('uid', '==', safeUid));
+
+    const unsubChat = onSnapshot(
+      threadsQuery,
+      (snapshot) => {
+        let unread = 0;
+        snapshot.forEach((d) => {
+          const data = d.data();
+          if (isAdmin ? data?.unreadByAdmin : data?.unreadByUser) {
+            unread += 1;
+          }
+        });
+        setUnreadChatCount(unread);
+      },
+      (error) => {
+        reportAppIssue({
+          source: 'ChatHub:UnreadSync',
+          severity: 'warning',
+          message: error?.message || 'Failed to sync unread chat count',
+        });
+      }
+    );
+
+    return () => unsubChat();
   }, [authReady, user, isAdmin]);
 
   // Firestore user preferences & favorites sync (only when authenticated)
@@ -278,6 +337,16 @@ const App: React.FC = () => {
 
           setFavorites(safeFavorites);
           setUserPlan(safePlan);
+          setProPackageType(
+            data?.proPackageType === 'yearly' || data?.proPackageType === 'monthly'
+              ? data.proPackageType
+              : null
+          );
+          const expiresMs =
+            typeof data?.proExpiresAt?.toMillis === 'function'
+              ? data.proExpiresAt.toMillis()
+              : null;
+          setProExpiresAtMs(expiresMs);
           setDailyCount(safeDailyCount);
           setLastUsageDate(safeLastUsageDate);
 
@@ -393,8 +462,16 @@ const App: React.FC = () => {
           const d = snap.data();
           const nextApiBaseUrl = typeof d?.apiBaseUrl === 'string' ? d.apiBaseUrl.trim() : '';
           setDynamicApiBaseUrl(nextApiBaseUrl);
+          const feeAmount =
+            typeof d?.feeAmount === 'string' && d.feeAmount ? d.feeAmount : DEFAULT_BILLING_CONFIG.feeAmount;
+          const monthlyFee =
+            typeof d?.monthlyFee === 'string' && d.monthlyFee ? d.monthlyFee : feeAmount;
+          const yearlyFee =
+            typeof d?.yearlyFee === 'string' && d.yearlyFee ? d.yearlyFee : DEFAULT_BILLING_CONFIG.yearlyFee;
           setBillingConfig({
-            feeAmount: typeof d?.feeAmount === 'string' && d.feeAmount ? d.feeAmount : DEFAULT_BILLING_CONFIG.feeAmount,
+            feeAmount,
+            monthlyFee,
+            yearlyFee,
             paymentMethod: typeof d?.paymentMethod === 'string' && d.paymentMethod ? d.paymentMethod : DEFAULT_BILLING_CONFIG.paymentMethod,
             paymentAccount: typeof d?.paymentAccount === 'string' ? d.paymentAccount : '',
             instructions: typeof d?.instructions === 'string' && d.instructions ? d.instructions : DEFAULT_BILLING_CONFIG.instructions,
@@ -511,7 +588,7 @@ const App: React.FC = () => {
 
   const consumeAiQuota = async (): Promise<boolean> => {
     if (!user) return false;
-    if (isAdmin || userPlan === 'pro') return true;
+    if (isAdmin || effectiveUserPlan === 'pro') return true;
 
     const today = getTodayUtcDate();
     const currentUsed = lastUsageDate === today ? dailyCount : 0;
@@ -593,15 +670,20 @@ const App: React.FC = () => {
     setAiResult(null);
     setFavorites([]);
     setUserPlan('free');
+    setProPackageType(null);
+    setProExpiresAtMs(null);
     setDailyCount(0);
     setReferralCode('');
     setBonusCredits(0);
     setReferralCount(0);
     setAlreadyClaimedReferral(false);
     setProModalTab('refer');
+    setProSelectedPackage('monthly');
     setShowProModal(false);
     setShowAdminPanel(false);
     setShowAdminNotifications(false);
+    setShowChatHub(false);
+    setUnreadChatCount(0);
     setFloatingNoticeHidden(false);
     setFirestoreIssues([]);
     setAdminInitialTab('requests');
@@ -708,6 +790,7 @@ const App: React.FC = () => {
       showProModal ||
       showAdminPanel ||
       showAdminNotifications ||
+      showChatHub ||
       legalTab ||
       (aiResult && isAiCardVisible)
   );
@@ -761,7 +844,7 @@ const App: React.FC = () => {
           toggleTheme={toggleTheme}
           user={user}
           onSignOut={handleSignOut}
-          userPlan={userPlan}
+          userPlan={effectiveUserPlan}
           usedToday={effectiveUsedToday}
           freeDailyLimit={billingConfig.freeDailyLimit}
           bonusCredits={bonusCredits}
@@ -776,13 +859,15 @@ const App: React.FC = () => {
           }}
           unreadIssuesCount={unreadIssuesCount}
           onOpenNotifications={() => setShowAdminNotifications(true)}
+          unreadChatCount={unreadChatCount}
+          onOpenChat={() => setShowChatHub(true)}
         />
 
         <main className="flex-1 relative flex flex-col overflow-hidden">
               {viewMode === 'home' ? (
                 <HomePage
                   user={user}
-                  userPlan={userPlan}
+                  userPlan={effectiveUserPlan}
                   isAdmin={isAdmin}
                   salonConfig={salonConfig}
                   voicesCount={VOICE_DATA.length}
@@ -816,6 +901,21 @@ const App: React.FC = () => {
                   onOpenIdeas={() => handleViewModeChange('ideas')}
                   isAdmin={isAdmin}
                   apiBaseUrl={billingConfig.apiBaseUrl || ''}
+                  billingConfig={billingConfig}
+                  userPlan={effectiveUserPlan}
+                  proPackageType={proPackageType}
+                  proExpiresAtMs={proExpiresAtMs}
+                  usedToday={effectiveUsedToday}
+                  bonusCredits={bonusCredits}
+                  onOpenUpgradePackage={(pkg) => {
+                    setProSelectedPackage(pkg);
+                    setProModalTab('pro');
+                    setShowProModal(true);
+                  }}
+                  onOpenAdminSettings={() => {
+                    setAdminInitialTab('settings');
+                    setShowAdminPanel(true);
+                  }}
                 />
               ) : viewMode === 'ideas' ? (
                 <TrendingIdeas
@@ -942,7 +1042,9 @@ const App: React.FC = () => {
       {showProModal && user && (
         <ProUpgradeModal
           user={user}
-          userPlan={userPlan}
+          userPlan={effectiveUserPlan}
+          proPackageType={proPackageType}
+          proExpiresAtMs={proExpiresAtMs}
           usedToday={effectiveUsedToday}
           billingConfig={billingConfig}
           isAdmin={isAdmin}
@@ -952,6 +1054,7 @@ const App: React.FC = () => {
           alreadyClaimedReferral={alreadyClaimedReferral}
           onReferralClaimed={() => setAlreadyClaimedReferral(true)}
           initialTab={proModalTab}
+          initialPackage={proSelectedPackage}
           onClose={() => setShowProModal(false)}
         />
       )}
@@ -1055,6 +1158,35 @@ const App: React.FC = () => {
         <SiteLegalModal
           initialTab={legalTab}
           onClose={() => setLegalTab(null)}
+        />
+      )}
+
+      {/* App-wide Floating Chat List Hub Launcher */}
+      {!showChatHub && (
+        <button
+          type="button"
+          onClick={() => setShowChatHub(true)}
+          className="fixed bottom-4 left-4 z-[70] inline-flex items-center gap-2 px-4 py-2.5 rounded-full bg-zinc-900 dark:bg-indigo-600 hover:bg-zinc-800 dark:hover:bg-indigo-500 text-white shadow-xl border border-white/10 transition-all hover:scale-105 active:scale-95"
+          aria-label="Open Chat List"
+          title="চ্যাট লিস্ট · মতামত ও আলোচনা"
+        >
+          <MessageSquare size={16} />
+          <span className="text-xs font-semibold tracking-wide">চ্যাট ও মতামত</span>
+          {unreadChatCount > 0 && (
+            <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-500 text-white tabular-nums">
+              {unreadChatCount > 99 ? '99+' : unreadChatCount}
+            </span>
+          )}
+        </button>
+      )}
+
+      {showChatHub && user && (
+        <ChatHubModal
+          user={user}
+          isAdmin={isAdmin}
+          currentViewMode={viewMode}
+          salonName={salonConfig.salonName}
+          onClose={() => setShowChatHub(false)}
         />
       )}
 

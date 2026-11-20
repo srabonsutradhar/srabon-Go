@@ -34,6 +34,7 @@ import { reportAppIssue } from '../utils/appIssues';
 import {
   BillingConfig,
   PaymentMethod,
+  ProPackageType,
   ProUpgradeRequest,
   UserPlan,
 } from '../types';
@@ -42,6 +43,8 @@ import { claimReferralCode, normalizeReferralCode } from '../utils/referral';
 interface ProUpgradeModalProps {
   user: User;
   userPlan: UserPlan;
+  proPackageType?: ProPackageType | null;
+  proExpiresAtMs?: number | null;
   usedToday: number;
   billingConfig: BillingConfig;
   isAdmin: boolean;
@@ -51,6 +54,7 @@ interface ProUpgradeModalProps {
   alreadyClaimedReferral: boolean;
   onReferralClaimed: () => void;
   initialTab?: 'refer' | 'pro';
+  initialPackage?: ProPackageType;
   onClose: () => void;
 }
 
@@ -65,6 +69,8 @@ function generateRequestId(uid: string): string {
 const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
   user,
   userPlan,
+  proPackageType = null,
+  proExpiresAtMs = null,
   usedToday,
   billingConfig,
   isAdmin,
@@ -74,13 +80,19 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
   alreadyClaimedReferral,
   onReferralClaimed,
   initialTab = 'refer',
+  initialPackage = 'monthly',
   onClose,
 }) => {
+  const monthlyPrice = billingConfig.monthlyFee || billingConfig.feeAmount || '50 BDT';
+  const yearlyPrice = billingConfig.yearlyFee || '480 BDT';
   const [activeTab, setActiveTab] = useState<'refer' | 'pro'>(initialTab);
+  const [selectedPackage, setSelectedPackage] = useState<ProPackageType>(initialPackage);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('bKash');
   const [senderNumber, setSenderNumber] = useState('');
   const [transactionId, setTransactionId] = useState('');
-  const [amountText, setAmountText] = useState(billingConfig.feeAmount || '50 BDT');
+  const [amountText, setAmountText] = useState(
+    initialPackage === 'yearly' ? yearlyPrice : monthlyPrice
+  );
   const [note, setNote] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -103,8 +115,12 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
       : '';
 
   useEffect(() => {
-    setAmountText(billingConfig.feeAmount || '50 BDT');
-  }, [billingConfig.feeAmount]);
+    setSelectedPackage(initialPackage);
+  }, [initialPackage]);
+
+  useEffect(() => {
+    setAmountText(selectedPackage === 'yearly' ? yearlyPrice : monthlyPrice);
+  }, [selectedPackage, monthlyPrice, yearlyPrice]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -260,6 +276,7 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
     const reqPath = `proRequests/${requestId}`;
     const payload: Record<string, any> = {
       uid: user.uid.slice(0, 128),
+      packageType: selectedPackage,
       paymentMethod,
       senderNumber: cleanSender,
       transactionId: cleanTrx,
@@ -510,62 +527,132 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
                   <CheckCircle2 size={20} className="shrink-0" />
                   <div className="text-xs space-y-0.5">
                     <p className="font-semibold">
-                      {isAdmin ? 'Admin Account (Unlimited)' : 'Pro Plan Active'}
+                      {isAdmin
+                        ? 'Admin Account (Unlimited)'
+                        : proPackageType === 'yearly'
+                        ? 'Yearly Pro Package Active (৩৬৫ দিন)'
+                        : proPackageType === 'monthly'
+                        ? 'Monthly Pro Package Active (৩০ দিন)'
+                        : 'Pro Plan Active'}
                     </p>
                     <p className="opacity-80">
-                      সব ভয়েস স্টুডিও ও AI ফিচার কোনো দৈনিক সীমা ছাড়াই চালু রয়েছে।
+                      সব ভয়েস স্টুডিও ও AI ফিচার কোনো দৈনিক সীমা ছাড়াই চালু রয়েছে
+                      {proExpiresAtMs && proExpiresAtMs > Date.now() && !isAdmin
+                        ? ` • মেয়াদ শেষ: ${new Date(proExpiresAtMs).toLocaleDateString('bn-BD', {
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric',
+                          })}`
+                        : '।'}
                     </p>
                   </div>
                 </div>
               )}
 
               {userPlan === 'free' && !isAdmin && (
-                <div className="p-4 sm:p-5 rounded-2xl bg-zinc-50 dark:bg-zinc-800/70 border border-zinc-200 dark:border-zinc-700 space-y-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <div>
-                      <p className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
-                        Pro আনলক ফি
-                      </p>
-                      <p className="text-xl font-bold text-zinc-900 dark:text-white">
-                        {billingConfig.feeAmount}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
-                        পেমেন্ট মাধ্যম
-                      </p>
-                      <p className="text-sm font-semibold text-indigo-600 dark:text-indigo-400">
-                        {billingConfig.paymentMethod}
-                      </p>
-                    </div>
-                  </div>
-
-                  {billingConfig.paymentAccount ? (
-                    <div className="flex items-center justify-between gap-2 px-3.5 py-2.5 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700">
-                      <div className="min-w-0">
-                        <span className="text-[11px] text-zinc-400 block">পেমেন্ট নম্বর / অ্যাকাউন্ট</span>
-                        <span className="text-sm font-mono font-semibold text-zinc-900 dark:text-white break-all">
-                          {billingConfig.paymentAccount}
+                <div className="space-y-3">
+                  {/* Monthly / Yearly Package Selector */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedPackage('monthly')}
+                      className={`p-3.5 rounded-2xl border text-left transition-all ${
+                        selectedPackage === 'monthly'
+                          ? 'bg-indigo-50/80 dark:bg-indigo-950/40 border-indigo-500 ring-1 ring-indigo-500/40'
+                          : 'bg-zinc-50 dark:bg-zinc-800/60 border-zinc-200 dark:border-zinc-700 hover:border-zinc-300'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
+                          Monthly
+                        </span>
+                        <span className="text-[10px] font-semibold text-zinc-500 dark:text-zinc-400">
+                          ৩০ দিন
                         </span>
                       </div>
-                      <button
-                        type="button"
-                        onClick={handleCopyAccount}
-                        className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-xs font-medium text-zinc-700 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
-                      >
-                        {copiedAccount ? <Check size={13} className="text-emerald-500" /> : <Copy size={13} />}
-                        <span>{copiedAccount ? 'Copied' : 'Copy'}</span>
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 text-xs text-amber-800 dark:text-amber-300">
-                      অ্যাডমিন এখনও পেমেন্ট নম্বর সেট করেননি। অ্যাডমিন প্যানেল থেকে পেমেন্ট নম্বর সেট করার পর এখানে দেখাবে।
-                    </div>
-                  )}
+                      <p className="text-lg font-bold text-zinc-900 dark:text-white mt-1 tabular-nums">
+                        {monthlyPrice}
+                      </p>
+                      <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                        মাসিক আনলিমিটেড
+                      </p>
+                    </button>
 
-                  <p className="text-xs text-zinc-600 dark:text-zinc-300 leading-relaxed">
-                    {billingConfig.instructions}
-                  </p>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedPackage('yearly')}
+                      className={`p-3.5 rounded-2xl border text-left transition-all ${
+                        selectedPackage === 'yearly'
+                          ? 'bg-amber-50/90 dark:bg-amber-950/40 border-amber-500 ring-1 ring-amber-500/40'
+                          : 'bg-zinc-50 dark:bg-zinc-800/60 border-zinc-200 dark:border-zinc-700 hover:border-zinc-300'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400">
+                          Yearly
+                        </span>
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500 text-zinc-950">
+                          ৩৬৫ দিন
+                        </span>
+                      </div>
+                      <p className="text-lg font-bold text-zinc-900 dark:text-white mt-1 tabular-nums">
+                        {yearlyPrice}
+                      </p>
+                      <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                        বাৎসরিক সেরা অফার
+                      </p>
+                    </button>
+                  </div>
+
+                  <div className="p-4 sm:p-5 rounded-2xl bg-zinc-50 dark:bg-zinc-800/70 border border-zinc-200 dark:border-zinc-700 space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <div>
+                        <p className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
+                          {selectedPackage === 'yearly'
+                            ? 'Yearly প্যাকেজ ফি (৩৬৫ দিন)'
+                            : 'Monthly প্যাকেজ ফি (৩০ দিন)'}
+                        </p>
+                        <p className="text-xl font-bold text-zinc-900 dark:text-white">
+                          {selectedPackage === 'yearly' ? yearlyPrice : monthlyPrice}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
+                          পেমেন্ট মাধ্যম
+                        </p>
+                        <p className="text-sm font-semibold text-indigo-600 dark:text-indigo-400">
+                          {billingConfig.paymentMethod}
+                        </p>
+                      </div>
+                    </div>
+
+                    {billingConfig.paymentAccount ? (
+                      <div className="flex items-center justify-between gap-2 px-3.5 py-2.5 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700">
+                        <div className="min-w-0">
+                          <span className="text-[11px] text-zinc-400 block">পেমেন্ট নম্বর / অ্যাকাউন্ট</span>
+                          <span className="text-sm font-mono font-semibold text-zinc-900 dark:text-white break-all">
+                            {billingConfig.paymentAccount}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleCopyAccount}
+                          className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-xs font-medium text-zinc-700 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
+                        >
+                          {copiedAccount ? <Check size={13} className="text-emerald-500" /> : <Copy size={13} />}
+                          <span>{copiedAccount ? 'Copied' : 'Copy'}</span>
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 text-xs text-amber-800 dark:text-amber-300">
+                        অ্যাডমিন এখনও পেমেন্ট নম্বর সেট করেননি। অ্যাডমিন প্যানেল থেকে পেমেন্ট নম্বর সেট করার পর এখানে দেখাবে।
+                      </div>
+                    )}
+
+                    <p className="text-xs text-zinc-600 dark:text-zinc-300 leading-relaxed">
+                      {billingConfig.instructions}
+                    </p>
+                  </div>
                 </div>
               )}
 
@@ -699,7 +786,7 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
                       >
                         <div className="min-w-0">
                           <p className="font-medium text-zinc-900 dark:text-white truncate">
-                            {req.paymentMethod} • TrxID: {req.transactionId}
+                            {req.packageType === 'yearly' ? 'Yearly (৩৬৫ দিন)' : 'Monthly (৩০ দিন)'} • {req.paymentMethod} • TrxID: {req.transactionId}
                           </p>
                           <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
                             {req.amountText} • {req.senderNumber}

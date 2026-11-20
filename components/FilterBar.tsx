@@ -24,6 +24,7 @@ import {
   Home,
   Scissors,
   Bell,
+  MessageSquare,
 } from 'lucide-react';
 import type { User } from 'firebase/auth';
 
@@ -49,6 +50,8 @@ interface FilterBarProps {
   onOpenAdminPanel?: () => void;
   unreadIssuesCount?: number;
   onOpenNotifications?: () => void;
+  unreadChatCount?: number;
+  onOpenChat?: () => void;
 }
 
 const FilterBar: React.FC<FilterBarProps> = ({ 
@@ -73,6 +76,8 @@ const FilterBar: React.FC<FilterBarProps> = ({
   onOpenAdminPanel,
   unreadIssuesCount = 0,
   onOpenNotifications,
+  unreadChatCount = 0,
+  onOpenChat,
 }) => {
   
   const handleGenderChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -240,6 +245,29 @@ const FilterBar: React.FC<FilterBarProps> = ({
                                 )}
                             </button>
                         </div>
+
+                        {/* Chat List Hub Button */}
+                        {onOpenChat && (
+                          <button
+                            type="button"
+                            onClick={onOpenChat}
+                            className={`relative flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-colors shrink-0 ${
+                              unreadChatCount > 0
+                                ? 'bg-emerald-50 dark:bg-emerald-950/50 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/60'
+                                : 'bg-zinc-100 dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-200 hover:text-zinc-900 dark:hover:text-white'
+                            }`}
+                            title="চ্যাট লিস্ট · মতামত ও আলোচনা"
+                            aria-label={`Open Chat List (${unreadChatCount} unread)`}
+                          >
+                            <MessageSquare size={14} />
+                            <span className="hidden lg:inline">Chat</span>
+                            {unreadChatCount > 0 && (
+                              <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-rose-600 text-white tabular-nums">
+                                {unreadChatCount > 99 ? '99+' : unreadChatCount}
+                              </span>
+                            )}
+                          </button>
+                        )}
 
                         {/* Pro / Refer Credits / Admin Button */}
                         {onOpenProModal && !isAdmin && (

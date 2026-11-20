@@ -17,8 +17,12 @@ import {
   Sun,
   Check,
   TrendingUp,
+  Crown,
+  CheckCircle2,
+  CalendarDays,
+  Shield,
 } from 'lucide-react';
-import { Voice } from '../types';
+import { BillingConfig, ProPackageType, UserPlan, Voice } from '../types';
 import AudioVisualizer from './AudioVisualizer';
 import AdBanner from './AdBanner';
 import type { LegalTab } from './SiteLegalModal';
@@ -41,6 +45,14 @@ interface TtsStudioProps {
   onOpenIdeas?: () => void;
   isAdmin?: boolean;
   apiBaseUrl?: string;
+  billingConfig?: BillingConfig;
+  userPlan?: UserPlan;
+  proPackageType?: ProPackageType | null;
+  proExpiresAtMs?: number | null;
+  usedToday?: number;
+  bonusCredits?: number;
+  onOpenUpgradePackage?: (pkg: ProPackageType) => void;
+  onOpenAdminSettings?: () => void;
 }
 
 const DEFAULT_SCRIPT =
@@ -106,7 +118,26 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
   onOpenIdeas,
   isAdmin = false,
   apiBaseUrl = '',
+  billingConfig,
+  userPlan = 'free',
+  proPackageType = null,
+  proExpiresAtMs = null,
+  usedToday = 0,
+  bonusCredits = 0,
+  onOpenUpgradePackage,
+  onOpenAdminSettings,
 }) => {
+  const monthlyPriceLabel = billingConfig?.monthlyFee || billingConfig?.feeAmount || '50 BDT';
+  const yearlyPriceLabel = billingConfig?.yearlyFee || '480 BDT';
+  const freeDailyLimit = billingConfig?.freeDailyLimit ?? 5;
+  const expiryDateLabel =
+    proExpiresAtMs && proExpiresAtMs > Date.now()
+      ? new Date(proExpiresAtMs).toLocaleDateString('bn-BD', {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric',
+        })
+      : null;
   const [text, setText] = useState(DEFAULT_SCRIPT);
   const [style, setStyle] = useState(STYLE_PRESETS[0].value);
   const [isLooping, setIsLooping] = useState(false);
@@ -520,21 +551,48 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
               </h2>
             </div>
 
-            {/* Active Voice Quick Pill */}
-            {currentVoice && (
-              <div className="flex items-center gap-2.5 px-3.5 py-2 rounded-2xl bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 shadow-sm self-start sm:self-auto">
-                <div className={`w-2 h-2 rounded-full ${isPlaying ? 'animate-google-colors' : 'bg-indigo-500'}`} />
-                <div className="text-xs">
-                  <span className="font-semibold text-zinc-900 dark:text-white">
-                    {currentVoice.name}
+            {/* Active Voice & Plan Status */}
+            <div className="flex flex-wrap items-center gap-2.5 self-start sm:self-auto">
+              <div className="flex items-center gap-2 px-3 py-2 rounded-2xl bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 shadow-sm text-xs">
+                <Crown
+                  size={14}
+                  className={
+                    userPlan === 'pro' || isAdmin ? 'text-amber-500' : 'text-zinc-400'
+                  }
+                />
+                <span className="font-semibold text-zinc-900 dark:text-white">
+                  {isAdmin
+                    ? 'Admin Unlimited'
+                    : userPlan === 'pro'
+                    ? proPackageType === 'yearly'
+                      ? 'Yearly Pro Active'
+                      : proPackageType === 'monthly'
+                      ? 'Monthly Pro Active'
+                      : 'Pro Active'
+                    : `Free (${Math.max(0, freeDailyLimit - usedToday)}/${freeDailyLimit} Left)`}
+                </span>
+                {expiryDateLabel && userPlan === 'pro' && !isAdmin && (
+                  <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                    • মেয়াদ: {expiryDateLabel}
                   </span>
-                  <span className="text-zinc-400 dark:text-zinc-500 mx-1.5">•</span>
-                  <span className="text-zinc-500 dark:text-zinc-400">
-                    {currentVoice.analysis.gender}, {currentVoice.pitch}
-                  </span>
-                </div>
+                )}
               </div>
-            )}
+
+              {currentVoice && (
+                <div className="flex items-center gap-2.5 px-3.5 py-2 rounded-2xl bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 shadow-sm">
+                  <div className={`w-2 h-2 rounded-full ${isPlaying ? 'animate-google-colors' : 'bg-indigo-500'}`} />
+                  <div className="text-xs">
+                    <span className="font-semibold text-zinc-900 dark:text-white">
+                      {currentVoice.name}
+                    </span>
+                    <span className="text-zinc-400 dark:text-zinc-500 mx-1.5">•</span>
+                    <span className="text-zinc-500 dark:text-zinc-400">
+                      {currentVoice.analysis.gender}, {currentVoice.pitch}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="p-6 sm:p-8 grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-8">
@@ -850,6 +908,183 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
             </div>
           </div>
         </div>
+
+        {/* Voice Studio Monthly & Yearly Packages Section */}
+        <section className="mt-8 rounded-3xl bg-white/95 dark:bg-zinc-900/95 border border-zinc-200/80 dark:border-zinc-800 shadow-lg p-6 sm:p-8 space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-zinc-100 dark:border-zinc-800 pb-5">
+            <div className="space-y-1.5">
+              <div className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest text-amber-600 dark:text-amber-400">
+                <Crown size={14} />
+                <span>Voice Studio Pro Packages</span>
+              </div>
+              <h3 className="text-2xl font-serif font-medium text-zinc-900 dark:text-white">
+                ভয়েস স্টুডিও Monthly ও Yearly প্যাকেজ
+              </h3>
+              <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400">
+                {userPlan === 'pro' && !isAdmin
+                  ? `আপনার বর্তমান প্ল্যান: ${
+                      proPackageType === 'yearly'
+                        ? 'Yearly Pro (৩৬৫ দিন)'
+                        : proPackageType === 'monthly'
+                        ? 'Monthly Pro (৩০ দিন)'
+                        : 'Pro Active'
+                    }${expiryDateLabel ? ` · মেয়াদ শেষ: ${expiryDateLabel}` : ''}`
+                  : `বর্তমান ফ্রি ব্যবহার: আজ ${usedToday}/${freeDailyLimit} বার • বোনাস ক্রেডিট: ${bonusCredits} টি`}
+              </p>
+            </div>
+
+            {isAdmin && onOpenAdminSettings && (
+              <button
+                type="button"
+                onClick={onOpenAdminSettings}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/50 text-xs font-semibold transition-colors whitespace-nowrap shrink-0"
+              >
+                <Shield size={14} />
+                <span>প্যাকেজের দাম পরিবর্তন করুন (Admin)</span>
+              </button>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            {/* Monthly Package */}
+            <div
+              className={`rounded-2xl p-6 border flex flex-col justify-between gap-6 transition-all ${
+                userPlan === 'pro' && proPackageType === 'monthly'
+                  ? 'bg-indigo-50/70 dark:bg-indigo-950/30 border-indigo-400 dark:border-indigo-700 ring-1 ring-indigo-500/30'
+                  : 'bg-zinc-50/80 dark:bg-zinc-800/50 border-zinc-200 dark:border-zinc-700/80'
+              }`}
+            >
+              <div className="space-y-4">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
+                    <CalendarDays size={14} />
+                    <span>Monthly Package</span>
+                  </div>
+                  <span className="px-2.5 py-0.5 rounded-md text-[11px] font-semibold bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300">
+                    ৩০ দিন মেয়াদ
+                  </span>
+                </div>
+
+                <div>
+                  <h4 className="text-xl font-serif font-medium text-zinc-900 dark:text-white">
+                    মাসিক স্টুডিও প্যাক
+                  </h4>
+                  <div className="mt-2 flex items-baseline gap-1.5">
+                    <span className="text-3xl font-bold text-zinc-900 dark:text-white tabular-nums">
+                      {monthlyPriceLabel}
+                    </span>
+                    <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                      / ৩০ দিন
+                    </span>
+                  </div>
+                </div>
+
+                <ul className="space-y-2.5 text-xs sm:text-sm text-zinc-600 dark:text-zinc-300">
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 size={15} className="text-indigo-600 dark:text-indigo-400 shrink-0 mt-0.5" />
+                    <span>দৈনিক লিমিট ছাড়াই আনলিমিটেড Gemini TTS ভয়েস</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 size={15} className="text-indigo-600 dark:text-indigo-400 shrink-0 mt-0.5" />
+                    <span>সব বাংলা ও ইংরেজি স্টুডিও ভয়েস ও WAV ডাউনলোড</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 size={15} className="text-indigo-600 dark:text-indigo-400 shrink-0 mt-0.5" />
+                    <span>AI Trending Ideas ও Casting Director অ্যাক্সেস</span>
+                  </li>
+                </ul>
+              </div>
+
+              {isAdmin ? (
+                <div className="text-xs font-semibold text-zinc-500 dark:text-zinc-400">
+                  Admin অ্যাকাউন্টে সব ফিচার আনলিমিটেড চালু আছে
+                </div>
+              ) : userPlan === 'pro' && proPackageType === 'monthly' ? (
+                <div className="w-full py-2.5 px-4 rounded-xl bg-indigo-600/10 border border-indigo-300 dark:border-indigo-700 text-indigo-700 dark:text-indigo-300 text-xs font-semibold text-center">
+                  বর্তমান Monthly প্যাকেজ সক্রিয় ✓
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => onOpenUpgradePackage?.('monthly')}
+                  className="w-full inline-flex items-center justify-center gap-2 py-3 px-5 rounded-xl bg-zinc-900 dark:bg-indigo-600 hover:bg-zinc-800 dark:hover:bg-indigo-500 text-white text-sm font-semibold transition-colors"
+                >
+                  <Crown size={15} />
+                  <span>Monthly প্যাকেজ নিন</span>
+                </button>
+              )}
+            </div>
+
+            {/* Yearly Package */}
+            <div
+              className={`rounded-2xl p-6 border flex flex-col justify-between gap-6 transition-all ${
+                userPlan === 'pro' && proPackageType === 'yearly'
+                  ? 'bg-amber-50/80 dark:bg-amber-950/35 border-amber-500 dark:border-amber-600 ring-1 ring-amber-500/40'
+                  : 'bg-gradient-to-br from-amber-50/70 via-white to-orange-50/50 dark:from-amber-950/25 dark:via-zinc-900 dark:to-zinc-900 border-amber-300 dark:border-amber-800/80'
+              }`}
+            >
+              <div className="space-y-4">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400">
+                    <Sparkles size={14} />
+                    <span>Yearly Package · Best Value</span>
+                  </div>
+                  <span className="px-2.5 py-0.5 rounded-md text-[11px] font-bold bg-amber-500 text-zinc-950">
+                    ৩৬৫ দিন · সেরা সাশ্রয়
+                  </span>
+                </div>
+
+                <div>
+                  <h4 className="text-xl font-serif font-medium text-zinc-900 dark:text-white">
+                    বাৎসরিক স্টুডিও প্যাক
+                  </h4>
+                  <div className="mt-2 flex items-baseline gap-1.5">
+                    <span className="text-3xl font-bold text-zinc-900 dark:text-white tabular-nums">
+                      {yearlyPriceLabel}
+                    </span>
+                    <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                      / ৩৬৫ দিন (১ বছর)
+                    </span>
+                  </div>
+                </div>
+
+                <ul className="space-y-2.5 text-xs sm:text-sm text-zinc-700 dark:text-zinc-300">
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 size={15} className="text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                    <span>পুরো ১ বছর আনলিমিটেড Voice Studio ও AI TTS জেনারেশন</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 size={15} className="text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                    <span>মাসিক প্যাকেজের তুলনায় বড় বাৎসরিক মূল্য ছাড়</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 size={15} className="text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                    <span>সকল প্রিমিয়াম ভয়েস, Alarm Loop ও আনলিমিটেড WAV ডাউনলোড</span>
+                  </li>
+                </ul>
+              </div>
+
+              {isAdmin ? (
+                <div className="text-xs font-semibold text-amber-700 dark:text-amber-400">
+                  Admin অ্যাকাউন্টে সব ফিচার আনলিমিটেড চালু আছে
+                </div>
+              ) : userPlan === 'pro' && proPackageType === 'yearly' ? (
+                <div className="w-full py-2.5 px-4 rounded-xl bg-amber-500/15 border border-amber-400 dark:border-amber-700 text-amber-800 dark:text-amber-300 text-xs font-semibold text-center">
+                  বর্তমান Yearly প্যাকেজ সক্রিয় ✓
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => onOpenUpgradePackage?.('yearly')}
+                  className="w-full inline-flex items-center justify-center gap-2 py-3 px-5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-sm font-semibold transition-colors shadow-sm"
+                >
+                  <Crown size={15} />
+                  <span>Yearly প্যাকেজ নিন</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </section>
 
         <AdBanner
           slotId={import.meta.env.VITE_ADSENSE_SLOT_STUDIO}

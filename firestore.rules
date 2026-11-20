@@ -8,7 +8,7 @@ service cloud.firestore {
     }
 
     function isValidId(id) {
-      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+      return id is string && id.size() >= 1 && id.size() <= 140 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
     function isValidReferralCode(code) {
@@ -47,7 +47,7 @@ service cloud.firestore {
       return data.keys().hasAll(['uid', 'favorites', 'plan', 'dailyCount', 'lastUsageDate', 'createdAt', 'updatedAt'])
         && data.keys().hasOnly([
           'uid', 'displayName', 'email', 'photoURL', 'favorites',
-          'plan', 'dailyCount', 'lastUsageDate',
+          'plan', 'proPackageType', 'proExpiresAt', 'dailyCount', 'lastUsageDate',
           'referralCode', 'bonusCredits', 'referralCount',
           'createdAt', 'updatedAt'
         ])
@@ -64,6 +64,8 @@ service cloud.firestore {
         && (data.favorites.size() == 0 || (data.favorites[0] is string && data.favorites[0].size() >= 1 && data.favorites[0].size() <= 64))
         && data.plan is string
         && data.plan in ['free', 'pro']
+        && (!('proPackageType' in data) || (data.proPackageType is string && data.proPackageType in ['monthly', 'yearly']))
+        && (!('proExpiresAt' in data) || data.proExpiresAt is timestamp)
         && data.dailyCount is int
         && data.dailyCount >= 0
         && data.dailyCount <= 100000
@@ -104,13 +106,14 @@ service cloud.firestore {
 
     function isValidProRequest(data) {
       return data.keys().hasAll(['uid', 'paymentMethod', 'senderNumber', 'transactionId', 'amountText', 'status', 'createdAt', 'updatedAt'])
-        && data.keys().hasOnly(['uid', 'userEmail', 'userName', 'paymentMethod', 'senderNumber', 'transactionId', 'amountText', 'note', 'status', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'userEmail', 'userName', 'packageType', 'paymentMethod', 'senderNumber', 'transactionId', 'amountText', 'note', 'status', 'createdAt', 'updatedAt'])
         && data.uid is string
         && data.uid.size() >= 1
         && data.uid.size() <= 128
         && data.uid.matches('^[a-zA-Z0-9_\\-]+$')
         && (!('userEmail' in data) || (data.userEmail is string && data.userEmail.size() <= 254))
         && (!('userName' in data) || (data.userName is string && data.userName.size() <= 120))
+        && (!('packageType' in data) || (data.packageType is string && data.packageType in ['monthly', 'yearly']))
         && data.paymentMethod is string
         && data.paymentMethod in ['bKash', 'Nagad', 'Rocket', 'Bank / Other']
         && data.senderNumber is string
@@ -131,10 +134,12 @@ service cloud.firestore {
 
     function isValidBillingConfig(data) {
       return data.keys().hasAll(['feeAmount', 'paymentMethod', 'paymentAccount', 'instructions', 'freeDailyLimit', 'updatedAt'])
-        && data.keys().hasOnly(['feeAmount', 'paymentMethod', 'paymentAccount', 'instructions', 'freeDailyLimit', 'apiBaseUrl', 'updatedAt'])
+        && data.keys().hasOnly(['feeAmount', 'monthlyFee', 'yearlyFee', 'paymentMethod', 'paymentAccount', 'instructions', 'freeDailyLimit', 'apiBaseUrl', 'updatedAt'])
         && data.feeAmount is string
         && data.feeAmount.size() >= 1
         && data.feeAmount.size() <= 40
+        && (!('monthlyFee' in data) || (data.monthlyFee is string && data.monthlyFee.size() >= 1 && data.monthlyFee.size() <= 40))
+        && (!('yearlyFee' in data) || (data.yearlyFee is string && data.yearlyFee.size() >= 1 && data.yearlyFee.size() <= 40))
         && data.paymentMethod is string
         && data.paymentMethod.size() >= 1
         && data.paymentMethod.size() <= 60
@@ -308,6 +313,90 @@ service cloud.firestore {
         && data.updatedAt is timestamp;
     }
 
+    function isValidAdminFeedbackThread(data, expectedThreadId) {
+      return data.keys().hasAll([
+          'threadId', 'uid', 'userName', 'pageScope',
+          'lastMessage', 'lastSenderRole', 'unreadByAdmin', 'unreadByUser',
+          'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'threadId', 'uid', 'userName', 'pageScope',
+          'lastMessage', 'lastSenderRole', 'unreadByAdmin', 'unreadByUser',
+          'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.threadId)
+        && data.threadId.size() >= 3
+        && data.threadId == expectedThreadId
+        && isValidId(data.uid)
+        && data.uid.size() <= 128
+        && data.userName is string
+        && data.userName.size() >= 1
+        && data.userName.size() <= 120
+        && data.pageScope is string
+        && data.pageScope in ['studio', 'salon']
+        && data.lastMessage is string
+        && data.lastMessage.size() >= 1
+        && data.lastMessage.size() <= 500
+        && data.lastSenderRole is string
+        && data.lastSenderRole in ['user', 'admin']
+        && data.unreadByAdmin is bool
+        && data.unreadByUser is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidAdminFeedbackMessage(data, expectedThreadId) {
+      return data.keys().hasAll([
+          'threadId', 'threadOwnerUid', 'uid', 'senderName',
+          'senderRole', 'pageScope', 'text', 'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'threadId', 'threadOwnerUid', 'uid', 'senderName',
+          'senderRole', 'pageScope', 'text', 'createdAt'
+        ])
+        && isValidId(data.threadId)
+        && data.threadId == expectedThreadId
+        && isValidId(data.threadOwnerUid)
+        && data.threadOwnerUid.size() <= 128
+        && isValidId(data.uid)
+        && data.uid.size() <= 128
+        && data.senderName is string
+        && data.senderName.size() >= 1
+        && data.senderName.size() <= 120
+        && data.senderRole is string
+        && data.senderRole in ['user', 'admin']
+        && data.pageScope is string
+        && data.pageScope in ['studio', 'salon']
+        && data.text is string
+        && data.text.size() >= 1
+        && data.text.size() <= 1000
+        && data.createdAt is timestamp;
+    }
+
+    function isValidCommunityMessage(data) {
+      return data.keys().hasAll([
+          'roomId', 'uid', 'senderName', 'senderRole', 'originPage', 'text', 'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'roomId', 'uid', 'senderName', 'senderRole', 'originPage', 'text', 'createdAt'
+        ])
+        && data.roomId is string
+        && data.roomId in ['general', 'studio', 'salon']
+        && isValidId(data.uid)
+        && data.uid.size() <= 128
+        && data.senderName is string
+        && data.senderName.size() >= 1
+        && data.senderName.size() <= 80
+        && data.senderRole is string
+        && data.senderRole in ['user', 'admin']
+        && data.originPage is string
+        && data.originPage in ['home', 'studio', 'ideas', 'salon', 'library']
+        && data.text is string
+        && data.text.size() >= 1
+        && data.text.size() <= 1000
+        && data.createdAt is timestamp;
+    }
+
     match /users/{userId} {
       allow get: if isSignedIn() && isValidId(userId) && (isOwner(userId) || isBootstrappedAdmin());
       allow list: if isBootstrappedAdmin();
@@ -373,10 +462,10 @@ service cloud.firestore {
             && getAfter(/databases/$(database)/documents/referrals/$(request.auth.uid)).data.referrerUid == userId
           )
           ||
-          // Action 3: Admin updates user plan or bonusCredits
+          // Action 3: Admin updates user plan, package expiry, or bonusCredits
           (
             isBootstrappedAdmin()
-            && incoming().diff(existing()).affectedKeys().hasOnly(['plan', 'dailyCount', 'lastUsageDate', 'bonusCredits', 'updatedAt'])
+            && incoming().diff(existing()).affectedKeys().hasOnly(['plan', 'proPackageType', 'proExpiresAt', 'dailyCount', 'lastUsageDate', 'bonusCredits', 'updatedAt'])
           )
         );
       allow delete: if isVerifiedUser() && isValidId(userId) && isOwner(userId);
@@ -441,7 +530,7 @@ service cloud.firestore {
       allow update: if isBootstrappedAdmin()
         && isValidId(configId)
         && isValidBillingConfig(incoming())
-        && incoming().diff(existing()).affectedKeys().hasOnly(['feeAmount', 'paymentMethod', 'paymentAccount', 'instructions', 'freeDailyLimit', 'apiBaseUrl', 'updatedAt'])
+        && incoming().diff(existing()).affectedKeys().hasOnly(['feeAmount', 'monthlyFee', 'yearlyFee', 'paymentMethod', 'paymentAccount', 'instructions', 'freeDailyLimit', 'apiBaseUrl', 'updatedAt'])
         && incoming().updatedAt == request.time;
       allow delete: if false;
     }
@@ -556,6 +645,77 @@ service cloud.firestore {
         && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])
         && incoming().status in ['unread', 'resolved'];
       allow delete: if isBootstrappedAdmin() && isValidId(issueId);
+    }
+
+    match /adminFeedbackThreads/{threadId} {
+      allow get: if isSignedIn() && isValidId(threadId) && (existing().uid == request.auth.uid || isBootstrappedAdmin());
+      allow list: if isBootstrappedAdmin() || (isVerifiedUser() && existing().uid == request.auth.uid);
+      allow create: if isVerifiedUser()
+        && isValidId(threadId)
+        && isValidAdminFeedbackThread(incoming(), threadId)
+        && incoming().uid == request.auth.uid
+        && incoming().lastSenderRole == 'user'
+        && incoming().unreadByAdmin == true
+        && incoming().unreadByUser == false
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser()
+        && isValidId(threadId)
+        && isValidAdminFeedbackThread(incoming(), threadId)
+        && incoming().uid == existing().uid
+        && incoming().threadId == existing().threadId
+        && incoming().pageScope == existing().pageScope
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          (
+            existing().uid == request.auth.uid
+            && incoming().diff(existing()).affectedKeys().hasOnly(['userName', 'lastMessage', 'lastSenderRole', 'unreadByAdmin', 'unreadByUser', 'updatedAt'])
+            && incoming().lastSenderRole in ['user', existing().lastSenderRole]
+          )
+          ||
+          (
+            isBootstrappedAdmin()
+            && incoming().diff(existing()).affectedKeys().hasOnly(['lastMessage', 'lastSenderRole', 'unreadByAdmin', 'unreadByUser', 'updatedAt'])
+          )
+        );
+      allow delete: if isBootstrappedAdmin() && isValidId(threadId);
+
+      match /messages/{messageId} {
+        allow get: if isVerifiedUser() && isValidId(threadId) && isValidId(messageId) && (existing().threadOwnerUid == request.auth.uid || isBootstrappedAdmin());
+        allow list: if isBootstrappedAdmin() || (isVerifiedUser() && existing().threadOwnerUid == request.auth.uid);
+        allow create: if isVerifiedUser()
+          && isValidId(threadId)
+          && isValidId(messageId)
+          && isValidAdminFeedbackMessage(incoming(), threadId)
+          && incoming().uid == request.auth.uid
+          && incoming().createdAt == request.time
+          && existsAfter(/databases/$(database)/documents/adminFeedbackThreads/$(threadId))
+          && getAfter(/databases/$(database)/documents/adminFeedbackThreads/$(threadId)).data.uid == incoming().threadOwnerUid
+          && getAfter(/databases/$(database)/documents/adminFeedbackThreads/$(threadId)).data.pageScope == incoming().pageScope
+          && (
+            (incoming().senderRole == 'user' && incoming().threadOwnerUid == request.auth.uid)
+            || (incoming().senderRole == 'admin' && isBootstrappedAdmin())
+          );
+        allow update: if false;
+        allow delete: if isBootstrappedAdmin() && isValidId(threadId) && isValidId(messageId);
+      }
+    }
+
+    match /communityMessages/{messageId} {
+      allow get: if isSignedIn() && isValidId(messageId);
+      allow list: if isVerifiedUser() && existing().roomId in ['general', 'studio', 'salon'];
+      allow create: if isVerifiedUser()
+        && isValidId(messageId)
+        && isValidCommunityMessage(incoming())
+        && incoming().uid == request.auth.uid
+        && incoming().createdAt == request.time
+        && (
+          incoming().senderRole == 'user'
+          || (incoming().senderRole == 'admin' && isBootstrappedAdmin())
+        );
+      allow update: if false;
+      allow delete: if isVerifiedUser() && isValidId(messageId) && (existing().uid == request.auth.uid || isBootstrappedAdmin());
     }
   }
 }

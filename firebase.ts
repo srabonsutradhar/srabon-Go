@@ -2,12 +2,14 @@
  * © 2026 Srabon Go — All Rights Reserved.
  */
 
-import { initializeApp } from 'firebase/app';
+import { getApp, getApps, initializeApp } from 'firebase/app';
 import {
+  browserPopupRedirectResolver,
   getAuth,
   GoogleAuthProvider,
   signInWithPopup,
   signOut,
+  UserCredential,
 } from 'firebase/auth';
 import {
   getFirestore,
@@ -16,7 +18,7 @@ import {
 } from 'firebase/firestore';
 import firebaseConfig from './firebase-applet-config.json';
 
-const app = initializeApp(firebaseConfig);
+const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const auth = getAuth(app);
 
@@ -25,11 +27,29 @@ googleProvider.setCustomParameters({
   prompt: 'select_account',
 });
 
-export async function signInWithGoogle() {
-  return await signInWithPopup(auth, googleProvider);
+let inFlightGoogleSignIn: Promise<UserCredential> | null = null;
+
+export function signInWithGoogle(): Promise<UserCredential> {
+  if (inFlightGoogleSignIn) {
+    return inFlightGoogleSignIn;
+  }
+
+  const signInPromise = signInWithPopup(
+    auth,
+    googleProvider,
+    browserPopupRedirectResolver
+  ).finally(() => {
+    if (inFlightGoogleSignIn === signInPromise) {
+      inFlightGoogleSignIn = null;
+    }
+  });
+
+  inFlightGoogleSignIn = signInPromise;
+  return signInPromise;
 }
 
 export async function signOutUser() {
+  inFlightGoogleSignIn = null;
   return await signOut(auth);
 }
 

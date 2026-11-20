@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { normalizeApiBaseUrl, setDynamicApiBaseUrl, testApiHealthAtUrl } from '../utils/audio';
 import {
+  Timestamp,
   collection,
   doc,
   getDoc,
@@ -31,6 +32,7 @@ import {
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import {
   BillingConfig,
+  ProPackageType,
   ProUpgradeRequest,
   SalonBooking,
   SalonBookingStatus,
@@ -67,6 +69,8 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
 
   // Billing config form state
   const [feeAmount, setFeeAmount] = useState(billingConfig.feeAmount);
+  const [monthlyFee, setMonthlyFee] = useState(billingConfig.monthlyFee || billingConfig.feeAmount);
+  const [yearlyFee, setYearlyFee] = useState(billingConfig.yearlyFee || '480 BDT');
   const [paymentMethod, setPaymentMethod] = useState(billingConfig.paymentMethod);
   const [paymentAccount, setPaymentAccount] = useState(billingConfig.paymentAccount);
   const [instructions, setInstructions] = useState(billingConfig.instructions);
@@ -97,6 +101,8 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
 
   useEffect(() => {
     setFeeAmount(billingConfig.feeAmount);
+    setMonthlyFee(billingConfig.monthlyFee || billingConfig.feeAmount);
+    setYearlyFee(billingConfig.yearlyFee || '480 BDT');
     setPaymentMethod(billingConfig.paymentMethod);
     setPaymentAccount(billingConfig.paymentAccount);
     setInstructions(billingConfig.instructions);
@@ -161,6 +167,11 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
             email: data?.email,
             photoURL: data?.photoURL,
             plan: data?.plan === 'pro' ? 'pro' : 'free',
+            proPackageType:
+              data?.proPackageType === 'yearly' || data?.proPackageType === 'monthly'
+                ? data.proPackageType
+                : undefined,
+            proExpiresAt: data?.proExpiresAt,
             dailyCount: typeof data?.dailyCount === 'number' ? data.dailyCount : 0,
             lastUsageDate: typeof data?.lastUsageDate === 'string' ? data.lastUsageDate : getTodayUtcDate(),
             favorites: Array.isArray(data?.favorites) ? data.favorites : [],
@@ -220,8 +231,12 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
 
       if (userSnap.exists()) {
         const userData = userSnap.data();
+        const pkg: ProPackageType = req.packageType === 'yearly' ? 'yearly' : 'monthly';
+        const durationDays = pkg === 'yearly' ? 365 : 30;
         const userUpdate: Record<string, any> = {
           plan: 'pro',
+          proPackageType: pkg,
+          proExpiresAt: Timestamp.fromMillis(Date.now() + durationDays * 86_400_000),
           updatedAt: serverTimestamp(),
         };
         if (typeof userData?.dailyCount !== 'number') userUpdate.dailyCount = 0;
@@ -255,10 +270,13 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
     }
   };
 
-  const handleToggleUserPlan = async (target: UserAccountRecord) => {
+  const handleSetUserPackage = async (
+    target: UserAccountRecord,
+    nextPlan: UserPlan,
+    pkg?: ProPackageType
+  ) => {
     if (busyId) return;
-    setBusyId(target.uid);
-    const nextPlan: UserPlan = target.plan === 'pro' ? 'free' : 'pro';
+    setBusyId(pkg ? `${target.uid}_${pkg}` : target.uid);
     const userRef = doc(db, 'users', target.uid);
 
     try {
@@ -269,6 +287,11 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
           plan: nextPlan,
           updatedAt: serverTimestamp(),
         };
+        if (nextPlan === 'pro' && pkg) {
+          const durationDays = pkg === 'yearly' ? 365 : 30;
+          payload.proPackageType = pkg;
+          payload.proExpiresAt = Timestamp.fromMillis(Date.now() + durationDays * 86_400_000);
+        }
         if (typeof existingData?.dailyCount !== 'number') payload.dailyCount = 0;
         if (typeof existingData?.lastUsageDate !== 'string') {
           payload.lastUsageDate = getTodayUtcDate();
@@ -344,8 +367,12 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
     setSavedBanner(false);
 
     const parsedLimit = Math.min(100, Math.max(1, parseInt(freeDailyLimit, 10) || 5));
+    const cleanMonthlyFee = (monthlyFee.trim() || feeAmount.trim() || '50 BDT').slice(0, 40);
+    const cleanYearlyFee = (yearlyFee.trim() || '480 BDT').slice(0, 40);
     const payload = {
-      feeAmount: (feeAmount.trim() || '50 BDT').slice(0, 40),
+      feeAmount: cleanMonthlyFee,
+      monthlyFee: cleanMonthlyFee,
+      yearlyFee: cleanYearlyFee,
       paymentMethod: (paymentMethod.trim() || 'bKash / Nagad').slice(0, 60),
       paymentAccount: paymentAccount.trim().slice(0, 80),
       instructions: (instructions.trim() || 'Send the Pro unlock fee and submit your TrxID below.').slice(0, 500),
@@ -571,6 +598,15 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                         </span>
                         <span
                           className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                            req.packageType === 'yearly'
+                              ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300'
+                              : 'bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300'
+                          }`}
+                        >
+                          {req.packageType === 'yearly' ? 'Yearly (365d)' : 'Monthly (30d)'}
+                        </span>
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
                             req.status === 'approved'
                               ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300'
                               : req.status === 'rejected'
@@ -654,15 +690,24 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                               : 'bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300'
                           }`}
                         >
-                          {u.plan}
+                          {u.plan === 'pro' && u.proPackageType
+                            ? `${u.proPackageType} pro`
+                            : u.plan}
                         </span>
                       </div>
                       <p className="text-xs text-zinc-500 dark:text-zinc-400 truncate">
                         {u.email || u.uid} • Usage ({u.lastUsageDate}): {u.dailyCount} • Credits: {u.bonusCredits ?? 0} • Refs: {u.referralCount ?? 0}
+                        {u.plan === 'pro' && typeof u.proExpiresAt?.toMillis === 'function'
+                          ? ` • Exp: ${new Date(u.proExpiresAt.toMillis()).toLocaleDateString('en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                              year: 'numeric',
+                            })}`
+                          : ''}
                       </p>
                     </div>
 
-                    <div className="flex items-center gap-1.5 shrink-0">
+                    <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
                       <button
                         type="button"
                         onClick={() => handleGrantTenCredits(u)}
@@ -676,23 +721,50 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                           <span>+10 Cr</span>
                         )}
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => handleToggleUserPlan(u)}
-                        disabled={busyId === u.uid}
-                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors disabled:opacity-50 ${
-                          u.plan === 'pro'
-                            ? 'bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-300 dark:hover:bg-zinc-600'
-                            : 'bg-indigo-600 hover:bg-indigo-500 text-white'
-                        }`}
-                      >
-                        {busyId === u.uid ? (
-                          <Loader2 size={13} className="animate-spin" />
-                        ) : (
-                          <Crown size={13} />
-                        )}
-                        <span>{u.plan === 'pro' ? 'Set Free' : 'Make Pro'}</span>
-                      </button>
+                      {u.plan === 'pro' ? (
+                        <button
+                          type="button"
+                          onClick={() => handleSetUserPackage(u, 'free')}
+                          disabled={busyId === u.uid}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors disabled:opacity-50 bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-300 dark:hover:bg-zinc-600"
+                        >
+                          {busyId === u.uid ? (
+                            <Loader2 size={13} className="animate-spin" />
+                          ) : (
+                            <Crown size={13} />
+                          )}
+                          <span>Set Free</span>
+                        </button>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => handleSetUserPackage(u, 'pro', 'monthly')}
+                            disabled={Boolean(busyId)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-colors disabled:opacity-50 bg-indigo-600 hover:bg-indigo-500 text-white"
+                          >
+                            {busyId === `${u.uid}_monthly` ? (
+                              <Loader2 size={12} className="animate-spin" />
+                            ) : (
+                              <Crown size={12} />
+                            )}
+                            <span>Monthly</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleSetUserPackage(u, 'pro', 'yearly')}
+                            disabled={Boolean(busyId)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-colors disabled:opacity-50 bg-amber-600 hover:bg-amber-500 text-white"
+                          >
+                            {busyId === `${u.uid}_yearly` ? (
+                              <Loader2 size={12} className="animate-spin" />
+                            ) : (
+                              <Crown size={12} />
+                            )}
+                            <span>Yearly</span>
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
                 ))
@@ -702,17 +774,31 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
 
           {activeTab === 'settings' && (
             <form onSubmit={handleSaveConfig} className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1">
-                    Pro আনলক ফি (Fee Amount)
+                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 mb-1">
+                    Monthly প্যাকেজ ফি (৩০ দিন)
                   </label>
                   <input
                     type="text"
-                    value={feeAmount}
-                    onChange={(e) => setFeeAmount(e.target.value)}
+                    value={monthlyFee}
+                    onChange={(e) => setMonthlyFee(e.target.value)}
                     maxLength={40}
-                    placeholder="e.g. 50 BDT / $1"
+                    placeholder="e.g. 50 BDT"
+                    className="w-full rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-3 py-2 text-sm text-zinc-900 dark:text-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400 mb-1">
+                    Yearly প্যাকেজ ফি (৩৬৫ দিন)
+                  </label>
+                  <input
+                    type="text"
+                    value={yearlyFee}
+                    onChange={(e) => setYearlyFee(e.target.value)}
+                    maxLength={40}
+                    placeholder="e.g. 480 BDT"
                     className="w-full rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-3 py-2 text-sm text-zinc-900 dark:text-white"
                   />
                 </div>
@@ -730,6 +816,9 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                     className="w-full rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-3 py-2 text-sm text-zinc-900 dark:text-white"
                   />
                 </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
 
                 <div>
                   <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1">
