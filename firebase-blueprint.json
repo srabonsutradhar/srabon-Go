@@ -256,6 +256,365 @@
         }
       },
       "required": ["feeAmount", "paymentMethod", "paymentAccount", "instructions", "freeDailyLimit", "updatedAt"]
+    },
+    "SalonConfig": {
+      "title": "SalonConfig",
+      "description": "Admin-configurable prices, booking fee, and schedule settings for Jagannath gents parlour and salon.",
+      "type": "object",
+      "properties": {
+        "salonName": {
+          "type": "string",
+          "description": "Display name of the salon.",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "currencySymbol": {
+          "type": "string",
+          "description": "Currency symbol or code shown alongside prices (e.g. BDT or ৳).",
+          "minLength": 1,
+          "maxLength": 10
+        },
+        "haircutPrice": {
+          "type": "integer",
+          "description": "Price for Haircut service."
+        },
+        "beardTrimPrice": {
+          "type": "integer",
+          "description": "Price for Beard Trim & Styling service."
+        },
+        "shavePrice": {
+          "type": "integer",
+          "description": "Price for Classic Shave service."
+        },
+        "hairColorPrice": {
+          "type": "integer",
+          "description": "Price for Hair Color & Wash service."
+        },
+        "facialPrice": {
+          "type": "integer",
+          "description": "Price for Facial & Grooming service."
+        },
+        "comboPrice": {
+          "type": "integer",
+          "description": "Price for Full Grooming Combo."
+        },
+        "bookingFee": {
+          "type": "integer",
+          "description": "Slot booking fee added to service price."
+        },
+        "address": {
+          "type": "string",
+          "description": "Salon location / address.",
+          "maxLength": 200
+        },
+        "phone": {
+          "type": "string",
+          "description": "Salon contact phone number.",
+          "maxLength": 30
+        },
+        "openHours": {
+          "type": "string",
+          "description": "Salon opening hours.",
+          "maxLength": 80
+        },
+        "isBookingOpen": {
+          "type": "boolean",
+          "description": "Whether online appointment booking is currently accepting requests."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when salon config was last updated."
+        }
+      },
+      "required": [
+        "salonName",
+        "currencySymbol",
+        "haircutPrice",
+        "beardTrimPrice",
+        "shavePrice",
+        "hairColorPrice",
+        "facialPrice",
+        "comboPrice",
+        "bookingFee",
+        "address",
+        "phone",
+        "openHours",
+        "isBookingOpen",
+        "updatedAt"
+      ]
+    },
+    "SalonBooking": {
+      "title": "SalonBooking",
+      "description": "Appointment booking created by signed-in users for Jagannath gents parlour and salon.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth UID of the customer.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "customerName": {
+          "type": "string",
+          "description": "Customer full name.",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "customerPhone": {
+          "type": "string",
+          "description": "Customer phone number.",
+          "minLength": 6,
+          "maxLength": 25
+        },
+        "customerEmail": {
+          "type": "string",
+          "format": "email",
+          "description": "Customer Google email address.",
+          "maxLength": 254
+        },
+        "serviceKey": {
+          "type": "string",
+          "enum": ["haircut", "beard", "shave", "color", "facial", "combo"],
+          "description": "Selected salon service identifier."
+        },
+        "serviceTitle": {
+          "type": "string",
+          "description": "Selected service display name.",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "servicePrice": {
+          "type": "integer",
+          "description": "Service price at time of booking."
+        },
+        "bookingFee": {
+          "type": "integer",
+          "description": "Booking fee at time of booking."
+        },
+        "couponCode": {
+          "type": "string",
+          "description": "Optional one-time AI coupon code redeemed on this booking.",
+          "minLength": 6,
+          "maxLength": 20,
+          "pattern": "^[A-Z0-9]+$"
+        },
+        "discountPercent": {
+          "type": "integer",
+          "description": "Percentage discount applied from the AI coupon (10-30)."
+        },
+        "discountAmount": {
+          "type": "integer",
+          "description": "Exact discount amount deducted from servicePrice."
+        },
+        "totalPrice": {
+          "type": "integer",
+          "description": "Total amount (servicePrice + bookingFee - discountAmount)."
+        },
+        "bookingDate": {
+          "type": "string",
+          "description": "Booking date in YYYY-MM-DD format.",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "timeSlot": {
+          "type": "string",
+          "description": "Selected appointment time slot.",
+          "minLength": 2,
+          "maxLength": 30
+        },
+        "notes": {
+          "type": "string",
+          "description": "Optional styling instructions or notes.",
+          "maxLength": 300
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "confirmed", "completed", "cancelled"],
+          "description": "Appointment status managed by admin (or cancelled by owner while pending)."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when booking was created."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when booking was last updated."
+        }
+      },
+      "required": [
+        "uid",
+        "customerName",
+        "customerPhone",
+        "serviceKey",
+        "serviceTitle",
+        "servicePrice",
+        "bookingFee",
+        "totalPrice",
+        "bookingDate",
+        "timeSlot",
+        "status",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "AppIssue": {
+      "title": "AppIssue",
+      "description": "Internal application error or system warning logged silently for Admin-only review in the Admin Notification Box.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth UID of the signed-in user who experienced the issue.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "reporterEmail": {
+          "type": "string",
+          "format": "email",
+          "description": "Email of the user who encountered the issue.",
+          "maxLength": 254
+        },
+        "reporterName": {
+          "type": "string",
+          "description": "Display name of the user who encountered the issue.",
+          "maxLength": 120
+        },
+        "source": {
+          "type": "string",
+          "description": "Module or component where the issue originated.",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "severity": {
+          "type": "string",
+          "enum": ["error", "warning"],
+          "description": "Severity level of the app issue."
+        },
+        "message": {
+          "type": "string",
+          "description": "Human-readable problem description.",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "details": {
+          "type": "string",
+          "description": "Optional technical details or stack/host metadata.",
+          "maxLength": 1000
+        },
+        "status": {
+          "type": "string",
+          "enum": ["unread", "resolved"],
+          "description": "Notification resolution status controlled by Admin."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when issue was recorded."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when issue status was last updated."
+        }
+      },
+      "required": [
+        "uid",
+        "source",
+        "severity",
+        "message",
+        "status",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "SalonCoupon": {
+      "title": "SalonCoupon",
+      "description": "One-time AI-generated discount coupon issued once per verified Gmail user for Jagannath gents parlour and salon.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth UID of the verified user (matches document ID).",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userEmail": {
+          "type": "string",
+          "format": "email",
+          "description": "Verified Google email of the coupon holder.",
+          "maxLength": 254
+        },
+        "userName": {
+          "type": "string",
+          "description": "Display name of the coupon holder.",
+          "maxLength": 120
+        },
+        "code": {
+          "type": "string",
+          "description": "AI-generated uppercase alphanumeric coupon code.",
+          "minLength": 6,
+          "maxLength": 20,
+          "pattern": "^[A-Z0-9]+$"
+        },
+        "title": {
+          "type": "string",
+          "description": "AI-generated offer title.",
+          "minLength": 3,
+          "maxLength": 80
+        },
+        "aiMessage": {
+          "type": "string",
+          "description": "AI-generated personalized welcome offer message.",
+          "minLength": 5,
+          "maxLength": 240
+        },
+        "discountPercent": {
+          "type": "integer",
+          "description": "Percentage discount off salon service price (10-30)."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["available", "used"],
+          "description": "Coupon usage state. Can transition once from available to used."
+        },
+        "usedBookingId": {
+          "type": "string",
+          "description": "Document ID of the salonBooking where this coupon was redeemed.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "usedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when coupon was redeemed."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when coupon was generated."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when coupon was last updated."
+        }
+      },
+      "required": [
+        "uid",
+        "code",
+        "title",
+        "aiMessage",
+        "discountPercent",
+        "status",
+        "createdAt",
+        "updatedAt"
+      ]
     }
   },
   "firestore": {
@@ -288,6 +647,30 @@
         "$ref": "#/entities/BillingConfig"
       },
       "description": "Public Pro unlock fee & payment instructions readable by signed-in users, editable only by admin."
+    },
+    "/salonConfig/{configId}": {
+      "schema": {
+        "$ref": "#/entities/SalonConfig"
+      },
+      "description": "Live service prices, booking fee, and schedule configuration for Jagannath gents parlour and salon."
+    },
+    "/salonBookings/{bookingId}": {
+      "schema": {
+        "$ref": "#/entities/SalonBooking"
+      },
+      "description": "Salon appointment bookings submitted by users and managed by admin."
+    },
+    "/appIssues/{issueId}": {
+      "schema": {
+        "$ref": "#/entities/AppIssue"
+      },
+      "description": "Admin-only issue notification log written silently on app/API errors and readable/manageable exclusively by admin."
+    },
+    "/salonCoupons/{userId}": {
+      "schema": {
+        "$ref": "#/entities/SalonCoupon"
+      },
+      "description": "Single lifetime AI-generated salon coupon per verified Gmail user, atomically marked used on booking."
     }
   }
 }

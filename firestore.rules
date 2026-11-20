@@ -15,6 +15,10 @@ service cloud.firestore {
       return code is string && code.size() >= 6 && code.size() <= 16 && code.matches('^[A-Z0-9]+$');
     }
 
+    function isValidCouponCode(code) {
+      return code is string && code.size() >= 6 && code.size() <= 20 && code.matches('^[A-Z0-9]+$');
+    }
+
     function incoming() {
       return request.resource.data;
     }
@@ -142,6 +146,165 @@ service cloud.firestore {
         && data.freeDailyLimit >= 1
         && data.freeDailyLimit <= 100
         && (!('apiBaseUrl' in data) || (data.apiBaseUrl is string && data.apiBaseUrl.size() <= 200 && data.apiBaseUrl.matches('^(|https?://[a-zA-Z0-9._:/-]+)$')))
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidSalonPrice(val) {
+      return val is int && val >= 0 && val <= 50000;
+    }
+
+    function isValidSalonConfig(data) {
+      return data.keys().hasAll([
+          'salonName', 'currencySymbol',
+          'haircutPrice', 'beardTrimPrice', 'shavePrice',
+          'hairColorPrice', 'facialPrice', 'comboPrice', 'bookingFee',
+          'address', 'phone', 'openHours', 'isBookingOpen', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'salonName', 'currencySymbol',
+          'haircutPrice', 'beardTrimPrice', 'shavePrice',
+          'hairColorPrice', 'facialPrice', 'comboPrice', 'bookingFee',
+          'address', 'phone', 'openHours', 'isBookingOpen', 'updatedAt'
+        ])
+        && data.salonName is string
+        && data.salonName.size() >= 1
+        && data.salonName.size() <= 100
+        && data.currencySymbol is string
+        && data.currencySymbol.size() >= 1
+        && data.currencySymbol.size() <= 10
+        && isValidSalonPrice(data.haircutPrice)
+        && isValidSalonPrice(data.beardTrimPrice)
+        && isValidSalonPrice(data.shavePrice)
+        && isValidSalonPrice(data.hairColorPrice)
+        && isValidSalonPrice(data.facialPrice)
+        && isValidSalonPrice(data.comboPrice)
+        && isValidSalonPrice(data.bookingFee)
+        && data.address is string
+        && data.address.size() <= 200
+        && data.phone is string
+        && data.phone.size() <= 30
+        && data.openHours is string
+        && data.openHours.size() <= 80
+        && data.isBookingOpen is bool
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidSalonBooking(data) {
+      return data.keys().hasAll([
+          'uid', 'customerName', 'customerPhone',
+          'serviceKey', 'serviceTitle', 'servicePrice', 'bookingFee', 'totalPrice',
+          'bookingDate', 'timeSlot', 'status', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'uid', 'customerName', 'customerPhone', 'customerEmail',
+          'serviceKey', 'serviceTitle', 'servicePrice', 'bookingFee',
+          'couponCode', 'discountPercent', 'discountAmount', 'totalPrice',
+          'bookingDate', 'timeSlot', 'notes', 'status', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.uid)
+        && data.customerName is string
+        && data.customerName.size() >= 2
+        && data.customerName.size() <= 100
+        && data.customerPhone is string
+        && data.customerPhone.size() >= 6
+        && data.customerPhone.size() <= 25
+        && (!('customerEmail' in data) || (data.customerEmail is string && data.customerEmail.size() <= 254))
+        && data.serviceKey is string
+        && data.serviceKey in ['haircut', 'beard', 'shave', 'color', 'facial', 'combo']
+        && data.serviceTitle is string
+        && data.serviceTitle.size() >= 2
+        && data.serviceTitle.size() <= 100
+        && isValidSalonPrice(data.servicePrice)
+        && isValidSalonPrice(data.bookingFee)
+        && data.totalPrice is int
+        && (
+          (
+            !('couponCode' in data)
+            && !('discountPercent' in data)
+            && !('discountAmount' in data)
+            && data.totalPrice == data.servicePrice + data.bookingFee
+          )
+          ||
+          (
+            'couponCode' in data
+            && 'discountPercent' in data
+            && 'discountAmount' in data
+            && isValidCouponCode(data.couponCode)
+            && data.discountPercent is int
+            && data.discountPercent >= 10
+            && data.discountPercent <= 30
+            && data.discountAmount is int
+            && data.discountAmount >= 0
+            && data.discountAmount <= data.servicePrice
+            && data.discountAmount * 100 <= data.servicePrice * data.discountPercent + 50
+            && data.discountAmount * 100 >= data.servicePrice * data.discountPercent - 50
+            && data.totalPrice == data.servicePrice + data.bookingFee - data.discountAmount
+          )
+        )
+        && data.bookingDate is string
+        && data.bookingDate.size() == 10
+        && data.bookingDate.matches('^\\d{4}-\\d{2}-\\d{2}$')
+        && data.timeSlot is string
+        && data.timeSlot.size() >= 2
+        && data.timeSlot.size() <= 30
+        && (!('notes' in data) || (data.notes is string && data.notes.size() <= 300))
+        && data.status is string
+        && data.status in ['pending', 'confirmed', 'completed', 'cancelled']
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidSalonCoupon(data, expectedUid) {
+      return data.keys().hasAll(['uid', 'code', 'title', 'aiMessage', 'discountPercent', 'status', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly([
+          'uid', 'userEmail', 'userName',
+          'code', 'title', 'aiMessage', 'discountPercent',
+          'status', 'usedBookingId', 'usedAt', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.uid)
+        && data.uid == expectedUid
+        && (!('userEmail' in data) || (data.userEmail is string && data.userEmail.size() <= 254))
+        && (!('userName' in data) || (data.userName is string && data.userName.size() <= 120))
+        && isValidCouponCode(data.code)
+        && data.title is string
+        && data.title.size() >= 3
+        && data.title.size() <= 80
+        && data.aiMessage is string
+        && data.aiMessage.size() >= 5
+        && data.aiMessage.size() <= 240
+        && data.discountPercent is int
+        && data.discountPercent >= 10
+        && data.discountPercent <= 30
+        && data.status is string
+        && data.status in ['available', 'used']
+        && (!('usedBookingId' in data) || isValidId(data.usedBookingId))
+        && (!('usedAt' in data) || data.usedAt is timestamp)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidAppIssue(data) {
+      return data.keys().hasAll(['uid', 'source', 'severity', 'message', 'status', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly([
+          'uid', 'reporterEmail', 'reporterName',
+          'source', 'severity', 'message', 'details',
+          'status', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.uid)
+        && (!('reporterEmail' in data) || (data.reporterEmail is string && data.reporterEmail.size() <= 254))
+        && (!('reporterName' in data) || (data.reporterName is string && data.reporterName.size() <= 120))
+        && data.source is string
+        && data.source.size() >= 1
+        && data.source.size() <= 60
+        && data.severity is string
+        && data.severity in ['error', 'warning']
+        && data.message is string
+        && data.message.size() >= 1
+        && data.message.size() <= 500
+        && (!('details' in data) || (data.details is string && data.details.size() <= 1000))
+        && data.status is string
+        && data.status in ['unread', 'resolved']
+        && data.createdAt is timestamp
         && data.updatedAt is timestamp;
     }
 
@@ -281,6 +444,118 @@ service cloud.firestore {
         && incoming().diff(existing()).affectedKeys().hasOnly(['feeAmount', 'paymentMethod', 'paymentAccount', 'instructions', 'freeDailyLimit', 'apiBaseUrl', 'updatedAt'])
         && incoming().updatedAt == request.time;
       allow delete: if false;
+    }
+
+    match /salonConfig/{configId} {
+      allow get: if isSignedIn() && isValidId(configId);
+      allow list: if false;
+      allow create: if isBootstrappedAdmin()
+        && isValidId(configId)
+        && isValidSalonConfig(incoming())
+        && incoming().updatedAt == request.time;
+      allow update: if isBootstrappedAdmin()
+        && isValidId(configId)
+        && isValidSalonConfig(incoming())
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'salonName', 'currencySymbol',
+          'haircutPrice', 'beardTrimPrice', 'shavePrice',
+          'hairColorPrice', 'facialPrice', 'comboPrice', 'bookingFee',
+          'address', 'phone', 'openHours', 'isBookingOpen', 'updatedAt'
+        ])
+        && incoming().updatedAt == request.time;
+      allow delete: if false;
+    }
+
+    match /salonBookings/{bookingId} {
+      allow get: if isSignedIn() && isValidId(bookingId) && (existing().uid == request.auth.uid || isBootstrappedAdmin());
+      allow list: if isBootstrappedAdmin() || (isVerifiedUser() && existing().uid == request.auth.uid);
+      allow create: if isVerifiedUser()
+        && isValidId(bookingId)
+        && isValidSalonBooking(incoming())
+        && incoming().uid == request.auth.uid
+        && incoming().status == 'pending'
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && (
+          !('couponCode' in incoming())
+          || (
+            exists(/databases/$(database)/documents/salonCoupons/$(request.auth.uid))
+            && get(/databases/$(database)/documents/salonCoupons/$(request.auth.uid)).data.status == 'available'
+            && get(/databases/$(database)/documents/salonCoupons/$(request.auth.uid)).data.code == incoming().couponCode
+            && get(/databases/$(database)/documents/salonCoupons/$(request.auth.uid)).data.discountPercent == incoming().discountPercent
+            && existsAfter(/databases/$(database)/documents/salonCoupons/$(request.auth.uid))
+            && getAfter(/databases/$(database)/documents/salonCoupons/$(request.auth.uid)).data.status == 'used'
+            && getAfter(/databases/$(database)/documents/salonCoupons/$(request.auth.uid)).data.usedBookingId == bookingId
+          )
+        );
+      allow update: if isVerifiedUser()
+        && isValidId(bookingId)
+        && isValidSalonBooking(incoming())
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])
+        && (
+          (isBootstrappedAdmin() && incoming().status in ['pending', 'confirmed', 'completed', 'cancelled'])
+          || (existing().uid == request.auth.uid && existing().status == 'pending' && incoming().status == 'cancelled')
+        );
+      allow delete: if isBootstrappedAdmin() && isValidId(bookingId);
+    }
+
+    match /salonCoupons/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && (isOwner(userId) || isBootstrappedAdmin());
+      allow list: if isBootstrappedAdmin();
+      allow create: if isVerifiedUser()
+        && isValidId(userId)
+        && isOwner(userId)
+        && isValidSalonCoupon(incoming(), userId)
+        && incoming().status == 'available'
+        && !('usedBookingId' in incoming())
+        && !('usedAt' in incoming())
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser()
+        && isValidId(userId)
+        && isOwner(userId)
+        && isValidSalonCoupon(incoming(), userId)
+        && existing().status == 'available'
+        && incoming().status == 'used'
+        && incoming().uid == existing().uid
+        && incoming().code == existing().code
+        && incoming().title == existing().title
+        && incoming().aiMessage == existing().aiMessage
+        && incoming().discountPercent == existing().discountPercent
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && 'usedBookingId' in incoming()
+        && 'usedAt' in incoming()
+        && incoming().usedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'usedBookingId', 'usedAt', 'updatedAt'])
+        && existsAfter(/databases/$(database)/documents/salonBookings/$(incoming().usedBookingId))
+        && getAfter(/databases/$(database)/documents/salonBookings/$(incoming().usedBookingId)).data.uid == request.auth.uid
+        && getAfter(/databases/$(database)/documents/salonBookings/$(incoming().usedBookingId)).data.couponCode == existing().code;
+      allow delete: if false;
+    }
+
+    match /appIssues/{issueId} {
+      allow get: if isBootstrappedAdmin() && isValidId(issueId);
+      allow list: if isBootstrappedAdmin();
+      allow create: if isVerifiedUser()
+        && isValidId(issueId)
+        && isValidAppIssue(incoming())
+        && incoming().uid == request.auth.uid
+        && incoming().status == 'unread'
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isBootstrappedAdmin()
+        && isValidId(issueId)
+        && isValidAppIssue(incoming())
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])
+        && incoming().status in ['unread', 'resolved'];
+      allow delete: if isBootstrappedAdmin() && isValidId(issueId);
     }
   }
 }

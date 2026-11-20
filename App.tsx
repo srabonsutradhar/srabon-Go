@@ -12,17 +12,22 @@ import VoiceFinder from './components/VoiceFinder';
 import AiResultCard from './components/AiResultCard';
 import TtsStudio from './components/TtsStudio';
 import TrendingIdeas from './components/TrendingIdeas';
+import HomePage from './components/HomePage';
+import SalonBookingPage from './components/SalonBookingPage';
 import GoogleLoginGate from './components/GoogleLoginGate';
 import ProUpgradeModal from './components/ProUpgradeModal';
-import AdminPanelModal from './components/AdminPanelModal';
+import AdminPanelModal, { AdminPanelTab } from './components/AdminPanelModal';
+import AdminNotificationsBox from './components/AdminNotificationsBox';
 import SiteLegalModal, { LegalTab } from './components/SiteLegalModal';
-import { FilterState, AiRecommendation, BillingConfig, UserPlan } from './types';
-import { Info, Heart, Loader2 } from 'lucide-react';
+import { AppIssueRecord, AppViewMode, FilterState, AiRecommendation, BillingConfig, SalonConfig, UserPlan } from './types';
+import { Info, Heart, Loader2, Bell, AlertTriangle, X } from 'lucide-react';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { doc, onSnapshot, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, doc, onSnapshot, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db, signOutUser, handleFirestoreError, OperationType } from './firebase';
 import { initGoogleAdsTag } from './utils/googleAds';
 import { setDynamicApiBaseUrl } from './utils/audio';
+import { reportAppIssue, subscribeSessionIssues } from './utils/appIssues';
+import { DEFAULT_SALON_CONFIG, sanitizeSalonConfig } from './utils/salon';
 import {
   buildReferralCode,
   capturePendingReferralFromUrl,
@@ -74,7 +79,7 @@ const App: React.FC = () => {
   const [aiResult, setAiResult] = useState<AiRecommendation | null>(null);
   const [isAiCardVisible, setIsAiCardVisible] = useState(false);
   const [showVoiceFinder, setShowVoiceFinder] = useState(false);
-  const [viewMode, setViewMode] = useState<'studio' | 'ideas' | 'carousel' | 'grid' | 'favorites'>('studio');
+  const [viewMode, setViewMode] = useState<AppViewMode>('home');
   const [studioVoiceName, setStudioVoiceName] = useState<string>('Kore');
   const [studioDraft, setStudioDraft] = useState<{ text: string; style: string; revision: number } | null>(null);
   const [favorites, setFavorites] = useState<string[]>([]);
@@ -82,9 +87,15 @@ const App: React.FC = () => {
   const [dailyCount, setDailyCount] = useState<number>(0);
   const [lastUsageDate, setLastUsageDate] = useState<string>(getTodayUtcDate());
   const [billingConfig, setBillingConfig] = useState<BillingConfig>(DEFAULT_BILLING_CONFIG);
+  const [salonConfig, setSalonConfig] = useState<SalonConfig>(DEFAULT_SALON_CONFIG);
   const [showProModal, setShowProModal] = useState(false);
   const [proModalTab, setProModalTab] = useState<'refer' | 'pro'>('refer');
   const [showAdminPanel, setShowAdminPanel] = useState(false);
+  const [adminInitialTab, setAdminInitialTab] = useState<AdminPanelTab>('requests');
+  const [showAdminNotifications, setShowAdminNotifications] = useState(false);
+  const [floatingNoticeHidden, setFloatingNoticeHidden] = useState(false);
+  const [sessionIssues, setSessionIssues] = useState<AppIssueRecord[]>([]);
+  const [firestoreIssues, setFirestoreIssues] = useState<AppIssueRecord[]>([]);
   const [referralCode, setReferralCode] = useState<string>('');
   const [bonusCredits, setBonusCredits] = useState<number>(0);
   const [referralCount, setReferralCount] = useState<number>(0);
@@ -127,6 +138,85 @@ const App: React.FC = () => {
     });
     return () => unsubscribe();
   }, []);
+
+  // Global silent error/issue collector -> sends all app problems exclusively to Admin Notification Box
+  useEffect(() => {
+    const unsubSession = subscribeSessionIssues(setSessionIssues);
+
+    const onCustomIssue = (event: Event) => {
+      const detail = (event as CustomEvent)?.detail;
+      if (!detail || typeof detail.message !== 'string') return;
+      reportAppIssue({
+        source: typeof detail.source === 'string' ? detail.source : 'App',
+        severity: detail.severity === 'warning' ? 'warning' : 'error',
+        message: detail.message,
+        details: typeof detail.details === 'string' ? detail.details : undefined,
+      });
+    };
+
+    const onWindowError = (event: ErrorEvent) => {
+      const message = event?.message || event?.error?.message || 'Unexpected runtime error';
+      if (message.includes('ResizeObserver') || message.includes('WebSocket')) return;
+      reportAppIssue({
+        source: 'Runtime',
+        severity: 'error',
+        message,
+        details: event?.filename ? `${event.filename}:${event.lineno}:${event.colno}` : undefined,
+      });
+    };
+
+    const onUnhandledRejection = (event: PromiseRejectionEvent) => {
+      const reason = event?.reason;
+      const message =
+        reason instanceof Error
+          ? reason.message
+          : typeof reason === 'string'
+          ? reason
+          : 'Unhandled promise rejection';
+      if (message.includes('WebSocket')) return;
+      reportAppIssue({
+        source: 'AsyncTask',
+        severity: 'error',
+        message,
+      });
+    };
+
+    window.addEventListener('srabon:app-issue', onCustomIssue);
+    window.addEventListener('error', onWindowError);
+    window.addEventListener('unhandledrejection', onUnhandledRejection);
+
+    return () => {
+      unsubSession();
+      window.removeEventListener('srabon:app-issue', onCustomIssue);
+      window.removeEventListener('error', onWindowError);
+      window.removeEventListener('unhandledrejection', onUnhandledRejection);
+    };
+  }, []);
+
+  // Admin-only real-time listener for Firestore /appIssues notification box
+  useEffect(() => {
+    if (!authReady || !user || !isAdmin) {
+      setFirestoreIssues([]);
+      return;
+    }
+
+    const unsubIssues = onSnapshot(
+      collection(db, 'appIssues'),
+      (snapshot) => {
+        const items: AppIssueRecord[] = snapshot.docs.map((d) => ({
+          id: d.id,
+          ...(d.data() as Omit<AppIssueRecord, 'id'>),
+          origin: 'firestore',
+        }));
+        setFirestoreIssues(items);
+      },
+      (err) => {
+        console.error('Failed to subscribe to appIssues:', err);
+      }
+    );
+
+    return () => unsubIssues();
+  }, [authReady, user, isAdmin]);
 
   // Firestore user preferences & favorites sync (only when authenticated)
   useEffect(() => {
@@ -320,9 +410,25 @@ const App: React.FC = () => {
       }
     );
 
+    const salonConfigRef = doc(db, 'salonConfig', 'default');
+    const unsubSalonConfig = onSnapshot(
+      salonConfigRef,
+      (snap) => {
+        if (snap.exists()) {
+          setSalonConfig(sanitizeSalonConfig(snap.data()));
+        } else {
+          setSalonConfig(DEFAULT_SALON_CONFIG);
+        }
+      },
+      (error) => {
+        handleFirestoreError(error, OperationType.GET, 'salonConfig/default');
+      }
+    );
+
     return () => {
       unsubscribe();
       unsubConfig();
+      unsubSalonConfig();
     };
   }, [authReady, user]);
 
@@ -495,11 +601,49 @@ const App: React.FC = () => {
     setProModalTab('refer');
     setShowProModal(false);
     setShowAdminPanel(false);
+    setShowAdminNotifications(false);
+    setFloatingNoticeHidden(false);
+    setFirestoreIssues([]);
+    setAdminInitialTab('requests');
+    setSalonConfig(DEFAULT_SALON_CONFIG);
     setLegalTab(null);
     setStudioDraft(null);
     setDynamicApiBaseUrl('');
     await signOutUser();
   };
+
+  const allAdminIssues = useMemo(() => {
+    const getMs = (item: AppIssueRecord) =>
+      typeof item.createdAt?.toMillis === 'function' ? item.createdAt.toMillis() : 0;
+
+    const merged: AppIssueRecord[] = [...firestoreIssues];
+    for (const sItem of sessionIssues) {
+      const sMs = getMs(sItem);
+      const hasFirestoreMatch = firestoreIssues.some(
+        (fItem) =>
+          fItem.source === sItem.source &&
+          fItem.message === sItem.message &&
+          Math.abs(getMs(fItem) - sMs) < 30_000
+      );
+      if (!hasFirestoreMatch) {
+        merged.push(sItem);
+      }
+    }
+    merged.sort((a, b) => getMs(b) - getMs(a));
+    return merged;
+  }, [firestoreIssues, sessionIssues]);
+
+  const unreadIssues = useMemo(
+    () => allAdminIssues.filter((i) => i.status === 'unread'),
+    [allAdminIssues]
+  );
+  const unreadIssuesCount = unreadIssues.length;
+
+  useEffect(() => {
+    if (unreadIssuesCount > 0) {
+      setFloatingNoticeHidden(false);
+    }
+  }, [unreadIssuesCount]);
 
   const uniqueGenders = useMemo(() => Array.from(new Set(VOICE_DATA.map(v => v.analysis.gender))).sort(), []);
   const uniquePitches = useMemo(() => Array.from(new Set(VOICE_DATA.map(v => v.analysis.pitch))).sort(), []);
@@ -546,8 +690,8 @@ const App: React.FC = () => {
     setViewMode('studio');
   };
 
-  const handleViewModeChange = (mode: 'studio' | 'ideas' | 'carousel' | 'grid' | 'favorites') => {
-    if (mode === 'studio' || mode === 'ideas') {
+  const handleViewModeChange = (mode: AppViewMode) => {
+    if (mode === 'home' || mode === 'studio' || mode === 'ideas' || mode === 'salon') {
       setPlayingVoice(null);
     }
     setViewMode(mode);
@@ -560,7 +704,12 @@ const App: React.FC = () => {
   };
 
   const isModalOpen = Boolean(
-    showVoiceFinder || showProModal || showAdminPanel || legalTab || (aiResult && isAiCardVisible)
+    showVoiceFinder ||
+      showProModal ||
+      showAdminPanel ||
+      showAdminNotifications ||
+      legalTab ||
+      (aiResult && isAiCardVisible)
   );
 
   if (!authReady) {
@@ -598,7 +747,7 @@ const App: React.FC = () => {
           filters={filters}
           onFilterChange={(next) => {
             setFilters(next);
-            if ((viewMode === 'studio' || viewMode === 'ideas') && (next.search || next.gender !== 'All' || next.pitch !== 'All')) {
+            if ((viewMode === 'home' || viewMode === 'studio' || viewMode === 'ideas' || viewMode === 'salon') && (next.search || next.gender !== 'All' || next.pitch !== 'All')) {
               setViewMode('grid');
             }
           }}
@@ -621,11 +770,42 @@ const App: React.FC = () => {
             setProModalTab(tab);
             setShowProModal(true);
           }}
-          onOpenAdminPanel={() => setShowAdminPanel(true)}
+          onOpenAdminPanel={() => {
+            setAdminInitialTab('requests');
+            setShowAdminPanel(true);
+          }}
+          unreadIssuesCount={unreadIssuesCount}
+          onOpenNotifications={() => setShowAdminNotifications(true)}
         />
 
         <main className="flex-1 relative flex flex-col overflow-hidden">
-              {viewMode === 'studio' ? (
+              {viewMode === 'home' ? (
+                <HomePage
+                  user={user}
+                  userPlan={userPlan}
+                  isAdmin={isAdmin}
+                  salonConfig={salonConfig}
+                  voicesCount={VOICE_DATA.length}
+                  favoritesCount={favorites.length}
+                  onNavigate={handleViewModeChange}
+                  onOpenAdminPanel={() => {
+                    setAdminInitialTab('salon');
+                    setShowAdminPanel(true);
+                  }}
+                  onOpenLegal={setLegalTab}
+                />
+              ) : viewMode === 'salon' ? (
+                <SalonBookingPage
+                  user={user}
+                  isAdmin={isAdmin}
+                  salonConfig={salonConfig}
+                  onBackHome={() => handleViewModeChange('home')}
+                  onOpenAdminPanel={() => {
+                    setAdminInitialTab('salon');
+                    setShowAdminPanel(true);
+                  }}
+                />
+              ) : viewMode === 'studio' ? (
                 <TtsStudio
                   voices={VOICE_DATA}
                   selectedVoiceName={studioVoiceName}
@@ -652,6 +832,7 @@ const App: React.FC = () => {
                   }}
                   onBeforeGenerate={consumeAiQuota}
                   onOpenLegal={setLegalTab}
+                  isAdmin={isAdmin}
                 />
               ) : filteredVoices.length > 0 ? (
                   viewMode === 'carousel' ? (
@@ -754,6 +935,7 @@ const App: React.FC = () => {
             }}
             onClose={() => setShowVoiceFinder(false)}
             onBeforeGenerate={consumeAiQuota}
+            isAdmin={isAdmin}
         />
       )}
 
@@ -777,6 +959,8 @@ const App: React.FC = () => {
       {showAdminPanel && isAdmin && (
         <AdminPanelModal
           billingConfig={billingConfig}
+          salonConfig={salonConfig}
+          initialTab={adminInitialTab}
           onClose={() => setShowAdminPanel(false)}
         />
       )}
@@ -790,14 +974,81 @@ const App: React.FC = () => {
           >
              <div className="absolute inset-0" onClick={clearAiResult}></div>
              <div className="relative w-full max-w-5xl animate-slide-up max-h-[90vh] overflow-hidden rounded-2xl">
-                 <AiResultCard 
+                  <AiResultCard 
                     result={aiResult} 
                     voices={filteredVoices} 
                     onClose={clearAiResult}
                     onBeforeGenerate={consumeAiQuota}
+                    isAdmin={isAdmin}
                  />
              </div>
           </div>
+      )}
+
+      {showAdminNotifications && isAdmin && (
+        <AdminNotificationsBox
+          issues={allAdminIssues}
+          onClose={() => setShowAdminNotifications(false)}
+        />
+      )}
+
+      {/* Separate Admin-only Floating Issue Notification Box */}
+      {isAdmin && unreadIssuesCount > 0 && !showAdminNotifications && !floatingNoticeHidden && (
+        <aside
+          aria-label="Admin Issue Notification"
+          className="fixed bottom-4 right-4 z-[80] w-[calc(100%-2rem)] max-w-sm rounded-2xl bg-white dark:bg-zinc-900 border border-rose-200 dark:border-rose-900 shadow-2xl p-4 space-y-3 animate-slide-up"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0">
+                <Bell size={15} />
+              </div>
+              <div>
+                <p className="text-xs font-bold text-zinc-900 dark:text-white">
+                  অ্যাডমিন নোটিফিকেশন বক্স ({unreadIssuesCount})
+                </p>
+                <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                  অ্যাপে নতুন সমস্যা পাওয়া গেছে (শুধু আপনি দেখছেন)
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setFloatingNoticeHidden(true)}
+              className="p-1 rounded-lg text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors"
+              aria-label="Hide notification preview"
+            >
+              <X size={14} />
+            </button>
+          </div>
+
+          <div className="p-2.5 rounded-xl bg-rose-50/70 dark:bg-rose-950/30 border border-rose-100 dark:border-rose-900/60 text-xs text-rose-800 dark:text-rose-200 flex items-start gap-2">
+            <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+            <div className="min-w-0">
+              <p className="font-semibold text-[11px] uppercase tracking-wider opacity-80">
+                {unreadIssues[0].source}
+              </p>
+              <p className="line-clamp-2 break-words">{unreadIssues[0].message}</p>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setFloatingNoticeHidden(true)}
+              className="px-3 py-1.5 rounded-lg text-xs font-medium text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 transition-colors"
+            >
+              পরে দেখুন
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowAdminNotifications(true)}
+              className="px-3.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold transition-colors"
+            >
+              নোটিফিকেশন বক্স খুলুন
+            </button>
+          </div>
+        </aside>
       )}
 
       {legalTab && (

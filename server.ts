@@ -5,6 +5,7 @@
 import express from "express";
 import path from "path";
 import fs from "fs";
+import crypto from "crypto";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 
@@ -76,6 +77,14 @@ function resolveModel(model?: string): string {
   return candidate;
 }
 
+function getServerApiKey(): string | undefined {
+  const key = process.env.GEMINI_API_KEY || process.env.API_KEY || process.env.GOOGLE_API_KEY;
+  return typeof key === "string" && key.trim() ? key.trim() : undefined;
+}
+
+const MISSING_API_KEY_ERROR =
+  "GEMINI_API_KEY is not configured on the server. Add GEMINI_API_KEY in Render > Environment (or hosting Secrets) and redeploy.";
+
 function createAiClient(apiKey: string) {
   return new GoogleGenAI({
     apiKey,
@@ -109,6 +118,271 @@ const apiRateLimits = new BoundedMap<string, { count: number; resetAt: number }>
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_MAX_REQUESTS = 45;
 
+// --- Gemini Flash-Lite TTS (gemini-3.8-flash-lite-tts) Cache & RPM/TPM/RPD Governor ---
+function parseNonNegativeInt(raw: string | undefined, fallback: number): number {
+  if (raw === undefined || raw === "") return fallback;
+  const n = Number.parseInt(raw, 10);
+  return Number.isFinite(n) && n >= 0 ? n : fallback;
+}
+
+const TTS_RPM_LIMIT = parseNonNegativeInt(process.env.TTS_RPM_LIMIT, 10);
+const TTS_TPM_LIMIT = parseNonNegativeInt(process.env.TTS_TPM_LIMIT, 10_000);
+const TTS_RPD_LIMIT = parseNonNegativeInt(process.env.TTS_RPD_LIMIT, 0); // 0 = no local daily cap unless configured
+
+const TTS_CACHE_MAX_ENTRIES = 120;
+const TTS_CACHE_MAX_BYTES = 32 * 1024 * 1024; // 32 MB cap safe for Render 512MB Free Tier
+const TTS_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24h
+
+interface TtsCacheEntry {
+  audioData: string;
+  mimeType: string;
+  byteLength: number;
+  createdAt: number;
+  hits: number;
+}
+
+const ttsCache = new Map<string, TtsCacheEntry>();
+const inFlightTts = new Map<string, Promise<{ audioData: string; mimeType: string }>>();
+let ttsCacheTotalBytes = 0;
+
+function makeTtsCacheKey(text: string, voiceName: string, style: string): string {
+  const normalizedText = text.replace(/\s+/g, " ").trim();
+  const normalizedStyle = style.replace(/\s+/g, " ").trim();
+  const rawKey = `${voiceName.trim().toLowerCase()}::${normalizedStyle}::${normalizedText}`;
+  return crypto.createHash("sha256").update(rawKey).digest("hex");
+}
+
+function getCachedTts(key: string): TtsCacheEntry | null {
+  const entry = ttsCache.get(key);
+  if (!entry) return null;
+  if (Date.now() - entry.createdAt > TTS_CACHE_TTL_MS) {
+    ttsCache.delete(key);
+    ttsCacheTotalBytes = Math.max(0, ttsCacheTotalBytes - entry.byteLength);
+    return null;
+  }
+  // Refresh LRU order
+  ttsCache.delete(key);
+  entry.hits += 1;
+  ttsCache.set(key, entry);
+  return entry;
+}
+
+function setCachedTts(key: string, audioData: string, mimeType: string): void {
+  const byteLength = Buffer.byteLength(audioData, "utf8");
+  if (byteLength > TTS_CACHE_MAX_BYTES / 2) return;
+
+  const existing = ttsCache.get(key);
+  if (existing) {
+    ttsCache.delete(key);
+    ttsCacheTotalBytes = Math.max(0, ttsCacheTotalBytes - existing.byteLength);
+  }
+
+  while (
+    ttsCache.size >= TTS_CACHE_MAX_ENTRIES ||
+    (ttsCacheTotalBytes + byteLength > TTS_CACHE_MAX_BYTES && ttsCache.size > 0)
+  ) {
+    const oldestKey = ttsCache.keys().next().value;
+    if (!oldestKey) break;
+    const oldest = ttsCache.get(oldestKey);
+    ttsCache.delete(oldestKey);
+    if (oldest) {
+      ttsCacheTotalBytes = Math.max(0, ttsCacheTotalBytes - oldest.byteLength);
+    }
+  }
+
+  ttsCache.set(key, {
+    audioData,
+    mimeType,
+    byteLength,
+    createdAt: Date.now(),
+    hits: 0,
+  });
+  ttsCacheTotalBytes += byteLength;
+}
+
+function estimateTtsTokens(text: string, style: string): number {
+  // Bengali/Unicode scripts tokenize denser (~2.5 chars/token); include prompt overhead
+  return Math.max(12, Math.ceil(text.length / 2.5) + Math.ceil(style.length / 3) + 25);
+}
+
+interface TtsWindowEntry {
+  ts: number;
+  tokens: number;
+}
+
+const ttsMinuteWindow: TtsWindowEntry[] = [];
+let ttsDailyDate = new Date().toISOString().slice(0, 10);
+let ttsDailyCount = 0;
+let ttsUpstreamCooldownUntil = 0;
+let ttsQueueTail: Promise<void> = Promise.resolve();
+
+function pruneTtsWindow(now: number): void {
+  const cutoff = now - 60_000;
+  while (ttsMinuteWindow.length > 0 && ttsMinuteWindow[0].ts <= cutoff) {
+    ttsMinuteWindow.shift();
+  }
+  const today = new Date(now).toISOString().slice(0, 10);
+  if (today !== ttsDailyDate) {
+    ttsDailyDate = today;
+    ttsDailyCount = 0;
+  }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+class TtsQuotaError extends Error {
+  status: number;
+  retryAfterSeconds: number;
+  constructor(message: string, status: number, retryAfterSeconds: number = 15) {
+    super(message);
+    this.status = status;
+    this.retryAfterSeconds = retryAfterSeconds;
+  }
+}
+
+function isRateLimitError(err: any): boolean {
+  const status = err?.status ?? err?.statusCode ?? err?.error?.code;
+  if (status === 429) return true;
+  const msg = String(err?.message || err || "").toLowerCase();
+  return (
+    msg.includes("429") ||
+    msg.includes("resource_exhausted") ||
+    msg.includes("quota") ||
+    msg.includes("rate limit") ||
+    msg.includes("too many requests")
+  );
+}
+
+function parseRetryAfterSeconds(err: any): number {
+  const msg = String(err?.message || "");
+  const match = msg.match(/retry\s*(?:in|after)\s*([0-9]+(?:\.[0-9]+)?)\s*s/i);
+  if (match) {
+    const parsed = Math.ceil(Number.parseFloat(match[1]));
+    if (Number.isFinite(parsed) && parsed > 0) return Math.min(parsed, 120);
+  }
+  const headerVal = err?.headers?.["retry-after"];
+  if (headerVal) {
+    const parsed = Number.parseInt(String(headerVal), 10);
+    if (Number.isFinite(parsed) && parsed > 0) return Math.min(parsed, 120);
+  }
+  return 15;
+}
+
+function isDailyQuotaMessage(err: any): boolean {
+  const msg = String(err?.message || "").toLowerCase();
+  return (
+    msg.includes("per day") ||
+    msg.includes("perday") ||
+    msg.includes("rpd") ||
+    msg.includes("daily")
+  );
+}
+
+async function acquireTtsQuotaSlot(tokensNeeded: number): Promise<void> {
+  const MAX_QUEUE_WAIT_MS = 12_000;
+  const startedWait = Date.now();
+
+  if (TTS_TPM_LIMIT > 0 && tokensNeeded > TTS_TPM_LIMIT) {
+    throw new TtsQuotaError(
+      `টেক্সটটি এক মিনিটের টোকেন সীমার (TPM: ${TTS_TPM_LIMIT}) চেয়ে বড়। অনুগ্রহ করে ছোট অংশে ভাগ করে চেষ্টা করুন।`,
+      400,
+      5
+    );
+  }
+
+  while (true) {
+    const now = Date.now();
+    pruneTtsWindow(now);
+
+    if (now < ttsUpstreamCooldownUntil) {
+      const waitSec = Math.max(1, Math.ceil((ttsUpstreamCooldownUntil - now) / 1000));
+      if (ttsUpstreamCooldownUntil - now <= 4000 && Date.now() - startedWait < MAX_QUEUE_WAIT_MS) {
+        await sleep(ttsUpstreamCooldownUntil - now + 100);
+        continue;
+      }
+      throw new TtsQuotaError(
+        `Gemini TTS সার্ভারে সাময়িক Rate Limit চলছে (429)। অনুগ্রহ করে ${waitSec} সেকেন্ড পর আবার চেষ্টা করুন।`,
+        429,
+        waitSec
+      );
+    }
+
+    if (TTS_RPD_LIMIT > 0 && ttsDailyCount >= TTS_RPD_LIMIT) {
+      throw new TtsQuotaError(
+        `আজকের দৈনিক TTS সীমা (${TTS_RPD_LIMIT} RPD) শেষ হয়েছে। আগে তৈরি করা অডিওগুলো ক্যাশ থেকে চলবে, নতুন অডিওর জন্য আগামীকাল চেষ্টা করুন।`,
+        429,
+        60
+      );
+    }
+
+    const usedRpm = ttsMinuteWindow.length;
+    const usedTpm = ttsMinuteWindow.reduce((sum, item) => sum + item.tokens, 0);
+    const rpmExceeded = TTS_RPM_LIMIT > 0 && usedRpm >= TTS_RPM_LIMIT;
+    const tpmExceeded = TTS_TPM_LIMIT > 0 && usedTpm + tokensNeeded > TTS_TPM_LIMIT;
+
+    if (!rpmExceeded && !tpmExceeded) {
+      ttsMinuteWindow.push({ ts: now, tokens: tokensNeeded });
+      ttsDailyCount += 1;
+      return;
+    }
+
+    const oldestTs = ttsMinuteWindow[0]?.ts ?? now;
+    const waitMs = Math.max(250, oldestTs + 60_000 - now + 50);
+    if (Date.now() - startedWait + waitMs > MAX_QUEUE_WAIT_MS) {
+      const waitSec = Math.max(1, Math.ceil(waitMs / 1000));
+      throw new TtsQuotaError(
+        `একসাথে অনেকগুলো অডিও অনুরোধ আসায় প্রতি মিনিটের সীমা (${rpmExceeded ? `${TTS_RPM_LIMIT} RPM` : `${TTS_TPM_LIMIT} TPM`}) পূর্ণ হয়েছে। ${waitSec} সেকেন্ড পর আবার চেষ্টা করুন।`,
+        429,
+        waitSec
+      );
+    }
+
+    await sleep(Math.min(waitMs, 3000));
+  }
+}
+
+function enqueueTtsTask<T>(task: () => Promise<T>): Promise<T> {
+  const next = ttsQueueTail.then(task, task);
+  ttsQueueTail = next.then(
+    () => undefined,
+    () => undefined
+  );
+  return next;
+}
+
+async function callGeminiWithRetry<T>(fn: () => Promise<T>, maxRetries: number = 2): Promise<T> {
+  let attempt = 0;
+  while (true) {
+    try {
+      return await fn();
+    } catch (err: any) {
+      const retryable429 = isRateLimitError(err);
+      const status = err?.status ?? err?.statusCode;
+      const retryable5xx = status === 500 || status === 502 || status === 503 || status === 504;
+
+      if ((!retryable429 && !retryable5xx) || attempt >= maxRetries) {
+        throw err;
+      }
+
+      if (retryable429) {
+        if (isDailyQuotaMessage(err)) {
+          throw err;
+        }
+        const suggestedSec = parseRetryAfterSeconds(err);
+        if (suggestedSec > 6) {
+          throw err;
+        }
+      }
+
+      const backoffMs = Math.min(4000, 1200 * Math.pow(2, attempt)) + Math.floor(Math.random() * 400);
+      attempt += 1;
+      await sleep(backoffMs);
+    }
+  }
+}
+
 function getClientKey(req: any): string {
   const raw = req?.headers?.["x-client-id"];
   if (typeof raw === "string" && /^[a-zA-Z0-9_-]{8,128}$/.test(raw.trim())) {
@@ -131,8 +405,10 @@ function aiRateLimitMiddleware(req: any, res: any, next: any) {
     return next();
   }
   if (entry.count >= RATE_LIMIT_MAX_REQUESTS) {
+    res.setHeader("Retry-After", "30");
     return res.status(429).json({
-      error: "Too many requests. Please wait a moment before generating again.",
+      error: "অল্প সময়ে অনেকগুলো অনুরোধ পাঠানো হয়েছে। অনুগ্রহ করে ৩০ সেকেন্ড পর আবার চেষ্টা করুন।",
+      retryAfterSeconds: 30,
     });
   }
   entry.count += 1;
@@ -166,6 +442,7 @@ async function startServer() {
       res.setHeader("Access-Control-Allow-Origin", origin);
       res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
       res.setHeader("Access-Control-Allow-Headers", "Content-Type,x-client-id");
+      res.setHeader("Access-Control-Expose-Headers", "Retry-After,X-TTS-Cache");
     }
     if (req.method === "OPTIONS") {
       return res.sendStatus(204);
@@ -174,7 +451,23 @@ async function startServer() {
   });
 
   app.get("/api/health", (_req, res) => {
-    res.json({ status: "ok" });
+    const now = Date.now();
+    pruneTtsWindow(now);
+    res.json({
+      status: "ok",
+      configured: Boolean(getServerApiKey()),
+      ttsCacheEntries: ttsCache.size,
+      limits: {
+        rpm: TTS_RPM_LIMIT,
+        tpm: TTS_TPM_LIMIT,
+        rpd: TTS_RPD_LIMIT,
+      },
+      usage: {
+        rpmUsed: ttsMinuteWindow.length,
+        tpmUsed: ttsMinuteWindow.reduce((sum, item) => sum + item.tokens, 0),
+        rpdUsed: ttsDailyCount,
+      },
+    });
   });
 
   app.use("/api/tts", aiRateLimitMiddleware);
@@ -187,13 +480,6 @@ async function startServer() {
 
   app.post("/api/tts", async (req, res): Promise<any> => {
     try {
-      const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
-      if (!apiKey) {
-        return res.status(503).json({
-          error: "API key is not configured. Please add your GEMINI_API_KEY in Settings > Secrets.",
-        });
-      }
-
       const text = typeof req.body?.text === "string" ? req.body.text.trim() : "";
       const voiceName = typeof req.body?.voiceName === "string" && req.body.voiceName.trim()
         ? req.body.voiceName.trim().slice(0, 50)
@@ -207,53 +493,121 @@ async function startServer() {
         return res.status(400).json({ error: "Text is too long (maximum 5,000 characters)." });
       }
 
-      const ai = createAiClient(apiKey);
-      const callTts = async (includeSpeechMetadata: boolean) => {
-        const part: Record<string, any> = { text };
-        if (includeSpeechMetadata && style) {
-          part.speechMetadata = { style };
-        }
-        return await ai.models.generateContent({
-          model: "gemini-3.8-flash-lite-tts",
-          contents: [
-            {
-              role: "user",
-              parts: [part],
-            },
-          ],
-          config: {
-            responseModalities: ["AUDIO"],
-            speechConfig: {
-              voiceConfig: {
-                prebuiltVoiceConfig: { voiceName },
-              },
-            },
-          },
+      // 1. Check in-memory LRU cache FIRST (0 RPM / TPM / RPD cost for identical text!)
+      const cacheKey = makeTtsCacheKey(text, voiceName, style);
+      const cached = getCachedTts(cacheKey);
+      if (cached) {
+        res.setHeader("X-TTS-Cache", "HIT");
+        return res.json({
+          audioData: cached.audioData,
+          mimeType: cached.mimeType,
+          cached: true,
         });
-      };
-
-      let response;
-      try {
-        response = await callTts(Boolean(style));
-      } catch (err: any) {
-        const msg = String(err?.message || "");
-        if (style && msg.includes("speechMetadata")) {
-          response = await callTts(false);
-        } else {
-          throw err;
-        }
       }
 
-      const inlineData = response.candidates?.[0]?.content?.parts?.[0]?.inlineData;
-      if (!inlineData?.data) {
-        return res.status(502).json({ error: "No audio data received from the TTS model." });
+      const apiKey = getServerApiKey();
+      if (!apiKey) {
+        return res.status(503).json({
+          error: MISSING_API_KEY_ERROR,
+        });
       }
 
+      // 2. Coalesce simultaneous identical requests into a single Gemini API call
+      let pending = inFlightTts.get(cacheKey);
+      if (!pending) {
+        const tokensNeeded = estimateTtsTokens(text, style);
+        pending = enqueueTtsTask(async () => {
+          // Re-check cache in case an earlier queued task just populated it
+          const insideCached = getCachedTts(cacheKey);
+          if (insideCached) {
+            return { audioData: insideCached.audioData, mimeType: insideCached.mimeType };
+          }
+
+          await acquireTtsQuotaSlot(tokensNeeded);
+
+          const ai = createAiClient(apiKey);
+          const callTts = async (includeSpeechMetadata: boolean) => {
+            const part: Record<string, any> = { text };
+            if (includeSpeechMetadata && style) {
+              part.speechMetadata = { style };
+            }
+            return await ai.models.generateContent({
+              model: "gemini-3.8-flash-lite-tts",
+              contents: [
+                {
+                  role: "user",
+                  parts: [part],
+                },
+              ],
+              config: {
+                responseModalities: ["AUDIO"],
+                speechConfig: {
+                  voiceConfig: {
+                    prebuiltVoiceConfig: { voiceName },
+                  },
+                },
+              },
+            });
+          };
+
+          let response;
+          try {
+            response = await callGeminiWithRetry(() => callTts(Boolean(style)));
+          } catch (err: any) {
+            const msg = String(err?.message || "");
+            if (style && msg.includes("speechMetadata")) {
+              response = await callGeminiWithRetry(() => callTts(false));
+            } else {
+              throw err;
+            }
+          }
+
+          const inlineData = response.candidates?.[0]?.content?.parts?.[0]?.inlineData;
+          if (!inlineData?.data) {
+            throw new TtsQuotaError("No audio data received from the TTS model.", 502, 5);
+          }
+
+          const mimeType = inlineData.mimeType || "audio/wav";
+          setCachedTts(cacheKey, inlineData.data, mimeType);
+          return { audioData: inlineData.data, mimeType };
+        }).finally(() => {
+          inFlightTts.delete(cacheKey);
+        });
+
+        inFlightTts.set(cacheKey, pending);
+      }
+
+      const result = await pending;
+      res.setHeader("X-TTS-Cache", "MISS");
       return res.json({
-        audioData: inlineData.data,
-        mimeType: inlineData.mimeType || "audio/wav",
+        audioData: result.audioData,
+        mimeType: result.mimeType,
+        cached: false,
       });
     } catch (error: any) {
+      if (error instanceof TtsQuotaError) {
+        if (error.status === 429) {
+          res.setHeader("Retry-After", String(error.retryAfterSeconds));
+        }
+        return res.status(error.status).json({
+          error: error.message,
+          retryAfterSeconds: error.retryAfterSeconds,
+        });
+      }
+
+      if (isRateLimitError(error)) {
+        const retrySec = parseRetryAfterSeconds(error);
+        const daily = isDailyQuotaMessage(error);
+        ttsUpstreamCooldownUntil = Date.now() + Math.min(retrySec, 60) * 1000;
+        res.setHeader("Retry-After", String(retrySec));
+        return res.status(429).json({
+          error: daily
+            ? "Gemini TTS-এর দৈনিক কোটা (RPD) শেষ হয়েছে। আগে তৈরি করা টেক্সট ক্যাশ থেকে চলবে; নতুন টেক্সটের জন্য পরে বা পেইড API Key দিয়ে চেষ্টা করুন।"
+            : `Gemini API সাময়িকভাবে ব্যস্ত (429 Rate Limit)। অনুগ্রহ করে ${retrySec} সেকেন্ড পর আবার চেষ্টা করুন।`,
+          retryAfterSeconds: retrySec,
+        });
+      }
+
       console.error("[Backend] /api/tts error:", error);
       return res.status(500).json({ error: error.message || "Failed to generate speech." });
     }
@@ -261,17 +615,25 @@ async function startServer() {
 
   app.post("/api/generate-content", async (req, res): Promise<any> => {
     try {
-      const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
+      const apiKey = getServerApiKey();
       if (!apiKey) {
         return res.status(503).json({
-          error: "API key is not configured. Please add your GEMINI_API_KEY in Settings > Secrets.",
+          error: MISSING_API_KEY_ERROR,
         });
       }
       const ai = createAiClient(apiKey);
       const params = { ...req.body, model: resolveModel(req.body?.model) };
-      const response = await ai.models.generateContent(params);
+      const response = await callGeminiWithRetry(() => ai.models.generateContent(params));
       return res.json(serializeGenerateContentResponse(response));
     } catch (error: any) {
+      if (isRateLimitError(error)) {
+        const retrySec = parseRetryAfterSeconds(error);
+        res.setHeader("Retry-After", String(retrySec));
+        return res.status(429).json({
+          error: `AI সার্ভার এখন ব্যস্ত (429 Rate Limit)। অনুগ্রহ করে ${retrySec} সেকেন্ড পর আবার চেষ্টা করুন।`,
+          retryAfterSeconds: retrySec,
+        });
+      }
       console.error("[Backend] /api/generate-content error:", error);
       return res.status(500).json({ error: error.message || "Failed to generate content." });
     }
@@ -279,10 +641,10 @@ async function startServer() {
 
   app.post("/api/generate-content-stream", async (req, res): Promise<any> => {
     try {
-      const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
+      const apiKey = getServerApiKey();
       if (!apiKey) {
         return res.status(503).json({
-          error: "API key is not configured. Please add your GEMINI_API_KEY in Settings > Secrets.",
+          error: MISSING_API_KEY_ERROR,
         });
       }
       const ai = createAiClient(apiKey);
@@ -306,10 +668,10 @@ async function startServer() {
 
   app.post("/api/chat-message", async (req, res): Promise<any> => {
     try {
-      const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
+      const apiKey = getServerApiKey();
       if (!apiKey) {
         return res.status(503).json({
-          error: "API key is not configured. Please add your GEMINI_API_KEY in Settings > Secrets.",
+          error: MISSING_API_KEY_ERROR,
         });
       }
       const { sessionId, model, config, history, message, msgConfig } = req.body || {};
@@ -334,10 +696,10 @@ async function startServer() {
 
   app.post("/api/chat-stream", async (req, res): Promise<any> => {
     try {
-      const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
+      const apiKey = getServerApiKey();
       if (!apiKey) {
         return res.status(503).json({
-          error: "API key is not configured. Please add your GEMINI_API_KEY in Settings > Secrets.",
+          error: MISSING_API_KEY_ERROR,
         });
       }
       const { sessionId, model, config, history, message, msgConfig } = req.body || {};
@@ -371,10 +733,10 @@ async function startServer() {
 
   app.post("/api/generate-images", async (req, res): Promise<any> => {
     try {
-      const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
+      const apiKey = getServerApiKey();
       if (!apiKey) {
         return res.status(503).json({
-          error: "API key is not configured. Please add your GEMINI_API_KEY in Settings > Secrets.",
+          error: MISSING_API_KEY_ERROR,
         });
       }
       const ai = createAiClient(apiKey);
@@ -388,10 +750,10 @@ async function startServer() {
 
   app.post("/api/generate-videos", async (req, res): Promise<any> => {
     try {
-      const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
+      const apiKey = getServerApiKey();
       if (!apiKey) {
         return res.status(503).json({
-          error: "API key is not configured. Please add your GEMINI_API_KEY in Settings > Secrets.",
+          error: MISSING_API_KEY_ERROR,
         });
       }
       const ai = createAiClient(apiKey);
@@ -419,10 +781,10 @@ async function startServer() {
 
   app.post("/api/videos-operation", async (req, res): Promise<any> => {
     try {
-      const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
+      const apiKey = getServerApiKey();
       if (!apiKey) {
         return res.status(503).json({
-          error: "API key is not configured. Please add your GEMINI_API_KEY in Settings > Secrets.",
+          error: MISSING_API_KEY_ERROR,
         });
       }
       const ai = createAiClient(apiKey);

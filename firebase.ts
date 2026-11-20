@@ -93,5 +93,19 @@ export function handleFirestoreError(
     path,
   };
   console.error('Firestore Error: ', JSON.stringify(errInfo));
+  if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+    try {
+      window.dispatchEvent(
+        new CustomEvent('srabon:app-issue', {
+          detail: {
+            source: `Firestore:${operationType}`,
+            severity: 'error',
+            message: errInfo.error || 'Firestore operation failed',
+            details: `Path: ${path || 'unknown'} | User: ${errInfo.authInfo.email || errInfo.authInfo.userId || 'anonymous'}`,
+          },
+        })
+      );
+    } catch {}
+  }
   throw new Error(JSON.stringify(errInfo));
 }

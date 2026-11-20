@@ -4,10 +4,28 @@
 */
 
 import React from 'react';
-import { FilterState } from '../types';
-import { Search, Sparkles, ChevronDown, Mic, LayoutGrid, GalleryHorizontalEnd, Sun, Moon, AudioLines, Heart, LogOut, Crown, Shield, Gift, TrendingUp } from 'lucide-react';
+import { AppViewMode, FilterState, UserPlan } from '../types';
+import {
+  Search,
+  Sparkles,
+  ChevronDown,
+  Mic,
+  LayoutGrid,
+  GalleryHorizontalEnd,
+  Sun,
+  Moon,
+  AudioLines,
+  Heart,
+  LogOut,
+  Crown,
+  Shield,
+  Gift,
+  TrendingUp,
+  Home,
+  Scissors,
+  Bell,
+} from 'lucide-react';
 import type { User } from 'firebase/auth';
-import type { UserPlan } from '../types';
 
 interface FilterBarProps {
   filters: FilterState;
@@ -15,8 +33,8 @@ interface FilterBarProps {
   uniqueGenders: string[];
   uniquePitches: string[];
   onOpenAiCasting: () => void;
-  viewMode: 'studio' | 'ideas' | 'carousel' | 'grid' | 'favorites';
-  onViewModeChange: (mode: 'studio' | 'ideas' | 'carousel' | 'grid' | 'favorites') => void;
+  viewMode: AppViewMode;
+  onViewModeChange: (mode: AppViewMode) => void;
   favoritesCount: number;
   isDarkMode: boolean;
   toggleTheme: () => void;
@@ -29,6 +47,8 @@ interface FilterBarProps {
   isAdmin?: boolean;
   onOpenProModal?: (tab?: 'refer' | 'pro') => void;
   onOpenAdminPanel?: () => void;
+  unreadIssuesCount?: number;
+  onOpenNotifications?: () => void;
 }
 
 const FilterBar: React.FC<FilterBarProps> = ({ 
@@ -51,6 +71,8 @@ const FilterBar: React.FC<FilterBarProps> = ({
   isAdmin = false,
   onOpenProModal,
   onOpenAdminPanel,
+  unreadIssuesCount = 0,
+  onOpenNotifications,
 }) => {
   
   const handleGenderChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -72,14 +94,19 @@ const FilterBar: React.FC<FilterBarProps> = ({
                 
                 {/* Left: Brand + AI Casting Button */}
                 <div className="flex items-center gap-2 sm:gap-4 shrink-0">
-                    <div className="flex items-center gap-2 group select-none">
+                    <button
+                        type="button"
+                        onClick={() => onViewModeChange('home')}
+                        className="flex items-center gap-2 group select-none text-left"
+                        title="হোম পেজ"
+                    >
                         <div className="w-9 h-9 bg-zinc-900 dark:bg-zinc-100 rounded-xl flex items-center justify-center shadow-lg shadow-zinc-900/10 shrink-0">
                             <Mic size={18} className="text-white dark:text-zinc-900" />
                         </div>
                         <h1 className="hidden md:block text-lg font-bold tracking-tight text-zinc-900 dark:text-white font-display whitespace-nowrap">
                             Srabon Go
                         </h1>
-                    </div>
+                    </button>
 
                     <button 
                         onClick={onOpenAiCasting}
@@ -146,6 +173,17 @@ const FilterBar: React.FC<FilterBarProps> = ({
                         {/* View Toggle */}
                         <div className="flex bg-zinc-100 dark:bg-zinc-800 p-1 rounded-lg border border-zinc-200 dark:border-zinc-700">
                             <button
+                                type="button"
+                                onClick={() => onViewModeChange('home')}
+                                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all whitespace-nowrap shrink-0 ${viewMode === 'home' ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white shadow-sm' : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200'}`}
+                                title="Home Page"
+                                aria-label="Home Page"
+                            >
+                                <Home size={14} />
+                                <span className="hidden sm:inline">Home</span>
+                            </button>
+                            <button
+                                type="button"
                                 onClick={() => onViewModeChange('studio')}
                                 className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all whitespace-nowrap shrink-0 ${viewMode === 'studio' ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white shadow-sm' : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200'}`}
                                 title="Voice Studio (Custom TTS)"
@@ -154,6 +192,7 @@ const FilterBar: React.FC<FilterBarProps> = ({
                                 <span className="hidden sm:inline">Studio</span>
                             </button>
                             <button
+                                type="button"
                                 onClick={() => onViewModeChange('ideas')}
                                 className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all whitespace-nowrap shrink-0 ${viewMode === 'ideas' ? 'bg-white dark:bg-zinc-700 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-zinc-500 dark:text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400'}`}
                                 title="AI Trending Audio Ideas"
@@ -161,6 +200,16 @@ const FilterBar: React.FC<FilterBarProps> = ({
                             >
                                 <TrendingUp size={14} />
                                 <span className="hidden sm:inline">Ideas</span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => onViewModeChange('salon')}
+                                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all whitespace-nowrap shrink-0 ${viewMode === 'salon' ? 'bg-white dark:bg-zinc-700 text-amber-600 dark:text-amber-400 shadow-sm' : 'text-zinc-500 dark:text-zinc-400 hover:text-amber-600 dark:hover:text-amber-400'}`}
+                                title="Jagannath gents parlour and salon Booking"
+                                aria-label="Jagannath Salon Booking"
+                            >
+                                <Scissors size={14} />
+                                <span className="hidden sm:inline">Salon</span>
                             </button>
                             <button
                                 onClick={() => onViewModeChange('carousel')}
@@ -205,6 +254,26 @@ const FilterBar: React.FC<FilterBarProps> = ({
                             {bonusCredits > 0 && (
                               <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-indigo-200/80 dark:bg-indigo-900 text-indigo-800 dark:text-indigo-200">
                                 {bonusCredits} Cr
+                              </span>
+                            )}
+                          </button>
+                        )}
+                        {isAdmin && onOpenNotifications && (
+                          <button
+                            type="button"
+                            onClick={onOpenNotifications}
+                            className={`relative flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-colors shrink-0 ${
+                              unreadIssuesCount > 0
+                                ? 'bg-rose-50 dark:bg-rose-950/50 border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-900/60'
+                                : 'bg-zinc-100 dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white'
+                            }`}
+                            title="Admin Issue Notification Box"
+                            aria-label={`Admin Issue Notification Box (${unreadIssuesCount} unread)`}
+                          >
+                            <Bell size={14} />
+                            {unreadIssuesCount > 0 && (
+                              <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-rose-600 text-white tabular-nums">
+                                {unreadIssuesCount > 99 ? '99+' : unreadIssuesCount}
                               </span>
                             )}
                           </button>
@@ -286,7 +355,7 @@ const FilterBar: React.FC<FilterBarProps> = ({
         </div>
         
         {/* Mobile Filters Sub-bar */}
-        {viewMode !== 'studio' && viewMode !== 'ideas' && (
+        {viewMode !== 'home' && viewMode !== 'studio' && viewMode !== 'ideas' && viewMode !== 'salon' && (
           <div className="xl:hidden border-t border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50">
               <div className="px-4 py-2 flex items-center gap-2 overflow-x-auto scrollbar-hide">
                    <div className="relative sm:hidden flex-1 min-w-[120px]">

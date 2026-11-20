@@ -18,6 +18,7 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { signInWithGoogle } from '../firebase';
+import { reportAppIssue } from '../utils/appIssues';
 import { VOICE_DATA } from '../constants';
 import AudioVisualizer from './AudioVisualizer';
 import AdBanner from './AdBanner';
@@ -106,11 +107,21 @@ const GoogleLoginGate: React.FC<GoogleLoginGateProps> = ({ isDarkMode, toggleThe
         setError('ব্রাউজারে পপআপ ব্লক করা আছে। অনুগ্রহ করে পপআপ অনুমতি দিন। (Please allow popups to sign in.)');
       } else if (code === 'auth/unauthorized-domain') {
         const host = typeof window !== 'undefined' ? window.location.hostname : '';
-        setError(
-          `এই ডোমেইন (${host}) Firebase Authentication-এ অনুমোদিত নয়। Firebase Console > Authentication > Settings > Authorized domains-এ "${host}" যোগ করুন।`
-        );
+        reportAppIssue({
+          source: 'GoogleSignIn',
+          severity: 'error',
+          message: `Unauthorized domain for Firebase Auth: ${host}`,
+          details: 'Add this hostname in Firebase Console > Authentication > Settings > Authorized domains.',
+        });
+        setError('লগইন সম্পন্ন করা যায়নি। অনুগ্রহ করে পরে আবার চেষ্টা করুন।');
       } else {
-        setError(err?.message || 'Google sign-in failed. Please try again.');
+        reportAppIssue({
+          source: 'GoogleSignIn',
+          severity: 'error',
+          message: err?.message || 'Google sign-in failed',
+          details: code ? `Firebase Auth code: ${code}` : undefined,
+        });
+        setError('লগইন সম্পন্ন করা যায়নি। অনুগ্রহ করে পরে আবার চেষ্টা করুন।');
       }
     } finally {
       setLoading(false);

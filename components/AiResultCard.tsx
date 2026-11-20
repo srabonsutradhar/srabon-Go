@@ -14,9 +14,10 @@ interface AiResultCardProps {
   voices: Voice[];
   onClose: () => void;
   onBeforeGenerate?: () => Promise<boolean>;
+  isAdmin?: boolean;
 }
 
-const AiResultCard: React.FC<AiResultCardProps> = ({ result, voices, onClose, onBeforeGenerate }) => {
+const AiResultCard: React.FC<AiResultCardProps> = ({ result, voices, onClose, onBeforeGenerate, isAdmin = false }) => {
   const [copiedSection, setCopiedSection] = useState<string | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
 
@@ -137,7 +138,7 @@ const AiResultCard: React.FC<AiResultCardProps> = ({ result, voices, onClose, on
                  </div>
                  
                  <div className="bg-white dark:bg-zinc-800 p-1 rounded-2xl shadow-sm border border-zinc-100 dark:border-zinc-700">
-                    <AiTtsPreview text={result.sampleText} voices={voices} onBeforeGenerate={onBeforeGenerate} />
+                    <AiTtsPreview text={result.sampleText} voices={voices} onBeforeGenerate={onBeforeGenerate} isAdmin={isAdmin} />
                  </div>
             </div>
         </div>

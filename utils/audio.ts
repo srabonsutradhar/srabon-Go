@@ -175,6 +175,13 @@ export async function generateTtsAudio(params: {
 
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
+    if (response.status === 429) {
+      const retryAfter = response.headers.get('Retry-After') || data.retryAfterSeconds;
+      throw new Error(
+        data.error ||
+          `অনেকগুলো অনুরোধ একসাথে পাঠানো হয়েছে (429)। অনুগ্রহ করে ${retryAfter ? `${retryAfter} সেকেন্ড` : 'কিছুক্ষণ'} পর আবার চেষ্টা করুন।`
+      );
+    }
     if ((response.status === 404 || response.status === 405) && !data.error) {
       throw new Error(
         `ব্যাকএন্ড সার্ভার সক্রিয় নেই (Status ${response.status})। GitHub Pages শুধু স্ট্যাটিক ফাইল চালায়—তাই Gemini AI TTS ব্যবহার করতে পূর্ণাঙ্গ সার্ভার (Node.js) বা VITE_API_BASE_URL যুক্ত করুন।`

@@ -29,6 +29,7 @@ import {
   generateTtsAudio,
   checkBackendHealth,
 } from '../utils/audio';
+import { reportAppIssue } from '../utils/appIssues';
 
 interface TtsStudioProps {
   voices: Voice[];
@@ -147,6 +148,14 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
     checkBackendHealth().then((ok) => {
       if (active && isMountedRef.current) {
         setBackendAvailable(ok);
+        if (!ok) {
+          reportAppIssue({
+            source: 'TtsStudio',
+            severity: 'warning',
+            message: 'Backend server is not connected (Static Host fallback active)',
+            details: apiBaseUrl ? `apiBaseUrl: ${apiBaseUrl}` : 'No apiBaseUrl configured',
+          });
+        }
       }
     });
     return () => {
@@ -219,7 +228,9 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
 
   const speakWithDeviceVoice = async (trimmedText: string, runId: number) => {
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
-      setError('এই ব্রাউজারে Device Speech সাপোর্ট করে না। Gemini AI TTS ব্যবহার করতে Node সার্ভার বা VITE_API_BASE_URL সেট করুন।');
+      const msg = 'এই ব্রাউজারে Device Speech সাপোর্ট করে না। Gemini AI TTS ব্যবহার করতে Node সার্ভার বা VITE_API_BASE_URL সেট করুন।';
+      reportAppIssue({ source: 'TtsStudio:DeviceSpeech', severity: 'error', message: msg });
+      if (isAdmin) setError(msg);
       return;
     }
 
@@ -237,9 +248,10 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
     if (hasBengali && !bengaliVoice) {
       setIsPlaying(false);
       setIsUsingDeviceSpeech(false);
-      setError(
-        'আপনার এই ব্রাউজার/ডিভাইসে বাংলা Device Voice ইনস্টল করা নেই এবং স্ট্যাটিক হোস্টে AI ব্যাকএন্ড সংযুক্ত নেই। অডিও শুনতে AI Studio অ্যাপ লিংক ব্যবহার করুন অথবা ইংরেজি টেক্সট লিখে শুনুন।'
-      );
+      const msg =
+        'আপনার এই ব্রাউজার/ডিভাইসে বাংলা Device Voice ইনস্টল করা নেই এবং স্ট্যাটিক হোস্টে AI ব্যাকএন্ড সংযুক্ত নেই।';
+      reportAppIssue({ source: 'TtsStudio:DeviceSpeech', severity: 'error', message: msg });
+      if (isAdmin) setError(msg);
       return;
     }
 
@@ -266,7 +278,9 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
       if (!didStart && Date.now() - queuedAt < 120) {
         setIsPlaying(false);
         setIsUsingDeviceSpeech(false);
-        setError('ডিভাইসের অডিও ইঞ্জিন টেক্সটটি পড়তে পারেনি। ডিভাইস সাউন্ড চেক করুন বা অন্য ব্রাউজার/সার্ভার লিংক ব্যবহার করুন।');
+        const msg = 'ডিভাইসের অডিও ইঞ্জিন টেক্সটটি পড়তে পারেনি। ডিভাইস সাউন্ড চেক করুন বা অন্য ব্রাউজার/সার্ভার লিংক ব্যবহার করুন।';
+        reportAppIssue({ source: 'TtsStudio:DeviceSpeech', severity: 'error', message: msg });
+        if (isAdmin) setError(msg);
         return;
       }
       if (isLoopingRef.current) {
@@ -287,7 +301,14 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
       setIsPlaying(false);
       setIsUsingDeviceSpeech(false);
       if (event?.error !== 'canceled' && event?.error !== 'interrupted') {
-        setError('Device Speech প্লেব্যাক শুরু করা যায়নি।');
+        const msg = 'Device Speech প্লেব্যাক শুরু করা যায়নি।';
+        reportAppIssue({
+          source: 'TtsStudio:DeviceSpeech',
+          severity: 'error',
+          message: msg,
+          details: event?.error ? `SpeechSynthesis error: ${String(event.error)}` : undefined,
+        });
+        if (isAdmin) setError(msg);
       }
     };
 
@@ -361,7 +382,6 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
 
     const trimmed = text.trim();
     if (!trimmed) {
-      setError('Please enter text to speak.');
       return;
     }
 
@@ -372,8 +392,9 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
       try {
         await playBytes(cachedBytes, runId);
       } catch (err: any) {
-        console.error('Playback error:', err);
-        setError(err?.message || 'Playback failed. Please try again.');
+        const msg = err?.message || 'Playback failed. Please try again.';
+        reportAppIssue({ source: 'TtsStudio:Playback', severity: 'error', message: msg });
+        if (isAdmin) setError(msg);
         setIsPlaying(false);
       }
       return;
@@ -409,9 +430,10 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
 
       await playBytes(bytes, runId);
     } catch (err: any) {
-      console.error('TTS Studio Error:', err);
-      if (isMountedRef.current && activeRunIdRef.current === runId) {
-        setError(err?.message || 'Failed to generate speech. Please try again.');
+      const msg = err?.message || 'Failed to generate speech. Please try again.';
+      reportAppIssue({ source: 'TtsStudio', severity: 'error', message: msg });
+      if (isMountedRef.current && activeRunIdRef.current === runId && isAdmin) {
+        setError(msg);
       }
     } finally {
       if (isMountedRef.current) {
@@ -453,9 +475,10 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
           setCachedKey(requestKey);
         }
       } catch (err: any) {
-        console.error('Download TTS Error:', err);
-        if (isMountedRef.current) {
-          setError(err?.message || 'Failed to generate audio for download.');
+        const msg = err?.message || 'Failed to generate audio for download.';
+        reportAppIssue({ source: 'TtsStudio:Download', severity: 'error', message: msg });
+        if (isMountedRef.current && isAdmin) {
+          setError(msg);
         }
         return;
       } finally {
@@ -743,7 +766,7 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
                   </div>
                 )}
 
-                {error && (
+                {isAdmin && error && (
                   <div className="absolute inset-0 bg-white/95 dark:bg-zinc-950/95 p-4 flex items-center justify-center gap-2 text-red-600 dark:text-red-400 text-xs text-center z-20">
                     <AlertCircle size={16} className="shrink-0" />
                     <span>{error}</span>

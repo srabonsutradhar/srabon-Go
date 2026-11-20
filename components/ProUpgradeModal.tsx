@@ -30,6 +30,7 @@ import {
   where,
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
+import { reportAppIssue } from '../utils/appIssues';
 import {
   BillingConfig,
   PaymentMethod,
@@ -215,11 +216,15 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
           text: 'এই রেফার কোডটি সঠিক নয় বা খুঁজে পাওয়া যায়নি।',
         });
       }
-    } catch {
-      setRefMessage({
-        type: 'error',
-        text: 'রেফার কোড যাচাই করতে সমস্যা হয়েছে। আবার চেষ্টা করুন।',
-      });
+    } catch (err: any) {
+      const msg = err?.message || 'রেফার কোড যাচাই করতে সমস্যা হয়েছে।';
+      reportAppIssue({ source: 'ProUpgrade:Referral', severity: 'error', message: msg });
+      if (isAdmin) {
+        setRefMessage({
+          type: 'error',
+          text: msg,
+        });
+      }
     } finally {
       setClaimingRef(false);
     }
@@ -274,7 +279,9 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
       setNote('');
       setSubmitSuccess(true);
     } catch (err: any) {
-      setSubmitError(err?.message || 'Request submission failed.');
+      const msg = err?.message || 'Request submission failed.';
+      reportAppIssue({ source: 'ProUpgrade:Payment', severity: 'error', message: msg });
+      if (isAdmin) setSubmitError(msg);
       handleFirestoreError(err, OperationType.CREATE, reqPath);
     } finally {
       setSubmitting(false);

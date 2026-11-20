@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { Voice } from '../types';
 import { checkBackendHealth } from '../utils/audio';
+import { reportAppIssue } from '../utils/appIssues';
 import type { LegalTab } from './SiteLegalModal';
 
 export interface AudioIdeaItem {
@@ -33,6 +34,7 @@ interface TrendingIdeasProps {
   onUseIdeaInStudio: (idea: { text: string; style: string; voiceName: string }) => void;
   onBeforeGenerate?: () => Promise<boolean>;
   onOpenLegal?: (tab: LegalTab) => void;
+  isAdmin?: boolean;
 }
 
 const CATEGORIES = [
@@ -109,6 +111,7 @@ const TrendingIdeas: React.FC<TrendingIdeasProps> = ({
   onUseIdeaInStudio,
   onBeforeGenerate,
   onOpenLegal,
+  isAdmin = false,
 }) => {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedLanguage, setSelectedLanguage] = useState<'bn' | 'en' | 'mix'>('bn');
@@ -135,9 +138,10 @@ const TrendingIdeas: React.FC<TrendingIdeasProps> = ({
     try {
       const hasBackend = await checkBackendHealth();
       if (!hasBackend) {
-        setError(
-          'লাইভ AI ট্রেন্ডিং আইডিয়া তৈরির জন্য ব্যাকএন্ড সার্ভার প্রয়োজন (Static Host)। নিচের তৈরি করা ট্রেন্ডিং আইডিয়াগুলো সরাসরি স্টুডিওতে ব্যবহার করতে পারেন।'
-        );
+        const msg =
+          'লাইভ AI ট্রেন্ডিং আইডিয়া তৈরির জন্য ব্যাকএন্ড সার্ভার প্রয়োজন (Static Host)।';
+        reportAppIssue({ source: 'TrendingIdeas', severity: 'warning', message: msg });
+        if (isAdmin) setError(msg);
         return;
       }
 
@@ -248,15 +252,18 @@ const TrendingIdeas: React.FC<TrendingIdeasProps> = ({
         : [];
 
       if (nextIdeas.length === 0) {
-        setError('AI থেকে নতুন আইডিয়া পাওয়া যায়নি। অনুগ্রহ করে আবার চেষ্টা করুন।');
+        const msg = 'AI থেকে নতুন আইডিয়া পাওয়া যায়নি।';
+        reportAppIssue({ source: 'TrendingIdeas', severity: 'error', message: msg });
+        if (isAdmin) setError(msg);
         return;
       }
 
       setIdeas(nextIdeas);
       setHasGeneratedLive(true);
     } catch (err: any) {
-      console.error('Trending Ideas AI Error:', err);
-      setError(err?.message || 'ট্রেন্ডিং আইডিয়া তৈরি করতে সমস্যা হয়েছে। আবার চেষ্টা করুন।');
+      const msg = err?.message || 'ট্রেন্ডিং আইডিয়া তৈরি করতে সমস্যা হয়েছে।';
+      reportAppIssue({ source: 'TrendingIdeas', severity: 'error', message: msg });
+      if (isAdmin) setError(msg);
     } finally {
       setLoading(false);
     }
@@ -370,7 +377,7 @@ const TrendingIdeas: React.FC<TrendingIdeasProps> = ({
               </div>
             </div>
 
-            {error && (
+            {isAdmin && error && (
               <div className="p-3.5 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 text-xs text-red-700 dark:text-red-300 flex items-start gap-2">
                 <AlertCircle size={15} className="shrink-0 mt-0.5" />
                 <span>{error}</span>

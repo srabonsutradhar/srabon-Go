@@ -8,15 +8,23 @@ import { GoogleGenAI, Type } from "../genaiProxy";
 import { Sparkles, Loader2, X, ArrowRight, Wand2 } from 'lucide-react';
 import { Voice, AiRecommendation } from '../types';
 import { checkBackendHealth } from '../utils/audio';
+import { reportAppIssue } from '../utils/appIssues';
 
 interface VoiceFinderProps {
   voices: Voice[];
   onRecommendation: (rec: AiRecommendation | null) => void;
   onClose: () => void;
   onBeforeGenerate?: () => Promise<boolean>;
+  isAdmin?: boolean;
 }
 
-const VoiceFinder: React.FC<VoiceFinderProps> = ({ voices, onRecommendation, onClose, onBeforeGenerate }) => {
+const VoiceFinder: React.FC<VoiceFinderProps> = ({
+  voices,
+  onRecommendation,
+  onClose,
+  onBeforeGenerate,
+  isAdmin = false,
+}) => {
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -75,9 +83,10 @@ const VoiceFinder: React.FC<VoiceFinderProps> = ({ voices, onRecommendation, onC
     try {
       const hasBackend = await checkBackendHealth();
       if (!hasBackend) {
-        setError(
-          'AI Casting সার্ভার সক্রিয় নেই (Static Host)। এটি ব্যবহার করতে Node সার্ভার বা VITE_API_BASE_URL যুক্ত করুন।'
-        );
+        const msg =
+          'AI Casting সার্ভার সক্রিয় নেই (Static Host)। এটি ব্যবহার করতে Node সার্ভার বা VITE_API_BASE_URL যুক্ত করুন।';
+        reportAppIssue({ source: 'VoiceFinder', severity: 'warning', message: msg });
+        if (isAdmin) setError(msg);
         setLoading(false);
         return;
       }
@@ -178,12 +187,15 @@ const VoiceFinder: React.FC<VoiceFinderProps> = ({ voices, onRecommendation, onC
           sampleText: typeof result.sampleText === 'string' && result.sampleText.trim() ? result.sampleText : query.trim(),
         });
       } else {
-        setError("No matching voices found. Please try refining your description.");
+        const msg = 'No matching voices found for AI Casting query.';
+        reportAppIssue({ source: 'VoiceFinder', severity: 'warning', message: msg, details: query.slice(0, 120) });
+        if (isAdmin) setError(msg);
       }
 
     } catch (err: any) {
-      console.error("AI Error:", err);
-      setError(err?.message || "Analysis failed. Please try again.");
+      const msg = err?.message || 'AI Casting analysis failed.';
+      reportAppIssue({ source: 'VoiceFinder', severity: 'error', message: msg });
+      if (isAdmin) setError(msg);
     } finally {
       setLoading(false);
     }
@@ -257,7 +269,7 @@ const VoiceFinder: React.FC<VoiceFinderProps> = ({ voices, onRecommendation, onC
             
             <div className="flex justify-between items-center mt-6">
               <span className="text-zinc-400 dark:text-zinc-500 text-sm font-medium flex items-center gap-2">
-                  {error ? (
+                  {isAdmin && error ? (
                     <span className="text-red-500 dark:text-red-400 flex items-center gap-1"><X size={14}/> {error}</span>
                   ) : (
                     <>Powered by <span className="text-indigo-500 dark:text-indigo-400">Gemini 3.1 Flash Lite</span></>

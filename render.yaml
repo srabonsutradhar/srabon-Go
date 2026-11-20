@@ -10,3 +10,9 @@ services:
         value: production
       - key: GEMINI_API_KEY
         sync: false
+      - key: TTS_RPM_LIMIT
+        value: "10"
+      - key: TTS_TPM_LIMIT
+        value: "10000"
+      - key: TTS_RPD_LIMIT
+        value: "0"

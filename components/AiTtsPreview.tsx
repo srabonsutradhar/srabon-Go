@@ -8,14 +8,16 @@ import { Play, Square, Loader2, Volume2, AlertCircle, ChevronDown, Download } fr
 import { Voice } from '../types';
 import AudioVisualizer from './AudioVisualizer';
 import { decodeBase64, decodeAudioToBuffer, createWavBlob, generateTtsAudio, checkBackendHealth } from '../utils/audio';
+import { reportAppIssue } from '../utils/appIssues';
 
 interface AiTtsPreviewProps {
   text: string;
   voices: Voice[];
   onBeforeGenerate?: () => Promise<boolean>;
+  isAdmin?: boolean;
 }
 
-const AiTtsPreview: React.FC<AiTtsPreviewProps> = ({ text, voices, onBeforeGenerate }) => {
+const AiTtsPreview: React.FC<AiTtsPreviewProps> = ({ text, voices, onBeforeGenerate, isAdmin = false }) => {
   const [selectedVoiceName, setSelectedVoiceName] = useState(voices[0]?.name || '');
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -112,9 +114,10 @@ const AiTtsPreview: React.FC<AiTtsPreviewProps> = ({ text, voices, onBeforeGener
       source.start();
       setIsPlaying(true);
     } catch (err: any) {
-      console.error("TTS Error:", err);
-      if (isMountedRef.current) {
-        setError(err?.message || "Failed to generate speech. Please try again.");
+      const msg = err?.message || 'Failed to generate speech. Please try again.';
+      reportAppIssue({ source: 'AiTtsPreview', severity: 'error', message: msg });
+      if (isMountedRef.current && isAdmin) {
+        setError(msg);
       }
     } finally {
       if (isMountedRef.current) setIsLoading(false);
@@ -218,8 +221,8 @@ const AiTtsPreview: React.FC<AiTtsPreviewProps> = ({ text, voices, onBeforeGener
           )}
         </div>
 
-        {/* Error Message */}
-        {error && (
+        {/* Error Message (Admin Only) */}
+        {isAdmin && error && (
           <div className="absolute inset-0 bg-zinc-50/95 dark:bg-zinc-900/95 px-4 flex items-center justify-center text-red-500 dark:text-red-400 gap-2 text-xs text-center z-20">
             <AlertCircle size={16} className="shrink-0" />
             <span>{error}</span>
