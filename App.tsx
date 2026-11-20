@@ -22,6 +22,7 @@ import { onAuthStateChanged, User } from 'firebase/auth';
 import { doc, onSnapshot, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db, signOutUser, handleFirestoreError, OperationType } from './firebase';
 import { initGoogleAdsTag } from './utils/googleAds';
+import { setDynamicApiBaseUrl } from './utils/audio';
 import {
   buildReferralCode,
   capturePendingReferralFromUrl,
@@ -40,6 +41,7 @@ const DEFAULT_BILLING_CONFIG: BillingConfig = {
   instructions:
     'উপরের নম্বরে ফি পাঠিয়ে নিচের ফর্মে আপনার নম্বর ও Transaction ID (TrxID) জমা দিন। অ্যাডমিন যাচাই করেই Pro চালু করে দেবেন।',
   freeDailyLimit: 5,
+  apiBaseUrl: '',
 };
 
 function getTodayUtcDate(): string {
@@ -299,13 +301,18 @@ const App: React.FC = () => {
       (snap) => {
         if (snap.exists()) {
           const d = snap.data();
+          const nextApiBaseUrl = typeof d?.apiBaseUrl === 'string' ? d.apiBaseUrl.trim() : '';
+          setDynamicApiBaseUrl(nextApiBaseUrl);
           setBillingConfig({
             feeAmount: typeof d?.feeAmount === 'string' && d.feeAmount ? d.feeAmount : DEFAULT_BILLING_CONFIG.feeAmount,
             paymentMethod: typeof d?.paymentMethod === 'string' && d.paymentMethod ? d.paymentMethod : DEFAULT_BILLING_CONFIG.paymentMethod,
             paymentAccount: typeof d?.paymentAccount === 'string' ? d.paymentAccount : '',
             instructions: typeof d?.instructions === 'string' && d.instructions ? d.instructions : DEFAULT_BILLING_CONFIG.instructions,
             freeDailyLimit: typeof d?.freeDailyLimit === 'number' && d.freeDailyLimit >= 1 ? d.freeDailyLimit : DEFAULT_BILLING_CONFIG.freeDailyLimit,
+            apiBaseUrl: nextApiBaseUrl,
           });
+        } else {
+          setDynamicApiBaseUrl('');
         }
       },
       (error) => {
@@ -490,6 +497,7 @@ const App: React.FC = () => {
     setShowAdminPanel(false);
     setLegalTab(null);
     setStudioDraft(null);
+    setDynamicApiBaseUrl('');
     await signOutUser();
   };
 
@@ -626,6 +634,8 @@ const App: React.FC = () => {
                   onOpenLegal={setLegalTab}
                   incomingDraft={studioDraft}
                   onOpenIdeas={() => handleViewModeChange('ideas')}
+                  isAdmin={isAdmin}
+                  apiBaseUrl={billingConfig.apiBaseUrl || ''}
                 />
               ) : viewMode === 'ideas' ? (
                 <TrendingIdeas

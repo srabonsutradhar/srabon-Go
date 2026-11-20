@@ -45,6 +45,7 @@ export interface BillingConfig {
   paymentAccount: string;
   instructions: string;
   freeDailyLimit: number;
+  apiBaseUrl?: string;
 }
 
 export interface ProUpgradeRequest {

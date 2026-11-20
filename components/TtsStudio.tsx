@@ -38,6 +38,8 @@ interface TtsStudioProps {
   onOpenLegal?: (tab: LegalTab) => void;
   incomingDraft?: { text: string; style: string; revision: number } | null;
   onOpenIdeas?: () => void;
+  isAdmin?: boolean;
+  apiBaseUrl?: string;
 }
 
 const DEFAULT_SCRIPT =
@@ -101,6 +103,8 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
   onOpenLegal,
   incomingDraft,
   onOpenIdeas,
+  isAdmin = false,
+  apiBaseUrl = '',
 }) => {
   const [text, setText] = useState(DEFAULT_SCRIPT);
   const [style, setStyle] = useState(STYLE_PRESETS[0].value);
@@ -117,6 +121,8 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
   const audioContextRef = useRef<AudioContext | null>(null);
   const sourceNodeRef = useRef<AudioBufferSourceNode | null>(null);
   const loopTimerRef = useRef<number | null>(null);
+  const speakDelayTimerRef = useRef<number | null>(null);
+  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
   const isMountedRef = useRef(true);
   const isLoopingRef = useRef(isLooping);
   const activeRunIdRef = useRef(0);
@@ -127,9 +133,6 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
 
   useEffect(() => {
     isMountedRef.current = true;
-    checkBackendHealth().then((ok) => {
-      if (isMountedRef.current) setBackendAvailable(ok);
-    });
     return () => {
       isMountedRef.current = false;
       stopPlayback();
@@ -138,6 +141,18 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
       }
     };
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    checkBackendHealth().then((ok) => {
+      if (active && isMountedRef.current) {
+        setBackendAvailable(ok);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [apiBaseUrl]);
 
   useEffect(() => {
     if (!incomingDraft) return;
@@ -157,11 +172,16 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
       window.clearTimeout(loopTimerRef.current);
       loopTimerRef.current = null;
     }
+    if (speakDelayTimerRef.current !== null) {
+      window.clearTimeout(speakDelayTimerRef.current);
+      speakDelayTimerRef.current = null;
+    }
   };
 
   const stopPlayback = () => {
     activeRunIdRef.current += 1;
     clearLoopTimer();
+    utteranceRef.current = null;
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       try {
         window.speechSynthesis.cancel();
@@ -180,28 +200,75 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
     }
   };
 
-  const speakWithDeviceVoice = (trimmedText: string, runId: number) => {
+  const getSpeechVoices = async (): Promise<SpeechSynthesisVoice[]> => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return [];
+    const current = window.speechSynthesis.getVoices();
+    if (current.length > 0) return current;
+    return await new Promise<SpeechSynthesisVoice[]>((resolve) => {
+      let settled = false;
+      const done = () => {
+        if (settled) return;
+        settled = true;
+        window.speechSynthesis.removeEventListener?.('voiceschanged', done);
+        resolve(window.speechSynthesis.getVoices());
+      };
+      window.speechSynthesis.addEventListener?.('voiceschanged', done);
+      window.setTimeout(done, 500);
+    });
+  };
+
+  const speakWithDeviceVoice = async (trimmedText: string, runId: number) => {
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
       setError('এই ব্রাউজারে Device Speech সাপোর্ট করে না। Gemini AI TTS ব্যবহার করতে Node সার্ভার বা VITE_API_BASE_URL সেট করুন।');
       return;
     }
 
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(trimmedText);
-    const hasBengali = /[\u0980-\u09FF]/.test(trimmedText);
-    const targetLang = hasBengali ? 'bn-BD' : 'en-US';
-    utterance.lang = targetLang;
+    const availableVoices = await getSpeechVoices();
+    if (!isMountedRef.current || activeRunIdRef.current !== runId) return;
 
-    const availableVoices = window.speechSynthesis.getVoices();
-    const preferredVoice =
-      availableVoices.find((v) => v.lang.toLowerCase().startsWith(hasBengali ? 'bn' : 'en')) ||
+    const hasBengali = /[\u0980-\u09FF]/.test(trimmedText);
+    const bengaliVoice =
+      availableVoices.find((v) => v.lang.toLowerCase().startsWith('bn')) || null;
+    const englishVoice =
+      availableVoices.find((v) => v.lang.toLowerCase().startsWith('en')) ||
+      availableVoices[0] ||
       null;
+
+    if (hasBengali && !bengaliVoice) {
+      setIsPlaying(false);
+      setIsUsingDeviceSpeech(false);
+      setError(
+        'আপনার এই ব্রাউজার/ডিভাইসে বাংলা Device Voice ইনস্টল করা নেই এবং স্ট্যাটিক হোস্টে AI ব্যাকএন্ড সংযুক্ত নেই। অডিও শুনতে AI Studio অ্যাপ লিংক ব্যবহার করুন অথবা ইংরেজি টেক্সট লিখে শুনুন।'
+      );
+      return;
+    }
+
+    const preferredVoice = hasBengali ? bengaliVoice : englishVoice;
+    const utterance = new SpeechSynthesisUtterance(trimmedText);
+    utterance.lang = preferredVoice?.lang || (hasBengali ? 'bn-BD' : 'en-US');
     if (preferredVoice) {
       utterance.voice = preferredVoice;
     }
+    utterance.volume = 1;
+    utterance.rate = 1;
+    utterance.pitch = 1;
+
+    let didStart = false;
+    const queuedAt = Date.now();
+
+    utterance.onstart = () => {
+      didStart = true;
+    };
 
     utterance.onend = () => {
       if (!isMountedRef.current || activeRunIdRef.current !== runId) return;
+      utteranceRef.current = null;
+      if (!didStart && Date.now() - queuedAt < 120) {
+        setIsPlaying(false);
+        setIsUsingDeviceSpeech(false);
+        setError('ডিভাইসের অডিও ইঞ্জিন টেক্সটটি পড়তে পারেনি। ডিভাইস সাউন্ড চেক করুন বা অন্য ব্রাউজার/সার্ভার লিংক ব্যবহার করুন।');
+        return;
+      }
       if (isLoopingRef.current) {
         loopTimerRef.current = window.setTimeout(() => {
           if (isMountedRef.current && activeRunIdRef.current === runId && isLoopingRef.current) {
@@ -214,16 +281,33 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
       }
     };
 
-    utterance.onerror = () => {
+    utterance.onerror = (event: any) => {
       if (!isMountedRef.current || activeRunIdRef.current !== runId) return;
+      utteranceRef.current = null;
       setIsPlaying(false);
       setIsUsingDeviceSpeech(false);
-      setError('Device Speech প্লেব্যাক শুরু করা যায়নি।');
+      if (event?.error !== 'canceled' && event?.error !== 'interrupted') {
+        setError('Device Speech প্লেব্যাক শুরু করা যায়নি।');
+      }
     };
 
-    setIsUsingDeviceSpeech(true);
-    setIsPlaying(true);
-    window.speechSynthesis.speak(utterance);
+    const startSpeaking = () => {
+      if (!isMountedRef.current || activeRunIdRef.current !== runId) return;
+      utteranceRef.current = utterance;
+      setIsUsingDeviceSpeech(true);
+      setIsPlaying(true);
+      window.speechSynthesis.speak(utterance);
+      if (window.speechSynthesis.paused) {
+        window.speechSynthesis.resume();
+      }
+    };
+
+    if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
+      window.speechSynthesis.cancel();
+      speakDelayTimerRef.current = window.setTimeout(startSpeaking, 60);
+    } else {
+      startSpeaking();
+    }
   };
 
   const playBytes = async (bytes: Uint8Array, runId: number) => {
@@ -302,7 +386,7 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
 
       if (!hasBackend) {
         if (isMountedRef.current) setIsLoading(false);
-        speakWithDeviceVoice(trimmed, runId);
+        await speakWithDeviceVoice(trimmed, runId);
         return;
       }
 
@@ -725,9 +809,9 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
                   </button>
                 </div>
 
-                {backendAvailable === false && (
+                {isAdmin && backendAvailable === false && (
                   <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/70 text-xs text-amber-800 dark:text-amber-200 leading-relaxed">
-                    <strong>Static Host Mode:</strong> এই সাইটটি এখন ব্যাকএন্ড সার্ভার ছাড়া চলছে (যেমন GitHub Pages)। তাই আপনার ব্রাউজারের <strong>Device Voice</strong> ব্যবহার করে প্লে হবে। স্টুডিও Gemini ভয়েস ও WAV ডাউনলোডের জন্য Node সার্ভার বা <code className="font-mono">VITE_API_BASE_URL</code> যুক্ত করুন।
+                    <strong>Admin Notice (Static Host):</strong> এই ডোমেইনে এখন Node ব্যাকএন্ড সংযুক্ত নেই। GitHub Pages-কেও ডায়নামিক করতে <strong>Admin Panel → Fee &amp; Quota Settings</strong>-এ গিয়ে আপনার Render/Node সার্ভারের URL সেভ করুন—সব ইউজারের জন্য সাথে সাথে Gemini বাংলা ভয়েস চালু হয়ে যাবে।
                   </div>
                 )}
 

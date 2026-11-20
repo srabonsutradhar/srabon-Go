@@ -3,6 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { resolveApiUrl } from "./utils/audio";
+
 export const Type = {
   TYPE_UNSPECIFIED: "TYPE_UNSPECIFIED",
   STRING: "STRING",
@@ -90,11 +92,6 @@ function __getAppletClientId(): string {
     }
   } catch {}
   return "anonclient0001";
-}
-
-function resolveApiUrl(path: string): string {
-  const base = ((import.meta as any).env?.VITE_API_BASE_URL || "").trim().replace(/\/+$/, "");
-  return base ? `${base}${path}` : path;
 }
 
 async function postJson(url: string, body: any) {

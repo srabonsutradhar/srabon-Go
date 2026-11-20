@@ -243,6 +243,12 @@
           "type": "integer",
           "description": "Daily free generation limit per user (1-100)."
         },
+        "apiBaseUrl": {
+          "type": "string",
+          "description": "Optional dynamic backend API base URL (e.g. Render/Node server URL) for static hosts like GitHub Pages.",
+          "maxLength": 200,
+          "pattern": "^(|https?://[a-zA-Z0-9._:/-]+)$"
+        },
         "updatedAt": {
           "type": "string",
           "format": "date-time",

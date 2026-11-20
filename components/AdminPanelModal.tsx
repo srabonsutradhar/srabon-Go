@@ -14,7 +14,9 @@ import {
   Crown,
   Loader2,
   Save,
+  Globe,
 } from 'lucide-react';
+import { normalizeApiBaseUrl, setDynamicApiBaseUrl, testApiHealthAtUrl } from '../utils/audio';
 import {
   collection,
   doc,
@@ -57,6 +59,9 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   const [paymentAccount, setPaymentAccount] = useState(billingConfig.paymentAccount);
   const [instructions, setInstructions] = useState(billingConfig.instructions);
   const [freeDailyLimit, setFreeDailyLimit] = useState(String(billingConfig.freeDailyLimit));
+  const [apiBaseUrl, setApiBaseUrl] = useState(billingConfig.apiBaseUrl || '');
+  const [testingApi, setTestingApi] = useState(false);
+  const [apiTestResult, setApiTestResult] = useState<'ok' | 'fail' | null>(null);
   const [savingConfig, setSavingConfig] = useState(false);
   const [savedBanner, setSavedBanner] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -67,6 +72,7 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
     setPaymentAccount(billingConfig.paymentAccount);
     setInstructions(billingConfig.instructions);
     setFreeDailyLimit(String(billingConfig.freeDailyLimit));
+    setApiBaseUrl(billingConfig.apiBaseUrl || '');
   }, [billingConfig]);
 
   useEffect(() => {
@@ -237,9 +243,36 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
     }
   };
 
+  const handleTestApiConnection = async () => {
+    if (testingApi) return;
+    setActionError(null);
+    setApiTestResult(null);
+    const cleaned = normalizeApiBaseUrl(apiBaseUrl);
+    if (apiBaseUrl.trim() && !cleaned) {
+      setActionError('সঠিক https:// বা http:// ব্যাকএন্ড সার্ভার URL দিন (যেমন https://srabon-go-api.onrender.com)।');
+      return;
+    }
+    setTestingApi(true);
+    try {
+      const ok = await testApiHealthAtUrl(cleaned);
+      setApiTestResult(ok ? 'ok' : 'fail');
+    } finally {
+      setTestingApi(false);
+    }
+  };
+
   const handleSaveConfig = async (e: React.FormEvent) => {
     e.preventDefault();
     if (savingConfig) return;
+    setActionError(null);
+
+    const rawApiUrl = apiBaseUrl.trim().replace(/\/+$/, '');
+    const cleanApiUrl = normalizeApiBaseUrl(rawApiUrl);
+    if (rawApiUrl && !cleanApiUrl) {
+      setActionError('সঠিক https:// বা http:// সার্ভার URL দিন (স্পেস বা query ছাড়া, যেমন https://srabon-go-api.onrender.com)।');
+      return;
+    }
+
     setSavingConfig(true);
     setSavedBanner(false);
 
@@ -250,14 +283,17 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
       paymentAccount: paymentAccount.trim().slice(0, 80),
       instructions: (instructions.trim() || 'Send the Pro unlock fee and submit your TrxID below.').slice(0, 500),
       freeDailyLimit: parsedLimit,
+      apiBaseUrl: cleanApiUrl,
       updatedAt: serverTimestamp(),
     };
 
     try {
       await setDoc(doc(db, 'appConfig', 'proPlan'), payload);
+      setDynamicApiBaseUrl(cleanApiUrl);
       setSavedBanner(true);
       setTimeout(() => setSavedBanner(false), 2500);
-    } catch (error) {
+    } catch (error: any) {
+      setActionError(error?.message || 'সেটিংস সেভ করা যায়নি।');
       handleFirestoreError(error, OperationType.WRITE, 'appConfig/proPlan');
     } finally {
       setSavingConfig(false);
@@ -587,6 +623,47 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                   maxLength={500}
                   className="w-full rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-3 py-2 text-sm text-zinc-900 dark:text-white resize-none"
                 />
+              </div>
+
+              <div className="p-4 rounded-2xl bg-indigo-50/60 dark:bg-indigo-950/25 border border-indigo-200/80 dark:border-indigo-900/60 space-y-2.5">
+                <div className="flex items-center gap-2 text-xs font-semibold text-indigo-700 dark:text-indigo-300">
+                  <Globe size={14} />
+                  <span>Dynamic Backend API URL (GitHub Pages Bridge)</span>
+                </div>
+                <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed">
+                  GitHub Pages স্ট্যাটিক হোস্ট হলেও, এখানে আপনার লাইভ Node/Render সার্ভার URL সেভ করলে সব ইউজারের জন্য সাথে সাথে রিয়েল-টাইম Gemini ভয়েস ও AI ট্রেন্ডিং আইডিয়া ডায়নামিকভাবে চালু হয়ে যাবে (কোড রিবিল্ড ছাড়াই)।
+                </p>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <input
+                    type="url"
+                    value={apiBaseUrl}
+                    onChange={(e) => {
+                      setApiBaseUrl(e.target.value);
+                      setApiTestResult(null);
+                    }}
+                    maxLength={200}
+                    placeholder="https://srabon-go-api.onrender.com"
+                    className="flex-1 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 px-3 py-2 text-sm text-zinc-900 dark:text-white font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleTestApiConnection}
+                    disabled={testingApi}
+                    className="px-4 py-2 rounded-xl bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-xs font-semibold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors whitespace-nowrap shrink-0"
+                  >
+                    {testingApi ? 'Testing...' : 'Test Connection'}
+                  </button>
+                </div>
+                {apiTestResult === 'ok' && (
+                  <p className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                    ✓ সার্ভার সফলভাবে সংযুক্ত আছে (/api/health OK)! এখন Save বাটনে চাপুন।
+                  </p>
+                )}
+                {apiTestResult === 'fail' && (
+                  <p className="text-xs font-medium text-red-600 dark:text-red-400">
+                    ✕ এই URL-এ /api/health পাওয়া যায়নি। Render/Node সার্ভার চালু আছে কি না ও সঠিক URL দিয়েছেন কি না যাচাই করুন।
+                  </p>
+                )}
               </div>
 
               {savedBanner && (

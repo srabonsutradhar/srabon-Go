@@ -109,16 +109,39 @@ function getAppletClientId(): string {
   return 'anonclient0001';
 }
 
+let dynamicApiBaseUrl = '';
+
+export function normalizeApiBaseUrl(raw?: string): string {
+  const cleaned = (raw || '').trim().replace(/\/+$/, '');
+  if (!cleaned) return '';
+  if (!/^https?:\/\/[a-zA-Z0-9._:/-]+$/.test(cleaned)) return '';
+  return cleaned.slice(0, 200);
+}
+
+export function setDynamicApiBaseUrl(url?: string): void {
+  dynamicApiBaseUrl = normalizeApiBaseUrl(url);
+}
+
+export function getDynamicApiBaseUrl(): string {
+  const envBase = normalizeApiBaseUrl((import.meta as any).env?.VITE_API_BASE_URL || '');
+  return dynamicApiBaseUrl || envBase;
+}
+
 export function resolveApiUrl(path: string): string {
-  const base = ((import.meta as any).env?.VITE_API_BASE_URL || '').trim().replace(/\/+$/, '');
+  const base = getDynamicApiBaseUrl();
   return base ? `${base}${path}` : path;
 }
 
-export async function checkBackendHealth(): Promise<boolean> {
+export async function testApiHealthAtUrl(baseUrl: string): Promise<boolean> {
+  const cleanBase = normalizeApiBaseUrl(baseUrl);
+  const url = cleanBase ? `${cleanBase}/api/health` : '/api/health';
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timer = controller ? setTimeout(() => controller.abort(), 6000) : null;
   try {
-    const res = await fetch(resolveApiUrl('/api/health'), {
+    const res = await fetch(url, {
       method: 'GET',
       cache: 'no-store',
+      signal: controller?.signal,
     });
     if (!res.ok) return false;
     const contentType = res.headers.get('content-type') || '';
@@ -127,7 +150,13 @@ export async function checkBackendHealth(): Promise<boolean> {
     return data?.status === 'ok';
   } catch {
     return false;
+  } finally {
+    if (timer) clearTimeout(timer);
   }
+}
+
+export async function checkBackendHealth(): Promise<boolean> {
+  return testApiHealthAtUrl(getDynamicApiBaseUrl());
 }
 
 export async function generateTtsAudio(params: {

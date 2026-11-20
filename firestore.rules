@@ -127,7 +127,7 @@ service cloud.firestore {
 
     function isValidBillingConfig(data) {
       return data.keys().hasAll(['feeAmount', 'paymentMethod', 'paymentAccount', 'instructions', 'freeDailyLimit', 'updatedAt'])
-        && data.keys().hasOnly(['feeAmount', 'paymentMethod', 'paymentAccount', 'instructions', 'freeDailyLimit', 'updatedAt'])
+        && data.keys().hasOnly(['feeAmount', 'paymentMethod', 'paymentAccount', 'instructions', 'freeDailyLimit', 'apiBaseUrl', 'updatedAt'])
         && data.feeAmount is string
         && data.feeAmount.size() >= 1
         && data.feeAmount.size() <= 40
@@ -141,6 +141,7 @@ service cloud.firestore {
         && data.freeDailyLimit is int
         && data.freeDailyLimit >= 1
         && data.freeDailyLimit <= 100
+        && (!('apiBaseUrl' in data) || (data.apiBaseUrl is string && data.apiBaseUrl.size() <= 200 && data.apiBaseUrl.matches('^(|https?://[a-zA-Z0-9._:/-]+)$')))
         && data.updatedAt is timestamp;
     }
 
@@ -277,6 +278,7 @@ service cloud.firestore {
       allow update: if isBootstrappedAdmin()
         && isValidId(configId)
         && isValidBillingConfig(incoming())
+        && incoming().diff(existing()).affectedKeys().hasOnly(['feeAmount', 'paymentMethod', 'paymentAccount', 'instructions', 'freeDailyLimit', 'apiBaseUrl', 'updatedAt'])
         && incoming().updatedAt == request.time;
       allow delete: if false;
     }
