@@ -69,9 +69,27 @@ export function clearResolvedSessionIssues() {
   if (removed) notifyListeners();
 }
 
+export function isBenignAppIssueNoise(message?: string, name?: string): boolean {
+  const safeName = (name || '').trim().toLowerCase();
+  const safeMsg = (message || '').trim().toLowerCase();
+  return (
+    safeName === 'aborterror' ||
+    safeMsg.includes('signal is aborted without reason') ||
+    safeMsg.includes('aborted without reason') ||
+    safeMsg.includes('the user aborted a request') ||
+    safeMsg.includes('request was aborted') ||
+    safeMsg.includes('resizeobserver') ||
+    safeMsg.includes('websocket') ||
+    safeMsg.includes('pending promise was never set')
+  );
+}
+
 export async function reportAppIssue(input: ReportIssueInput): Promise<void> {
   const source = (input.source || 'App').trim().slice(0, 60) || 'App';
   const message = (input.message || 'Unknown application error').trim().slice(0, 500) || 'Unknown error';
+  if (isBenignAppIssueNoise(message)) {
+    return;
+  }
   const severity: AppIssueSeverity = input.severity === 'warning' ? 'warning' : 'error';
   const rawDetails = input.details?.trim();
   const details = rawDetails ? rawDetails.slice(0, 1000) : undefined;

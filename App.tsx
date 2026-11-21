@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
 */
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { VOICE_DATA } from './constants';
 import Carousel3D from './components/Carousel3D';
 import GridView from './components/GridView';
@@ -23,11 +23,11 @@ import SiteLegalModal, { LegalTab } from './components/SiteLegalModal';
 import { AppIssueRecord, AppViewMode, FilterState, AiRecommendation, BillingConfig, ProPackageType, SalonConfig, UserPlan } from './types';
 import { Info, Heart, Loader2, Bell, AlertTriangle, X, MessageSquare } from 'lucide-react';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { collection, doc, onSnapshot, query, setDoc, updateDoc, where, serverTimestamp } from 'firebase/firestore';
+import { collection, deleteDoc, doc, onSnapshot, query, setDoc, updateDoc, where, serverTimestamp } from 'firebase/firestore';
 import { auth, db, signOutUser, handleFirestoreError, OperationType } from './firebase';
 import { initGoogleAdsTag } from './utils/googleAds';
 import { setDynamicApiBaseUrl } from './utils/audio';
-import { reportAppIssue, subscribeSessionIssues } from './utils/appIssues';
+import { isBenignAppIssueNoise, reportAppIssue, subscribeSessionIssues } from './utils/appIssues';
 import { DEFAULT_SALON_CONFIG, sanitizeSalonConfig } from './utils/salon';
 import {
   buildReferralCode,
@@ -104,6 +104,7 @@ const App: React.FC = () => {
   const [floatingNoticeHidden, setFloatingNoticeHidden] = useState(false);
   const [sessionIssues, setSessionIssues] = useState<AppIssueRecord[]>([]);
   const [firestoreIssues, setFirestoreIssues] = useState<AppIssueRecord[]>([]);
+  const cleanedObsoleteIssueIdsRef = useRef<Set<string>>(new Set());
   const [referralCode, setReferralCode] = useState<string>('');
   const [bonusCredits, setBonusCredits] = useState<number>(0);
   const [referralCount, setReferralCount] = useState<number>(0);
@@ -165,21 +166,28 @@ const App: React.FC = () => {
       });
     };
 
-    const isBenignAsyncNoise = (reason: unknown, message: string): boolean => {
+    const extractReasonInfo = (reason: unknown): { message: string; name: string } => {
       const name = typeof (reason as any)?.name === 'string' ? (reason as any).name : '';
-      return (
-        name === 'AbortError' ||
-        message.includes('signal is aborted without reason') ||
-        message.includes('The user aborted a request') ||
-        message.includes('ResizeObserver') ||
-        message.includes('WebSocket') ||
-        message.includes('Pending promise was never set')
-      );
+      const rawMsg =
+        reason instanceof Error
+          ? reason.message
+          : typeof (reason as any)?.message === 'string'
+          ? (reason as any).message
+          : typeof reason === 'string'
+          ? reason
+          : reason != null
+          ? String(reason)
+          : '';
+      return {
+        name,
+        message: rawMsg.trim() || 'Unhandled promise rejection',
+      };
     };
 
     const onWindowError = (event: ErrorEvent) => {
+      const errName = typeof (event?.error as any)?.name === 'string' ? (event.error as any).name : '';
       const message = event?.message || event?.error?.message || 'Unexpected runtime error';
-      if (isBenignAsyncNoise(event?.error, message)) {
+      if (isBenignAppIssueNoise(message, errName)) {
         return;
       }
       reportAppIssue({
@@ -191,14 +199,8 @@ const App: React.FC = () => {
     };
 
     const onUnhandledRejection = (event: PromiseRejectionEvent) => {
-      const reason = event?.reason;
-      const message =
-        reason instanceof Error
-          ? reason.message
-          : typeof reason === 'string'
-          ? reason
-          : 'Unhandled promise rejection';
-      if (isBenignAsyncNoise(reason, message)) {
+      const { message, name } = extractReasonInfo(event?.reason);
+      if (isBenignAppIssueNoise(message, name)) {
         event.preventDefault();
         return;
       }
@@ -231,11 +233,22 @@ const App: React.FC = () => {
     const unsubIssues = onSnapshot(
       collection(db, 'appIssues'),
       (snapshot) => {
-        const items: AppIssueRecord[] = snapshot.docs.map((d) => ({
-          id: d.id,
-          ...(d.data() as Omit<AppIssueRecord, 'id'>),
-          origin: 'firestore',
-        }));
+        const items: AppIssueRecord[] = [];
+        for (const d of snapshot.docs) {
+          const data = d.data() as Omit<AppIssueRecord, 'id'>;
+          if (isBenignAppIssueNoise(data?.message)) {
+            if (!cleanedObsoleteIssueIdsRef.current.has(d.id)) {
+              cleanedObsoleteIssueIdsRef.current.add(d.id);
+              deleteDoc(doc(db, 'appIssues', d.id)).catch(() => {});
+            }
+            continue;
+          }
+          items.push({
+            id: d.id,
+            ...data,
+            origin: 'firestore',
+          });
+        }
         setFirestoreIssues(items);
       },
       (err) => {
@@ -705,16 +718,11 @@ const App: React.FC = () => {
     const getMs = (item: AppIssueRecord) =>
       typeof item.createdAt?.toMillis === 'function' ? item.createdAt.toMillis() : 0;
 
-    const isObsoleteTransientNoise = (msg: string) =>
-      msg.includes('signal is aborted without reason') ||
-      msg.includes('The user aborted a request') ||
-      msg.includes('Pending promise was never set');
-
     const merged: AppIssueRecord[] = firestoreIssues.filter(
-      (item) => !isObsoleteTransientNoise(item.message || '')
+      (item) => !isBenignAppIssueNoise(item.message || '')
     );
     for (const sItem of sessionIssues) {
-      if (isObsoleteTransientNoise(sItem.message || '')) continue;
+      if (isBenignAppIssueNoise(sItem.message || '')) continue;
       const sMs = getMs(sItem);
       const hasFirestoreMatch = merged.some(
         (fItem) =>
