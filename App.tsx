@@ -165,13 +165,21 @@ const App: React.FC = () => {
       });
     };
 
-    const onWindowError = (event: ErrorEvent) => {
-      const message = event?.message || event?.error?.message || 'Unexpected runtime error';
-      if (
+    const isBenignAsyncNoise = (reason: unknown, message: string): boolean => {
+      const name = typeof (reason as any)?.name === 'string' ? (reason as any).name : '';
+      return (
+        name === 'AbortError' ||
+        message.includes('signal is aborted without reason') ||
+        message.includes('The user aborted a request') ||
         message.includes('ResizeObserver') ||
         message.includes('WebSocket') ||
         message.includes('Pending promise was never set')
-      ) {
+      );
+    };
+
+    const onWindowError = (event: ErrorEvent) => {
+      const message = event?.message || event?.error?.message || 'Unexpected runtime error';
+      if (isBenignAsyncNoise(event?.error, message)) {
         return;
       }
       reportAppIssue({
@@ -190,8 +198,7 @@ const App: React.FC = () => {
           : typeof reason === 'string'
           ? reason
           : 'Unhandled promise rejection';
-      if (message.includes('WebSocket')) return;
-      if (message.includes('Pending promise was never set')) {
+      if (isBenignAsyncNoise(reason, message)) {
         event.preventDefault();
         return;
       }
@@ -698,10 +705,18 @@ const App: React.FC = () => {
     const getMs = (item: AppIssueRecord) =>
       typeof item.createdAt?.toMillis === 'function' ? item.createdAt.toMillis() : 0;
 
-    const merged: AppIssueRecord[] = [...firestoreIssues];
+    const isObsoleteTransientNoise = (msg: string) =>
+      msg.includes('signal is aborted without reason') ||
+      msg.includes('The user aborted a request') ||
+      msg.includes('Pending promise was never set');
+
+    const merged: AppIssueRecord[] = firestoreIssues.filter(
+      (item) => !isObsoleteTransientNoise(item.message || '')
+    );
     for (const sItem of sessionIssues) {
+      if (isObsoleteTransientNoise(sItem.message || '')) continue;
       const sMs = getMs(sItem);
-      const hasFirestoreMatch = firestoreIssues.some(
+      const hasFirestoreMatch = merged.some(
         (fItem) =>
           fItem.source === sItem.source &&
           fItem.message === sItem.message &&

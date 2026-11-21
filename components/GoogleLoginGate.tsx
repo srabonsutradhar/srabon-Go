@@ -16,6 +16,8 @@ import {
   Sparkles,
   Check,
   ShieldCheck,
+  MoreVertical,
+  X,
 } from 'lucide-react';
 import { auth, signInWithGoogle } from '../firebase';
 import { reportAppIssue } from '../utils/appIssues';
@@ -56,8 +58,28 @@ const GoogleLoginGate: React.FC<GoogleLoginGateProps> = ({ isDarkMode, toggleThe
   const [playingVoice, setPlayingVoice] = useState<string | null>(null);
   const [openFaq, setOpenFaq] = useState<number | null>(0);
   const [legalTab, setLegalTab] = useState<LegalTab | null>(null);
+  const [showHeaderMenu, setShowHeaderMenu] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const signingInRef = useRef(false);
+  const headerMenuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!showHeaderMenu) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShowHeaderMenu(false);
+    };
+    const onOutside = (e: MouseEvent) => {
+      if (headerMenuRef.current && !headerMenuRef.current.contains(e.target as Node)) {
+        setShowHeaderMenu(false);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    document.addEventListener('mousedown', onOutside);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.removeEventListener('mousedown', onOutside);
+    };
+  }, [showHeaderMenu]);
 
   const featuredVoices = FEATURED_VOICE_NAMES.map((name) =>
     VOICE_DATA.find((v) => v.name === name)
@@ -194,26 +216,89 @@ const GoogleLoginGate: React.FC<GoogleLoginGateProps> = ({ isDarkMode, toggleThe
             </a>
           </nav>
 
-          {/* Zone 3: Primary Action + Theme */}
-          <div className="flex items-center gap-2.5 shrink-0">
-            <button
-              type="button"
-              onClick={toggleTheme}
-              className="p-2.5 rounded-lg bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors"
-              title={isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
-              aria-label={isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
-            >
-              {isDarkMode ? <Sun size={16} /> : <Moon size={16} />}
-            </button>
+          {/* Zone 3: Primary Action + Clean 3-Dot Menu */}
+          <div ref={headerMenuRef} className="relative flex items-center gap-2 shrink-0">
             <button
               type="button"
               onClick={handleGoogleSignIn}
               disabled={loading}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-zinc-900 dark:bg-indigo-600 text-white text-xs sm:text-sm font-semibold hover:bg-zinc-800 dark:hover:bg-indigo-500 transition-colors whitespace-nowrap shrink-0 disabled:opacity-60"
+              className="hidden sm:inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-zinc-900 dark:bg-indigo-600 text-white text-xs sm:text-sm font-semibold hover:bg-zinc-800 dark:hover:bg-indigo-500 transition-colors whitespace-nowrap shrink-0 disabled:opacity-60"
             >
               {loading && <Loader2 size={14} className="animate-spin" />}
               <span>Sign In</span>
             </button>
+
+            <button
+              type="button"
+              onClick={() => setShowHeaderMenu((prev) => !prev)}
+              aria-expanded={showHeaderMenu}
+              aria-haspopup="menu"
+              aria-label="অন্যান্য অপশন"
+              className="min-h-[40px] min-w-[40px] inline-flex items-center justify-center rounded-lg bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-800 transition-colors"
+            >
+              {showHeaderMenu ? <X size={18} /> : <MoreVertical size={18} />}
+            </button>
+
+            {showHeaderMenu && (
+              <div
+                role="menu"
+                className="absolute right-0 top-[calc(100%+8px)] w-60 rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-2xl p-2 space-y-1 z-50"
+              >
+                <div className="md:hidden space-y-1">
+                  <a
+                    href="#features"
+                    onClick={() => setShowHeaderMenu(false)}
+                    className="block px-3 py-2.5 rounded-xl text-sm font-medium text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                  >
+                    Features
+                  </a>
+                  <a
+                    href="#voices"
+                    onClick={() => setShowHeaderMenu(false)}
+                    className="block px-3 py-2.5 rounded-xl text-sm font-medium text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                  >
+                    Voice Library
+                  </a>
+                  <a
+                    href="#pricing"
+                    onClick={() => setShowHeaderMenu(false)}
+                    className="block px-3 py-2.5 rounded-xl text-sm font-medium text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                  >
+                    Plans &amp; Refer
+                  </a>
+                  <a
+                    href="#faq"
+                    onClick={() => setShowHeaderMenu(false)}
+                    className="block px-3 py-2.5 rounded-xl text-sm font-medium text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                  >
+                    FAQ
+                  </a>
+                  <div className="border-t border-zinc-100 dark:border-zinc-800 my-1" />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    toggleTheme();
+                    setShowHeaderMenu(false);
+                  }}
+                  className="w-full px-3 py-2.5 rounded-xl flex items-center gap-2.5 text-sm font-medium text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-left"
+                >
+                  {isDarkMode ? <Sun size={15} /> : <Moon size={15} />}
+                  <span>{isDarkMode ? 'Light Mode' : 'Dark Mode'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowHeaderMenu(false);
+                    handleGoogleSignIn();
+                  }}
+                  disabled={loading}
+                  className="sm:hidden w-full px-3 py-2.5 rounded-xl bg-zinc-900 dark:bg-indigo-600 text-white text-sm font-semibold text-center"
+                >
+                  {loading ? 'Signing in...' : 'Sign In with Google'}
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </header>

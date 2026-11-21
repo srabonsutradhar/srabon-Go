@@ -136,7 +136,9 @@ export async function testApiHealthAtUrl(baseUrl: string): Promise<boolean> {
   const cleanBase = normalizeApiBaseUrl(baseUrl);
   const url = cleanBase ? `${cleanBase}/api/health` : '/api/health';
   const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-  const timer = controller ? setTimeout(() => controller.abort(), 6000) : null;
+  const timer = controller
+    ? setTimeout(() => controller.abort(new Error('Health check timed out')), 6000)
+    : null;
   try {
     const res = await fetch(url, {
       method: 'GET',
