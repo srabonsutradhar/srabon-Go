@@ -3,6 +3,7 @@
  */
 
 import { SalonConfig, SalonServiceKey } from '../types';
+import { AppLanguage } from './i18n';
 
 export const DEFAULT_SALON_CONFIG: SalonConfig = {
   salonName: 'Jagannath gents parlour and salon',
@@ -192,24 +193,43 @@ export interface WhatsAppBookingPayload {
   discountLabel?: string;
   totalPriceLabel?: string;
   notes?: string;
+  lang?: AppLanguage;
 }
 
 export function buildSalonWhatsAppUrl(payload: WhatsAppBookingPayload): string | null {
   const waNumber = normalizeWhatsAppNumber(payload.adminPhone);
   if (!waNumber) return null;
 
-  const lines = [
-    `নমস্কার, *${payload.salonName}*-এ একটি নতুন বুকিং রিকোয়েস্ট পাঠাচ্ছি:`,
-    '',
-    `• কাস্টমারের নাম: ${payload.customerName.trim() || 'Guest'}`,
-    ...(payload.customerPhone?.trim() ? [`• মোবাইল নম্বর: ${payload.customerPhone.trim()}`] : []),
-    `• সার্ভিস: ${payload.serviceTitle}`,
-    `• তারিখ: ${payload.bookingDate}`,
-    `• সময়: ${payload.timeSlot}`,
-    ...(payload.couponCode ? [`• AI কুপন: ${payload.couponCode}${payload.discountLabel ? ` (${payload.discountLabel})` : ''}`] : []),
-    ...(payload.totalPriceLabel ? [`• মোট বিল: ${payload.totalPriceLabel}`] : []),
-    ...(payload.notes?.trim() ? [`• নোট: ${payload.notes.trim()}`] : []),
-  ];
+  const isEn = payload.lang === 'en';
+  const lines = isEn
+    ? [
+        `Hello, sending a new booking request for *${payload.salonName}*:`,
+        '',
+        `• Customer Name: ${payload.customerName.trim() || 'Guest'}`,
+        ...(payload.customerPhone?.trim() ? [`• Mobile Number: ${payload.customerPhone.trim()}`] : []),
+        `• Service: ${payload.serviceTitle}`,
+        `• Date: ${payload.bookingDate}`,
+        `• Time: ${payload.timeSlot}`,
+        ...(payload.couponCode
+          ? [`• AI Coupon: ${payload.couponCode}${payload.discountLabel ? ` (${payload.discountLabel})` : ''}`]
+          : []),
+        ...(payload.totalPriceLabel ? [`• Total Bill: ${payload.totalPriceLabel}`] : []),
+        ...(payload.notes?.trim() ? [`• Notes: ${payload.notes.trim()}`] : []),
+      ]
+    : [
+        `নমস্কার, *${payload.salonName}*-এ একটি নতুন বুকিং রিকোয়েস্ট পাঠাচ্ছি:`,
+        '',
+        `• কাস্টমারের নাম: ${payload.customerName.trim() || 'Guest'}`,
+        ...(payload.customerPhone?.trim() ? [`• মোবাইল নম্বর: ${payload.customerPhone.trim()}`] : []),
+        `• সার্ভিস: ${payload.serviceTitle}`,
+        `• তারিখ: ${payload.bookingDate}`,
+        `• সময়: ${payload.timeSlot}`,
+        ...(payload.couponCode
+          ? [`• AI কুপন: ${payload.couponCode}${payload.discountLabel ? ` (${payload.discountLabel})` : ''}`]
+          : []),
+        ...(payload.totalPriceLabel ? [`• মোট বিল: ${payload.totalPriceLabel}`] : []),
+        ...(payload.notes?.trim() ? [`• নোট: ${payload.notes.trim()}`] : []),
+      ];
 
   return `https://wa.me/${waNumber}?text=${encodeURIComponent(lines.join('\n'))}`;
 }

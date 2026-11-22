@@ -23,6 +23,7 @@ import type { User } from 'firebase/auth';
 import { AppViewMode, SalonConfig, UserPlan } from '../types';
 import { SALON_SERVICES, formatSalonPrice } from '../utils/salon';
 import { FEATURED_VOICE_ALBUMS, STUDIO_MEDIA } from '../utils/studioAlbums';
+import { localizeSalonService, useLanguage } from '../utils/i18n';
 
 interface HomePageProps {
   user: User;
@@ -49,7 +50,8 @@ const HomePage: React.FC<HomePageProps> = ({
   onOpenAdminPanel,
   onOpenLegal,
 }) => {
-  const firstName = (user.displayName || user.email?.split('@')[0] || 'Guest').split(' ')[0];
+  const { lang, bi } = useLanguage();
+  const firstName = (user.displayName || user.email?.split('@')[0] || bi('অতিথি', 'Guest')).split(' ')[0];
   const minServicePrice = Math.min(
     salonConfig.haircutPrice,
     salonConfig.beardTrimPrice,
@@ -67,16 +69,24 @@ const HomePage: React.FC<HomePageProps> = ({
             <div className="lg:col-span-7 p-6 sm:p-10 flex flex-col justify-between gap-6">
               <div className="space-y-3.5 max-w-2xl">
                 <p className="text-xs font-semibold uppercase tracking-widest text-indigo-600 dark:text-amber-400">
-                  Srabon Go Studio · {isAdmin ? 'Admin' : userPlan === 'pro' ? 'Pro Account' : 'Free Plan'}
+                  {bi('শ্রাবণ গো স্টুডিও', 'Srabon Go Studio')} ·{' '}
+                  {isAdmin
+                    ? bi('অ্যাডমিন', 'Admin')
+                    : userPlan === 'pro'
+                    ? bi('প্রো অ্যাকাউন্ট', 'Pro Account')
+                    : bi('ফ্রি প্ল্যান', 'Free Plan')}
                 </p>
                 <h2
                   className="text-3xl sm:text-4xl lg:text-5xl font-serif font-medium tracking-tight text-slate-900 dark:text-white leading-tight"
                   style={{ textWrap: 'balance' }}
                 >
-                  স্বাগতম, {firstName}
+                  {bi(`স্বাগতম, ${firstName}`, `Welcome, ${firstName}`)}
                 </h2>
                 <p className="text-sm sm:text-base text-slate-600 dark:text-slate-300 leading-relaxed">
-                  ভয়েস স্টুডিও, প্রিমিয়াম ভয়েস অ্যালবাম কালেকশন, ট্রেন্ডিং অডিও স্ক্রিপ্ট এবং আলাদা সেলুন অ্যাপয়েন্টমেন্ট বুকিং পেজ—সবকিছু রঙিন ও প্রিমিয়াম অভিজ্ঞতায় এক জায়গায়।
+                  {bi(
+                    'ভয়েস স্টুডিও, প্রিমিয়াম ভয়েস অ্যালবাম কালেকশন, ট্রেন্ডিং অডিও স্ক্রিপ্ট এবং আলাদা সেলুন অ্যাপয়েন্টমেন্ট বুকিং পেজ—সবকিছু রঙিন ও প্রিমিয়াম অভিজ্ঞতায় এক জায়গায়।',
+                    'Voice Studio, curated studio album collections, trending AI audio scripts, and dedicated salon appointment booking—all together in one workspace.'
+                  )}
                 </p>
               </div>
 
@@ -87,7 +97,7 @@ const HomePage: React.FC<HomePageProps> = ({
                   className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-gradient-to-r from-indigo-600 via-blue-600 to-violet-600 hover:from-indigo-500 hover:via-blue-500 hover:to-violet-500 text-white text-sm font-semibold shadow-md shadow-indigo-600/20 transition-all whitespace-nowrap shrink-0"
                 >
                   <AudioLines size={16} />
-                  <span>ভয়েস স্টুডিও খুলুন</span>
+                  <span>{bi('ভয়েস স্টুডিও খুলুন', 'Open Voice Studio')}</span>
                 </button>
                 <button
                   type="button"
@@ -95,7 +105,7 @@ const HomePage: React.FC<HomePageProps> = ({
                   className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white text-sm font-semibold shadow-md shadow-teal-600/20 transition-all whitespace-nowrap shrink-0"
                 >
                   <Mic size={16} />
-                  <span>নিজের ভয়েস ক্লোন টুল (Pro)</span>
+                  <span>{bi('নিজের ভয়েস ক্লোন টুল (Pro)', 'Personal Voice Clone (Pro)')}</span>
                 </button>
                 <button
                   type="button"
@@ -103,7 +113,7 @@ const HomePage: React.FC<HomePageProps> = ({
                   className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 text-sm font-bold shadow-md shadow-amber-500/20 transition-all whitespace-nowrap shrink-0"
                 >
                   <Scissors size={16} />
-                  <span>সেলুন বুকিং পেজ</span>
+                  <span>{bi('সেলুন বুকিং পেজ', 'Salon Booking Page')}</span>
                   <ArrowRight size={15} />
                 </button>
               </div>
@@ -113,7 +123,7 @@ const HomePage: React.FC<HomePageProps> = ({
               {!heroImgFailed ? (
                 <img
                   src={STUDIO_MEDIA.heroStudio}
-                  alt="Srabon Go Luxury Recording & AI Voice Studio"
+                  alt={bi('শ্রাবণ গো রেকর্ডিং ও এআই ভয়েস স্টুডিও', 'Srabon Go Luxury Recording & AI Voice Studio')}
                   referrerPolicy="no-referrer"
                   onError={() => setHeroImgFailed(true)}
                   className="w-full h-full object-cover"
@@ -127,10 +137,10 @@ const HomePage: React.FC<HomePageProps> = ({
               <div className="absolute bottom-4 left-5 right-5 flex items-end justify-between gap-3 text-white">
                 <div>
                   <p className="text-xs font-medium text-amber-300">
-                    Acoustic Voice Console
+                    {bi('অ্যাকুস্টিক ভয়েস কনসোল', 'Acoustic Voice Console')}
                   </p>
                   <p className="text-sm font-serif">
-                    {voicesCount}টি স্টুডিও ভয়েস · ২৪ kHz WAV
+                    {bi(`${voicesCount}টি স্টুডিও ভয়েস · ২৪ kHz WAV`, `${voicesCount} Studio Voices · 24 kHz WAV`)}
                   </p>
                 </div>
                 <button
@@ -138,7 +148,7 @@ const HomePage: React.FC<HomePageProps> = ({
                   onClick={() => onNavigate('carousel')}
                   className="px-3 py-1.5 rounded-lg bg-white/15 hover:bg-white/25 backdrop-blur-md border border-white/20 text-xs font-semibold text-white transition-colors whitespace-nowrap shrink-0"
                 >
-                  3D ক্যারোসেল দেখুন
+                  {bi('3D ক্যারোসেল দেখুন', 'View 3D Carousel')}
                 </button>
               </div>
             </div>
@@ -151,13 +161,16 @@ const HomePage: React.FC<HomePageProps> = ({
             <div className="space-y-2.5 max-w-2xl">
               <div className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-amber-300">
                 <Crown size={14} />
-                <span>Dedicated Premium Tool · Personal Voice Clone</span>
+                <span>{bi('প্রিমিয়াম টুল · ব্যক্তিগত ভয়েস ক্লোন', 'Dedicated Premium Tool · Personal Voice Clone')}</span>
               </div>
               <h3 className="text-2xl sm:text-3xl font-serif font-medium tracking-tight text-white">
-                নিজের ভয়েস রেকর্ড করে যেকোনো লেখা বলান
+                {bi('নিজের ভয়েস রেকর্ড করে যেকোনো লেখা বলান', 'Record Your Own Voice & Speak Any Script')}
               </h3>
               <p className="text-xs sm:text-sm text-indigo-100/85 leading-relaxed">
-                আপনার কণ্ঠ ৩–২৫ সেকেন্ড রেকর্ড (বা অডিও আপলোড) করে সেভ রাখুন। এআই আপনার ভয়েস এনালাইসিস করে Voice DNA প্রোফাইল তৈরি করবে—তারপর যেকোনো বাংলা বা ইংরেজি লেখা ওই প্রোফাইলে বলানো ও WAV ডাউনলোড করা যাবে।
+                {bi(
+                  'আপনার কণ্ঠ ৩–২৫ সেকেন্ড রেকর্ড (বা অডিও আপলোড) করে সেভ রাখুন। এআই আপনার ভয়েস এনালাইসিস করে Voice DNA প্রোফাইল তৈরি করবে—তারপর যেকোনো বাংলা বা ইংরেজি লেখা ওই প্রোফাইলে বলানো ও WAV ডাউনলোড করা যাবে।',
+                  'Record or upload 3–25 seconds of your voice. AI extracts your Voice DNA profile and lets you speak any Bengali or English script in your calibrated vocal profile with WAV export.'
+                )}
               </p>
             </div>
 
@@ -168,7 +181,7 @@ const HomePage: React.FC<HomePageProps> = ({
                 className="inline-flex items-center gap-2.5 px-6 py-3.5 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 text-sm font-bold shadow-lg shadow-amber-500/25 transition-all whitespace-nowrap"
               >
                 <UserCheck size={17} />
-                <span>প্রিমিয়াম টুল চালু করুন</span>
+                <span>{bi('প্রিমিয়াম টুল চালু করুন', 'Launch Premium Tool')}</span>
                 <ArrowRight size={16} />
               </button>
             </div>
@@ -180,10 +193,10 @@ const HomePage: React.FC<HomePageProps> = ({
           <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-2">
             <div>
               <p className="text-xs font-semibold uppercase tracking-widest text-indigo-600 dark:text-amber-400">
-                Curated Studio Editions
+                {bi('বাছাইকৃত স্টুডিও সংস্করণ', 'Curated Studio Editions')}
               </p>
               <h3 className="text-2xl font-serif font-medium text-slate-900 dark:text-white mt-0.5">
-                প্রিমিয়াম ভয়েস অ্যালবাম কালেকশন
+                {bi('প্রিমিয়াম ভয়েস অ্যালবাম কালেকশন', 'Premium Voice Album Collection')}
               </h3>
             </div>
             <button
@@ -191,7 +204,7 @@ const HomePage: React.FC<HomePageProps> = ({
               onClick={() => onNavigate('grid')}
               className="text-xs font-semibold text-indigo-600 dark:text-amber-300 hover:underline underline-offset-4 self-start sm:self-auto whitespace-nowrap"
             >
-              সব {voicesCount}টি ভয়েস দেখুন →
+              {bi(`সব ${voicesCount}টি ভয়েস দেখুন →`, `Browse All ${voicesCount} Voices →`)}
             </button>
           </div>
 
@@ -207,27 +220,27 @@ const HomePage: React.FC<HomePageProps> = ({
                     <div className="relative aspect-square w-full overflow-hidden bg-slate-900">
                       <img
                         src={album.coverImg}
-                        alt={album.titleEn}
+                        alt={bi(album.titleBn, album.titleEn)}
                         referrerPolicy="no-referrer"
                         className="w-full h-full object-cover transition-transform duration-500 hover:scale-105"
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-slate-950/15 to-transparent" />
                       <div className="absolute bottom-3.5 left-4 right-4 text-white">
                         <p className="text-[11px] font-medium text-amber-200">
-                          {album.titleEn}
+                          {bi(album.titleEn, album.titleBn)}
                         </p>
                         <h4 className="text-lg font-serif font-medium leading-snug">
-                          {album.titleBn}
+                          {bi(album.titleBn, album.titleEn)}
                         </h4>
                       </div>
                     </div>
 
                     <div className="p-5 space-y-2.5">
                       <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                        {album.subtitleBn}
+                        {bi(album.subtitleBn, album.subtitleEn)}
                       </p>
                       <p className={`text-xs font-semibold ${album.accentTextClass}`}>
-                        ভয়েস: {album.featuredVoiceNames.join(' · ')}
+                        {bi('ভয়েস:', 'Voices:')} {album.featuredVoiceNames.join(' · ')}
                       </p>
                     </div>
                   </div>
@@ -245,14 +258,14 @@ const HomePage: React.FC<HomePageProps> = ({
                       className={`flex-1 inline-flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl text-xs font-semibold transition-all whitespace-nowrap ${album.buttonBgClass}`}
                     >
                       <AudioLines size={14} />
-                      <span>{primaryVoice} দিয়ে বলুন</span>
+                      <span>{bi(`${primaryVoice} দিয়ে বলুন`, `Speak with ${primaryVoice}`)}</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => onNavigate('grid')}
                       className="py-2.5 px-3 rounded-xl bg-white/80 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-white dark:hover:bg-slate-800 transition-colors whitespace-nowrap"
                     >
-                      অ্যালবাম
+                      {bi('অ্যালবাম', 'Album')}
                     </button>
                   </div>
                 </article>
@@ -270,7 +283,7 @@ const HomePage: React.FC<HomePageProps> = ({
                 {!salonImgFailed ? (
                   <img
                     src={STUDIO_MEDIA.salonInterior}
-                    alt={`${salonConfig.salonName} Interior`}
+                    alt={`${salonConfig.salonName} ${bi('ইন্টারিওর', 'Interior')}`}
                     referrerPolicy="no-referrer"
                     onError={() => setSalonImgFailed(true)}
                     className="w-full h-full object-cover"
@@ -279,7 +292,12 @@ const HomePage: React.FC<HomePageProps> = ({
                 <div className="absolute inset-0 bg-gradient-to-t from-[#17110d] via-[#17110d]/35 to-transparent" />
                 <div className="absolute bottom-3 left-6 right-6 flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-amber-300">
                   <Scissors size={14} />
-                  <span>আলাদা পেজ · Men&apos;s Hair Cutting &amp; Grooming Booking</span>
+                  <span>
+                    {bi(
+                      'আলাদা পেজ · পুরুষদের হেয়ার কাটিং ও গ্রুমিং বুকিং',
+                      "Dedicated Page · Men's Hair Cutting & Grooming Booking"
+                    )}
+                  </span>
                 </div>
               </div>
 
@@ -290,7 +308,10 @@ const HomePage: React.FC<HomePageProps> = ({
                   </h3>
 
                   <p className="text-sm text-amber-100/80 leading-relaxed max-w-xl">
-                    প্রফেশনাল জেন্টস হেয়ারকাট, বিয়ার্ড স্টাইলিং, হট টাওয়েল শেভ ও ফেসিয়াল সার্ভিসের জন্য অনলাইন স্লট বুক করুন। সব সার্ভিসের বর্তমান রেট এবং বুকিং চার্জ রিয়েল-টাইমে অ্যাডমিন প্যানেল থেকে আপডেট হয়।
+                    {bi(
+                      'প্রফেশনাল জেন্টস হেয়ারকাট, বিয়ার্ড স্টাইলিং, হট টাওয়েল শেভ ও ফেসিয়াল সার্ভিসের জন্য অনলাইন স্লট বুক করুন। সব সার্ভিসের বর্তমান রেট এবং বুকিং চার্জ রিয়েল-টাইমে অ্যাডমিন প্যানেল থেকে আপডেট হয়।',
+                      'Book online appointments for professional gents haircuts, beard styling, hot towel shaves, and facial treatments. Service rates update in real time from Admin settings.'
+                    )}
                   </p>
 
                   <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-stone-300 pt-1">
@@ -321,7 +342,7 @@ const HomePage: React.FC<HomePageProps> = ({
                     onClick={() => onNavigate('salon')}
                     className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-stone-950 text-sm font-bold shadow-md shadow-amber-500/20 transition-all whitespace-nowrap shrink-0"
                   >
-                    <span>বুকিং পেজে প্রবেশ করুন</span>
+                    <span>{bi('বুকিং পেজে প্রবেশ করুন', 'Open Booking Page')}</span>
                     <ArrowRight size={16} />
                   </button>
 
@@ -332,7 +353,7 @@ const HomePage: React.FC<HomePageProps> = ({
                       className="inline-flex items-center gap-2 px-4 py-3 rounded-xl bg-white/10 hover:bg-white/15 border border-amber-400/30 text-amber-100 text-xs font-semibold transition-colors whitespace-nowrap shrink-0"
                     >
                       <Shield size={14} className="text-amber-400" />
-                      <span>অ্যাডমিন প্রাইস পরিবর্তন করুন</span>
+                      <span>{bi('অ্যাডমিন প্রাইস পরিবর্তন করুন', 'Edit Salon Prices (Admin)')}</span>
                     </button>
                   )}
                 </div>
@@ -344,40 +365,43 @@ const HomePage: React.FC<HomePageProps> = ({
               <div>
                 <div className="flex items-center justify-between border-b border-amber-500/20 pb-3 mb-3">
                   <span className="text-xs font-semibold uppercase tracking-wider text-amber-200/80">
-                    লাইভ রেট লিস্ট
+                    {bi('লাইভ রেট লিস্ট', 'Live Rate List')}
                   </span>
                   <span className="text-xs text-amber-400 font-semibold tabular-nums">
-                    শুরু {formatSalonPrice(minServicePrice, salonConfig.currencySymbol)}
+                    {bi('শুরু', 'From')} {formatSalonPrice(minServicePrice, salonConfig.currencySymbol)}
                   </span>
                 </div>
 
                 <ul className="divide-y divide-amber-500/15 text-sm">
-                  {SALON_SERVICES.slice(0, 5).map((service) => (
-                    <li
-                      key={service.key}
-                      className="py-2.5 flex items-center justify-between gap-4"
-                    >
-                      <div className="min-w-0">
-                        <span className="text-xs font-mono text-amber-300/60 mr-2">
-                          {service.number}
+                  {SALON_SERVICES.slice(0, 5).map((service) => {
+                    const loc = localizeSalonService(service.key, lang);
+                    return (
+                      <li
+                        key={service.key}
+                        className="py-2.5 flex items-center justify-between gap-4"
+                      >
+                        <div className="min-w-0">
+                          <span className="text-xs font-mono text-amber-300/60 mr-2">
+                            {service.number}
+                          </span>
+                          <span className="text-stone-100 font-medium truncate">
+                            {loc.primaryTitle}
+                          </span>
+                        </div>
+                        <span className="font-semibold text-amber-400 tabular-nums shrink-0">
+                          {formatSalonPrice(
+                            salonConfig[service.priceField],
+                            salonConfig.currencySymbol
+                          )}
                         </span>
-                        <span className="text-stone-100 font-medium truncate">
-                          {service.title}
-                        </span>
-                      </div>
-                      <span className="font-semibold text-amber-400 tabular-nums shrink-0">
-                        {formatSalonPrice(
-                          salonConfig[service.priceField],
-                          salonConfig.currencySymbol
-                        )}
-                      </span>
-                    </li>
-                  ))}
+                      </li>
+                    );
+                  })}
                 </ul>
               </div>
 
               <div className="pt-3 border-t border-amber-500/20 flex items-center justify-between text-xs text-stone-300">
-                <span>অনলাইন বুকিং চার্জ (Booking Fee)</span>
+                <span>{bi('অনলাইন বুকিং চার্জ', 'Online Booking Fee')}</span>
                 <span className="font-semibold text-amber-300 tabular-nums">
                   {formatSalonPrice(salonConfig.bookingFee, salonConfig.currencySymbol)}
                 </span>
@@ -390,10 +414,13 @@ const HomePage: React.FC<HomePageProps> = ({
         <section className="space-y-4">
           <div className="flex items-baseline justify-between">
             <h3 className="text-lg font-serif font-medium text-slate-900 dark:text-white">
-              অ্যাপের অন্যান্য সেকশন
+              {bi('অ্যাপের অন্যান্য সেকশন', 'Explore Studio & Tools')}
             </h3>
             <span className="text-xs text-slate-500 dark:text-slate-400 tabular-nums">
-              {voicesCount}টি ভয়েস · {favoritesCount}টি ফেভারিট
+              {bi(
+                `${voicesCount}টি ভয়েস · ${favoritesCount}টি ফেভারিট`,
+                `${voicesCount} voices · ${favoritesCount} favorites`
+              )}
             </span>
           </div>
 
@@ -414,10 +441,13 @@ const HomePage: React.FC<HomePageProps> = ({
               </div>
               <div className="space-y-1.5">
                 <h4 className="text-lg font-serif font-medium text-slate-900 dark:text-white">
-                  AI ভয়েস স্টুডিও (TTS Studio)
+                  {bi('এআই ভয়েস স্টুডিও (TTS Studio)', 'AI Voice Studio (TTS Studio)')}
                 </h4>
                 <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
-                  বাংলা, ইংরেজি ও যেকোনো স্ক্রিপ্ট দিয়ে ন্যাচারাল এআই ভয়েস ওভার তৈরি করুন এবং WAV ফাইল ডাউনলোড করুন।
+                  {bi(
+                    'বাংলা, ইংরেজি ও যেকোনো স্ক্রিপ্ট দিয়ে ন্যাচারাল এআই ভয়েস ওভার তৈরি করুন এবং WAV ফাইল ডাউনলোড করুন।',
+                    'Generate natural AI voiceovers in Bengali, English, or any language and download WAV audio.'
+                  )}
                 </p>
               </div>
             </button>
@@ -438,10 +468,13 @@ const HomePage: React.FC<HomePageProps> = ({
               </div>
               <div className="space-y-1.5">
                 <h4 className="text-base font-serif font-medium text-slate-900 dark:text-white">
-                  ট্রেন্ডিং অডিও আইডিয়া
+                  {bi('ট্রেন্ডিং অডিও আইডিয়া', 'Trending Audio Ideas')}
                 </h4>
                 <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                  AI দিয়ে নতুন রিলস, শর্টস ও অ্যালার্ম ভয়েস স্ক্রিপ্ট পান।
+                  {bi(
+                    'AI দিয়ে নতুন রিলস, শর্টস ও অ্যালার্ম ভয়েস স্ক্রিপ্ট পান।',
+                    'Get AI-generated Reels, Shorts, and alarm voice scripts.'
+                  )}
                 </p>
               </div>
             </button>
@@ -462,10 +495,13 @@ const HomePage: React.FC<HomePageProps> = ({
               </div>
               <div className="space-y-1.5">
                 <h4 className="text-base font-serif font-medium text-slate-900 dark:text-white">
-                  ভয়েস লাইব্রেরি
+                  {bi('ভয়েস লাইব্রেরি', 'Voice Library')}
                 </h4>
                 <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                  {voicesCount}টি ভয়েস আর্টিস্টের ডেমো শুনুন ও ফেভারিট সেভ করুন।
+                  {bi(
+                    `${voicesCount}টি ভয়েস আর্টিস্টের ডেমো শুনুন ও ফেভারিট সেভ করুন।`,
+                    `Audition all ${voicesCount} voice talents and save favorites.`
+                  )}
                 </p>
               </div>
             </button>
@@ -476,21 +512,21 @@ const HomePage: React.FC<HomePageProps> = ({
         <footer className="pt-4 pb-6 border-t border-indigo-100 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500 dark:text-slate-400">
           <div className="flex items-center gap-2">
             <Sparkles size={13} className="text-indigo-500 dark:text-amber-400" />
-            <span>Srabon Go · {salonConfig.salonName}</span>
+            <span>{bi('শ্রাবণ গো', 'Srabon Go')} · {salonConfig.salonName}</span>
           </div>
           {onOpenLegal && (
             <div className="flex items-center gap-4">
               <button type="button" onClick={() => onOpenLegal('about')} className="hover:text-indigo-700 dark:hover:text-white">
-                About
+                {bi('পরিচিতি', 'About')}
               </button>
               <button type="button" onClick={() => onOpenLegal('privacy')} className="hover:text-indigo-700 dark:hover:text-white">
-                Privacy
+                {bi('গোপনীয়তা', 'Privacy')}
               </button>
               <button type="button" onClick={() => onOpenLegal('terms')} className="hover:text-indigo-700 dark:hover:text-white">
-                Terms
+                {bi('শর্তাবলি', 'Terms')}
               </button>
               <button type="button" onClick={() => onOpenLegal('contact')} className="hover:text-indigo-700 dark:hover:text-white">
-                Contact
+                {bi('যোগাযোগ', 'Contact')}
               </button>
             </div>
           )}

@@ -57,6 +57,14 @@ import {
 } from '../utils/studioTiers';
 import { getVoiceAlbumVisual } from '../utils/studioAlbums';
 import { renderCalibratedAudioBytes } from '../utils/voiceClone';
+import {
+  localizeDate,
+  localizeGender,
+  localizePitch,
+  localizeStudioPresetLabel,
+  localizeTrait,
+  useLanguage,
+} from '../utils/i18n';
 
 interface TtsStudioProps {
   voices: Voice[];
@@ -91,25 +99,29 @@ const DEFAULT_SCRIPT =
 const SCRIPT_PRESETS = [
   {
     id: 'morning-study-bn',
-    label: 'সকালের পড়া (Wake-Up)',
+    labelBn: 'সকালের পড়া (Wake-Up)',
+    labelEn: 'Morning Study (Wake-Up)',
     text: 'সকাল হয়ে গেছে, আর ঘুম নয়! দ্রুত ঘুম থেকে উঠুন, আজকের পড়ার সময় শুরু হয়ে গেছে।',
     style: 'Energetic, bright, motivating morning wake-up announcement in clear Bengali',
   },
   {
     id: 'gentle-morning-bn',
-    label: 'শুভ সকাল (Gentle)',
+    labelBn: 'শুভ সকাল (Gentle)',
+    labelEn: 'Good Morning (Gentle)',
     text: 'শুভ সকাল! নতুন ভোরের আলো ফুটেছে, এখনই উঠে পড়ার টেবিলে বসে পড়ুন।',
     style: 'Warm, gentle, encouraging morning greeting in Bengali',
   },
   {
     id: 'focus-reminder-bn',
-    label: 'মনোযোগ রিমাইন্ডার',
+    labelBn: 'মনোযোগ রিমাইন্ডার',
+    labelEn: 'Focus Reminder',
     text: 'বিরতি শেষ! চলুন আবার পূর্ণ মনোযোগ দিয়ে আজকের অধ্যায়টা শেষ করি।',
     style: 'Clear, calm, focused study coach in Bengali',
   },
   {
     id: 'english-alarm',
-    label: 'Morning Study (EN)',
+    labelBn: 'মর্নিং স্টাডি (EN)',
+    labelEn: 'Morning Study (EN)',
     text: "Good morning! It's time to wake up, grab some water, and start today's study session.",
     style: 'Upbeat, energizing morning study coach',
   },
@@ -141,6 +153,7 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
   onOpenVoiceCloneTool,
   onOpenVoiceCompare,
 }) => {
+  const { lang, bi } = useLanguage();
   const studioTier = resolveStudioTier({ isAdmin, userPlan, proPackageType });
   const caps = getStudioCapabilities(studioTier);
   const monthlyPriceLabel = billingConfig?.monthlyFee || billingConfig?.feeAmount || '50 BDT';
@@ -148,7 +161,7 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
   const freeDailyLimit = billingConfig?.freeDailyLimit ?? 5;
   const expiryDateLabel =
     proExpiresAtMs && proExpiresAtMs > Date.now()
-      ? new Date(proExpiresAtMs).toLocaleDateString('bn-BD', {
+      ? localizeDate(proExpiresAtMs, lang, {
           year: 'numeric',
           month: 'short',
           day: 'numeric',
@@ -325,10 +338,19 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
 
   const speakWithDeviceVoice = async (trimmedText: string, runId: number) => {
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
-      const msg = 'এই ব্রাউজারে Device Speech সাপোর্ট করে না। Gemini AI TTS ব্যবহার করতে Node সার্ভার বা VITE_API_BASE_URL সেট করুন।';
+      const msg = bi(
+        'এই ব্রাউজারে Device Speech সাপোর্ট করে না। Gemini AI TTS ব্যবহার করতে Node সার্ভার বা VITE_API_BASE_URL সেট করুন।',
+        'Device Speech is not supported in this browser. Connect a Node backend or set VITE_API_BASE_URL for Gemini AI TTS.'
+      );
       reportAppIssue({ source: 'TtsStudio:DeviceSpeech', severity: 'error', message: msg });
       if (isAdmin) setError(msg);
-      else setUserNotice('আপনার বর্তমান ব্রাউজারটি সরাসরি ভয়েস প্লেব্যাক সাপোর্ট করছে না। অনুগ্রহ করে Chrome বা আধুনিক ব্রাউজার ব্যবহার করুন।');
+      else
+        setUserNotice(
+          bi(
+            'আপনার বর্তমান ব্রাউজারটি সরাসরি ভয়েস প্লেব্যাক সাপোর্ট করছে না। অনুগ্রহ করে Chrome বা আধুনিক ব্রাউজার ব্যবহার করুন।',
+            'Your current browser does not support direct speech playback. Please use Chrome or a modern browser.'
+          )
+        );
       return;
     }
 
@@ -346,11 +368,19 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
     if (hasBengali && !bengaliVoice) {
       setIsPlaying(false);
       setIsUsingDeviceSpeech(false);
-      const msg =
-        'আপনার এই ব্রাউজার/ডিভাইসে বাংলা Device Voice ইনস্টল করা নেই এবং স্ট্যাটিক হোস্টে AI ব্যাকএন্ড সংযুক্ত নেই।';
+      const msg = bi(
+        'আপনার এই ব্রাউজার/ডিভাইসে বাংলা Device Voice ইনস্টল করা নেই এবং স্ট্যাটিক হোস্টে AI ব্যাকএন্ড সংযুক্ত নেই।',
+        'Bengali Device Voice is not installed on this browser/device and no AI backend is connected.'
+      );
       reportAppIssue({ source: 'TtsStudio:DeviceSpeech', severity: 'error', message: msg });
       if (isAdmin) setError(msg);
-      else setUserNotice('এই ডিভাইসে বাংলা ডিফল্ট ভয়েস পাওয়া যায়নি; অনুগ্রহ করে ইংরেজি স্ক্রিপ্ট ব্যবহার করুন অথবা বাংলা ভয়েস প্যাক চালু করুন।');
+      else
+        setUserNotice(
+          bi(
+            'এই ডিভাইসে বাংলা ডিফল্ট ভয়েস পাওয়া যায়নি; অনুগ্রহ করে ইংরেজি স্ক্রিপ্ট ব্যবহার করুন অথবা বাংলা ভয়েস প্যাক চালু করুন।',
+            'No Bengali system voice was found on this device; try an English script or install a Bengali voice pack.'
+          )
+        );
       return;
     }
 
@@ -377,10 +407,19 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
       if (!didStart && Date.now() - queuedAt < 120) {
         setIsPlaying(false);
         setIsUsingDeviceSpeech(false);
-        const msg = 'ডিভাইসের অডিও ইঞ্জিন টেক্সটটি পড়তে পারেনি। ডিভাইস সাউন্ড চেক করুন বা অন্য ব্রাউজার/সার্ভার লিংক ব্যবহার করুন।';
+        const msg = bi(
+          'ডিভাইসের অডিও ইঞ্জিন টেক্সটটি পড়তে পারেনি। ডিভাইস সাউন্ড চেক করুন বা অন্য ব্রাউজার/সার্ভার লিংক ব্যবহার করুন।',
+          'Device audio engine could not read the text. Check device volume or backend connection.'
+        );
         reportAppIssue({ source: 'TtsStudio:DeviceSpeech', severity: 'error', message: msg });
         if (isAdmin) setError(msg);
-        else setUserNotice('ডিভাইস স্পিকার মিউট বা অডিও চালু না থাকায় প্লেব্যাক হয়নি।');
+        else
+          setUserNotice(
+            bi(
+              'ডিভাইস স্পিকার মিউট বা অডিও চালু না থাকায় প্লেব্যাক হয়নি।',
+              'Playback did not start because device audio is muted or unavailable.'
+            )
+          );
         return;
       }
       if (isLoopingRef.current) {
@@ -401,7 +440,7 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
       setIsPlaying(false);
       setIsUsingDeviceSpeech(false);
       if (event?.error !== 'canceled' && event?.error !== 'interrupted') {
-        const msg = 'Device Speech প্লেব্যাক শুরু করা যায়নি।';
+        const msg = bi('Device Speech প্লেব্যাক শুরু করা যায়নি।', 'Could not start Device Speech playback.');
         reportAppIssue({
           source: 'TtsStudio:DeviceSpeech',
           severity: 'error',
@@ -409,7 +448,13 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
           details: event?.error ? `SpeechSynthesis error: ${String(event.error)}` : undefined,
         });
         if (isAdmin) setError(msg);
-        else setUserNotice('ভয়েস প্লেব্যাক শুরু করা যায়নি। অনুগ্রহ করে আবার চেষ্টা করুন।');
+        else
+          setUserNotice(
+            bi(
+              'ভয়েস প্লেব্যাক শুরু করা যায়নি। অনুগ্রহ করে আবার চেষ্টা করুন।',
+              'Could not start voice playback. Please try again.'
+            )
+          );
       }
     };
 
@@ -492,14 +537,25 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
     const limitFormatted = caps.maxScriptChars.toLocaleString('en-US');
     if (studioTier === 'free') {
       setUserNotice(
-        `ফ্রি প্ল্যানে সর্বোচ্চ ${limitFormatted} অক্ষরের স্ক্রিপ্ট জেনারেট করা যায়। ২,৫০০ বা ৫,০০০ অক্ষরের জন্য Monthly বা Yearly প্যাক নিন।`
+        bi(
+          `ফ্রি প্ল্যানে সর্বোচ্চ ${limitFormatted} অক্ষরের স্ক্রিপ্ট জেনারেট করা যায়। ২,৫০০ বা ৫,০০০ অক্ষরের জন্য Monthly বা Yearly প্যাক নিন।`,
+          `Free plan allows up to ${limitFormatted} characters per script. Get Monthly or Yearly Pro for 2,500 or 5,000 characters.`
+        )
       );
     } else if (studioTier === 'monthly') {
       setUserNotice(
-        `Monthly প্যাকে সর্বোচ্চ ${limitFormatted} অক্ষরের স্ক্রিপ্ট ব্যবহার করা যায়। একসাথে ৫,০০০ অক্ষর (২× বড় স্ক্রিপ্ট) পেতে Yearly প্যাকে আপগ্রেড করুন।`
+        bi(
+          `Monthly প্যাকে সর্বোচ্চ ${limitFormatted} অক্ষরের স্ক্রিপ্ট ব্যবহার করা যায়। একসাথে ৫,০০০ অক্ষর (২× বড় স্ক্রিপ্ট) পেতে Yearly প্যাকে আপগ্রেড করুন।`,
+          `Monthly pack supports up to ${limitFormatted} characters. Upgrade to Yearly for 5,000 characters (2× length).`
+        )
       );
     } else {
-      setUserNotice(`একসাথে সর্বোচ্চ ${limitFormatted} অক্ষর জেনারেট করা যাবে।`);
+      setUserNotice(
+        bi(
+          `একসাথে সর্বোচ্চ ${limitFormatted} অক্ষর জেনারেট করা যাবে।`,
+          `Maximum ${limitFormatted} characters can be generated at once.`
+        )
+      );
     }
     return false;
   };
@@ -532,7 +588,10 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
         const msg = err?.message || 'Playback failed. Please try again.';
         reportAppIssue({ source: 'TtsStudio:Playback', severity: 'error', message: msg });
         if (isAdmin) setError(msg);
-        else setUserNotice('অডিও চালাতে সমস্যা হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।');
+        else
+          setUserNotice(
+            bi('অডিও চালাতে সমস্যা হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।', 'Could not play audio. Please try again.')
+          );
         setIsPlaying(false);
       }
       return;
@@ -581,7 +640,13 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
       reportAppIssue({ source: 'TtsStudio', severity: 'error', message: msg });
       if (isMountedRef.current && activeRunIdRef.current === runId) {
         if (isAdmin) setError(msg);
-        else setUserNotice('এই মুহূর্তে ভয়েস তৈরি করা যাচ্ছে না। অনুগ্রহ করে কিছুক্ষণ পর আবার চেষ্টা করুন।');
+        else
+          setUserNotice(
+            bi(
+              'এই মুহূর্তে ভয়েস তৈরি করা যাচ্ছে না। অনুগ্রহ করে কিছুক্ষণ পর আবার চেষ্টা করুন।',
+              'Could not synthesize speech right now. Please try again shortly.'
+            )
+          );
       }
     } finally {
       if (isMountedRef.current) {
@@ -605,11 +670,19 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
         const hasBackend = backendAvailable === true ? true : await checkBackendHealth();
         if (isMountedRef.current) setBackendAvailable(hasBackend);
         if (!hasBackend) {
-          const msg =
-            'WAV ডাউনলোডের জন্য Gemini ব্যাকএন্ড সার্ভার প্রয়োজন (GitHub Pages স্ট্যাটিক হোস্টে সরাসরি WAV জেনারেট হয় না)।';
+          const msg = bi(
+            'WAV ডাউনলোডের জন্য Gemini ব্যাকএন্ড সার্ভার প্রয়োজন (GitHub Pages স্ট্যাটিক হোস্টে সরাসরি WAV জেনারেট হয় না)।',
+            'Gemini backend server is required to download WAV audio.'
+          );
           reportAppIssue({ source: 'TtsStudio:Download', severity: 'warning', message: msg });
           if (isAdmin) setError(msg);
-          else setUserNotice('এই মুহূর্তে সরাসরি WAV ডাউনলোড চালু নেই; উপরে Generate & Speak দিয়ে লাইভ অডিও শুনুন।');
+          else
+            setUserNotice(
+              bi(
+                'এই মুহূর্তে সরাসরি WAV ডাউনলোড চালু নেই; উপরে Generate & Speak দিয়ে লাইভ অডিও শুনুন।',
+                'Direct WAV download is unavailable right now; press Generate & Speak above to listen live.'
+              )
+            );
           return;
         }
 
@@ -642,7 +715,10 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
         reportAppIssue({ source: 'TtsStudio:Download', severity: 'error', message: msg });
         if (isMountedRef.current) {
           if (isAdmin) setError(msg);
-          else setUserNotice('WAV ফাইল তৈরি করা যাচ্ছে না। অনুগ্রহ করে পরে আবার চেষ্টা করুন।');
+          else
+            setUserNotice(
+              bi('WAV ফাইল তৈরি করা যাচ্ছে না। অনুগ্রহ করে পরে আবার চেষ্টা করুন।', 'Failed to prepare WAV file. Please try again later.')
+            );
         }
         return;
       } finally {
@@ -658,7 +734,7 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    window.setTimeout(() => URL.revokeObjectURL(url), 1500);
 
     setDownloaded(true);
     window.setTimeout(() => {
@@ -671,7 +747,12 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
     if (!trimmed) return;
 
     if (caps.maxSavedScripts === 0) {
-      setUserNotice('কাস্টম স্ক্রিপ্ট সেভ করতে Monthly (৩টি) বা Yearly (২৫টি) প্যাক নিন।');
+      setUserNotice(
+        bi(
+          'কাস্টম স্ক্রিপ্ট সেভ করতে Monthly (৩টি) বা Yearly (২৫টি) প্যাক নিন।',
+          'Get Monthly (3 scripts) or Yearly (25 scripts) Pro to save custom scripts.'
+        )
+      );
       onOpenUpgradePackage?.('monthly');
       return;
     }
@@ -679,10 +760,18 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
     if (savedScripts.length >= caps.maxSavedScripts) {
       if (studioTier === 'monthly') {
         setUserNotice(
-          `Monthly প্যাকে সর্বোচ্চ ${caps.maxSavedScripts}টি স্ক্রিপ্ট সেভ করা যায়। ২৫টি স্ক্রিপ্ট লাইব্রেরি পেতে Yearly প্যাকে আপগ্রেড করুন।`
+          bi(
+            `Monthly প্যাকে সর্বোচ্চ ${caps.maxSavedScripts}টি স্ক্রিপ্ট সেভ করা যায়। ২৫টি স্ক্রিপ্ট লাইব্রেরি পেতে Yearly প্যাকে আপগ্রেড করুন।`,
+            `Monthly pack supports up to ${caps.maxSavedScripts} saved scripts. Upgrade to Yearly for 25 scripts.`
+          )
         );
       } else {
-        setUserNotice(`সর্বোচ্চ ${caps.maxSavedScripts}টি স্ক্রিপ্ট সেভ করা আছে। নতুন সেভ করতে পুরোনো ১টি মুছুন।`);
+        setUserNotice(
+          bi(
+            `সর্বোচ্চ ${caps.maxSavedScripts}টি স্ক্রিপ্ট সেভ করা আছে। নতুন সেভ করতে পুরোনো ১টি মুছুন।`,
+            `Maximum ${caps.maxSavedScripts} scripts saved. Delete an older one to save a new script.`
+          )
+        );
       }
       return;
     }
@@ -718,11 +807,11 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
               <div className="inline-flex items-center gap-2 text-indigo-600 dark:text-amber-400">
                 <Sun size={16} />
                 <span className="text-xs font-bold uppercase tracking-widest">
-                  Voice Studio · Multilingual TTS
+                  {bi('ভয়েস স্টুডিও · মাল্টিলিঙ্গুয়াল TTS', 'Voice Studio · Multilingual TTS')}
                 </span>
               </div>
               <h2 className="text-2xl sm:text-3xl font-serif font-medium tracking-tight text-slate-900 dark:text-white">
-                Speak any script aloud
+                {bi('যেকোনো লেখা মুখে বলুন', 'Speak any script aloud')}
               </h2>
             </div>
 
@@ -737,16 +826,19 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
                 />
                 <span className="font-semibold text-slate-900 dark:text-white">
                   {isAdmin
-                    ? 'Admin Unlimited'
+                    ? bi('অ্যাডমিন আনলিমিটেড', 'Admin Unlimited')
                     : userPlan === 'pro'
                     ? proPackageType === 'yearly'
-                      ? 'Yearly Pro Active'
-                      : 'Monthly Pro Active'
-                    : `Free (${Math.max(0, freeDailyLimit - usedToday)}/${freeDailyLimit} Left)`}
+                      ? bi('ইয়ারলি প্রো সক্রিয়', 'Yearly Pro Active')
+                      : bi('মান্থলি প্রো সক্রিয়', 'Monthly Pro Active')
+                    : bi(
+                        `ফ্রি (${Math.max(0, freeDailyLimit - usedToday)}/${freeDailyLimit} বাকি)`,
+                        `Free (${Math.max(0, freeDailyLimit - usedToday)}/${freeDailyLimit} Left)`
+                      )}
                 </span>
                 {expiryDateLabel && userPlan === 'pro' && !isAdmin && (
                   <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                    · মেয়াদ: {expiryDateLabel}
+                    · {bi('মেয়াদ:', 'Expires:')} {expiryDateLabel}
                   </span>
                 )}
               </div>
@@ -757,7 +849,7 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
                   <div className="text-xs">
                     <span className="font-bold">{activeCustomVoice.name}</span>
                     <span className="opacity-75 mx-1.5">·</span>
-                    <span className="font-medium">আমার ভয়েস প্রোফাইল</span>
+                    <span className="font-medium">{bi('আমার ভয়েস প্রোফাইল', 'My Voice Profile')}</span>
                   </div>
                 </div>
               ) : (
@@ -776,7 +868,8 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
                       </span>
                       <span className="text-slate-400 dark:text-slate-500 mx-1.5">·</span>
                       <span className="text-indigo-600 dark:text-amber-300 font-medium">
-                        {currentVoice.analysis.gender}, {currentVoice.pitch}
+                        {localizeGender(currentVoice.analysis.gender, lang)},{' '}
+                        {localizePitch(currentVoice.pitch, lang)}
                       </span>
                     </div>
                   </div>
@@ -790,7 +883,7 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
                   className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 text-xs font-bold shadow-sm transition-all whitespace-nowrap shrink-0"
                 >
                   <Mic size={14} />
-                  <span>নিজের ভয়েস রেকর্ড ও ক্লোন (Pro)</span>
+                  <span>{bi('নিজের ভয়েস রেকর্ড ও ক্লোন (Pro)', 'Record & Clone My Voice (Pro)')}</span>
                 </button>
               )}
             </div>
@@ -803,7 +896,7 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
               <div className="space-y-2">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
-                    Quick Scripts
+                    {bi('দ্রুত স্ক্রিপ্ট', 'Quick Scripts')}
                   </span>
                   {onOpenIdeas && (
                     <button
@@ -812,7 +905,7 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
                       className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors"
                     >
                       <TrendingUp size={13} />
-                      <span>AI Trending Ideas</span>
+                      <span>{bi('AI ট্রেন্ডিং আইডিয়া', 'AI Trending Ideas')}</span>
                     </button>
                   )}
                 </div>
@@ -836,7 +929,7 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
                             : 'bg-zinc-50 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-700'
                         }`}
                       >
-                        {preset.label}
+                        {lang === 'bn' ? preset.labelBn : preset.labelEn}
                       </button>
                     );
                   })}
@@ -850,7 +943,10 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
                     htmlFor="tts-script-input"
                     className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400"
                   >
-                    Script Text (বাংলা, English, or any language)
+                    {bi(
+                      'স্ক্রিপ্ট টেক্সট (বাংলা, ইংরেজি বা যেকোনো ভাষা)',
+                      'Script Text (Bengali, English, or any language)'
+                    )}
                   </label>
                   <div className="flex items-center gap-3">
                     <button
@@ -860,13 +956,16 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
                       className="inline-flex items-center gap-1 text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors disabled:opacity-40"
                       title={
                         caps.maxSavedScripts === 0
-                          ? 'Pro প্ল্যানে স্ক্রিপ্ট সেভ করুন'
-                          : `Save script (${savedScripts.length}/${caps.maxSavedScripts})`
+                          ? bi('Pro প্ল্যানে স্ক্রিপ্ট সেভ করুন', 'Upgrade to Pro to save scripts')
+                          : bi(
+                              `স্ক্রিপ্ট সেভ করুন (${savedScripts.length}/${caps.maxSavedScripts})`,
+                              `Save script (${savedScripts.length}/${caps.maxSavedScripts})`
+                            )
                       }
                     >
                       <Bookmark size={12} />
                       <span>
-                        Save ({savedScripts.length}/{caps.maxSavedScripts})
+                        {bi('সেভ', 'Save')} ({savedScripts.length}/{caps.maxSavedScripts})
                       </span>
                     </button>
                     <button
@@ -878,10 +977,10 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
                         setUserNotice(null);
                       }}
                       className="inline-flex items-center gap-1 text-xs text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors"
-                      title="Reset to morning study prompt"
+                      title={bi('সকালের পড়া প্রম্পটে রিসেট করুন', 'Reset to morning study prompt')}
                     >
                       <RotateCcw size={12} />
-                      <span>Reset</span>
+                      <span>{bi('রিসেট', 'Reset')}</span>
                     </button>
                   </div>
                 </div>
@@ -902,7 +1001,10 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
                     }
                   }}
                   rows={4}
-                  placeholder="Enter or paste text in Bengali, English, or any language..."
+                  placeholder={bi(
+                    'বাংলা, ইংরেজি বা যেকোনো ভাষায় আপনার লেখা লিখুন বা পেস্ট করুন...',
+                    'Enter or paste text in Bengali, English, or any language...'
+                  )}
                   className={`w-full rounded-2xl bg-zinc-50 dark:bg-zinc-800/80 border p-4 text-lg sm:text-xl leading-relaxed text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none focus:ring-2 transition-all resize-none ${
                     isOverCharLimit
                       ? 'border-red-400 dark:border-red-700 focus:ring-red-200 dark:focus:ring-red-950'
@@ -911,7 +1013,10 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
                 />
                 <div className="flex flex-wrap justify-between items-center gap-2 text-xs px-1">
                   <span className="text-zinc-400 dark:text-zinc-500">
-                    Supports Bengali, English &amp; multilingual speech · Ctrl/Cmd+Enter to play
+                    {bi(
+                      'বাংলা, ইংরেজি ও বহুভাষী ভয়েস সাপোর্ট · চালাতে Ctrl/Cmd+Enter চাপুন',
+                      'Supports Bengali, English & multilingual speech · Ctrl/Cmd+Enter to play'
+                    )}
                   </span>
                   <div className="flex items-center gap-2">
                     <span
@@ -921,7 +1026,8 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
                           : 'text-zinc-500 dark:text-zinc-400'
                       }`}
                     >
-                      {text.length.toLocaleString('en-US')} / {caps.maxScriptChars.toLocaleString('en-US')} chars
+                      {text.length.toLocaleString('en-US')} / {caps.maxScriptChars.toLocaleString('en-US')}{' '}
+                      {bi('অক্ষর', 'chars')}
                     </span>
                     {!caps.allowPlaybackSpeed && onOpenUpgradePackage && (
                       <button
@@ -929,7 +1035,7 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
                         onClick={() => onOpenUpgradePackage('yearly')}
                         className="text-[11px] font-semibold text-amber-600 dark:text-amber-400 hover:underline"
                       >
-                        5,000 chars (Yearly)
+                        {bi('৫,০০০ অক্ষর (Yearly)', '5,000 chars (Yearly)')}
                       </button>
                     )}
                   </div>
@@ -940,7 +1046,7 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
               {savedScripts.length > 0 && (
                 <div className="space-y-1.5">
                   <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
-                    My Saved Scripts ({savedScripts.length}/{caps.maxSavedScripts})
+                    {bi('আমার সংরক্ষিত স্ক্রিপ্ট', 'My Saved Scripts')} ({savedScripts.length}/{caps.maxSavedScripts})
                   </span>
                   <div className="flex flex-wrap gap-2">
                     {savedScripts.map((item) => (
@@ -965,7 +1071,7 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
                           type="button"
                           onClick={() => handleDeleteSavedScript(item.id)}
                           className="p-0.5 rounded-full text-zinc-400 hover:text-red-500 transition-colors"
-                          aria-label={`Delete ${item.title}`}
+                          aria-label={bi(`${item.title} মুছুন`, `Delete ${item.title}`)}
                         >
                           <Trash2 size={11} />
                         </button>
@@ -982,16 +1088,19 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
                     htmlFor="tts-style-input"
                     className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400"
                   >
-                    Delivery Tone &amp; Style
+                    {bi('ডেলিভারি টোন ও স্টাইল', 'Delivery Tone & Style')}
                   </label>
                   <span className="text-[11px] text-zinc-400 dark:text-zinc-500">
-                    {caps.allowExtraStyles ? '৮টি স্টুডিও স্টাইল আনলকড' : '৪ স্ট্যান্ডার্ড · +৪ Yearly প্রো'}
+                    {caps.allowExtraStyles
+                      ? bi('৮টি স্টুডিও স্টাইল আনলকড', '8 Studio styles unlocked')
+                      : bi('৪ স্ট্যান্ডার্ড · +৪ Yearly প্রো', '4 Standard · +4 Yearly Pro')}
                   </span>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                   {STUDIO_STYLE_PRESETS.map((preset) => {
                     const selected = style === preset.value;
                     const locked = preset.tier === 'yearly' && !caps.allowExtraStyles;
+                    const presetDisplayLabel = localizeStudioPresetLabel(preset.id, preset.label, lang);
                     return (
                       <button
                         key={preset.id}
@@ -999,7 +1108,10 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
                         onClick={() => {
                           if (locked) {
                             setUserNotice(
-                              `"${preset.label}" এক্সক্লুসিভ স্টুডিও স্টাইলটি শুধু Yearly প্যাকে (৩৬৫ দিন) পাওয়া যায়।`
+                              bi(
+                                `"${presetDisplayLabel}" এক্সক্লুসিভ স্টুডিও স্টাইলটি শুধু Yearly প্যাকে (৩৬৫ দিন) পাওয়া যায়।`,
+                                `"${presetDisplayLabel}" is an exclusive Yearly Pro studio style (365 days).`
+                              )
                             );
                             onOpenUpgradePackage?.('yearly');
                             return;
@@ -1017,7 +1129,7 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
                         }`}
                       >
                         {locked && <Lock size={11} className="shrink-0" />}
-                        <span>{preset.label}</span>
+                        <span>{presetDisplayLabel}</span>
                       </button>
                     );
                   })}
@@ -1030,7 +1142,10 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
                     if (isPlaying) stopPlayback();
                     setStyle(e.target.value);
                   }}
-                  placeholder="Optional vocal direction (e.g. Cheerful morning host)..."
+                  placeholder={bi(
+                    'ঐচ্ছিক কণ্ঠের ভঙ্গি লিখুন (যেমন: প্রফুল্ল সকালের উপস্থাপক)...',
+                    'Optional vocal direction (e.g. Cheerful morning host)...'
+                  )}
                   className="w-full rounded-xl bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 px-3.5 py-2 text-sm text-zinc-800 dark:text-zinc-200 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:focus:ring-indigo-900"
                 />
               </div>
@@ -1040,7 +1155,7 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
                 <div className="flex items-center justify-between gap-2">
                   <div className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400">
                     <Crown size={13} />
-                    <span>Yearly Pro Audio Controls</span>
+                    <span>{bi('Yearly প্রো অডিও কন্ট্রোল', 'Yearly Pro Audio Controls')}</span>
                   </div>
                   {!caps.allowPlaybackSpeed && onOpenUpgradePackage && (
                     <button
@@ -1049,7 +1164,7 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
                       className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-[11px] font-semibold transition-colors"
                     >
                       <Lock size={10} />
-                      <span>Yearly দিয়ে আনলক</span>
+                      <span>{bi('Yearly দিয়ে আনলক', 'Unlock with Yearly')}</span>
                     </button>
                   )}
                 </div>
@@ -1059,7 +1174,7 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
                   <div className="space-y-1.5">
                     <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-zinc-600 dark:text-zinc-300">
                       <Gauge size={12} />
-                      <span>প্লেব্যাক গতি</span>
+                      <span>{bi('প্লেব্যাক গতি', 'Playback Speed')}</span>
                     </span>
                     <div className="grid grid-cols-4 gap-1">
                       {STUDIO_PLAYBACK_SPEEDS.map((spd) => {
@@ -1095,7 +1210,7 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
                   <div className="space-y-1.5">
                     <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-zinc-600 dark:text-zinc-300">
                       <Zap size={12} />
-                      <span>অ্যালার্ম সাউন্ড বুস্ট</span>
+                      <span>{bi('অ্যালার্ম সাউন্ড বুস্ট', 'Alarm Sound Boost')}</span>
                     </span>
                     <button
                       type="button"
@@ -1114,7 +1229,11 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
                       }`}
                     >
                       {!caps.allowLoudnessBoost && <Lock size={11} className="text-amber-600 dark:text-amber-400" />}
-                      <span>{effectiveBoost ? 'Loud Boost +40% ON' : 'Normal (Boost +40%)'}</span>
+                      <span>
+                        {effectiveBoost
+                          ? bi('লাউড বুস্ট +৪০% চালু', 'Loud Boost +40% ON')
+                          : bi('নরমাল (বুস্ট +৪০%)', 'Normal (Boost +40%)')}
+                      </span>
                     </button>
                   </div>
 
@@ -1122,7 +1241,7 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
                   <div className="space-y-1.5">
                     <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-zinc-600 dark:text-zinc-300">
                       <Timer size={12} />
-                      <span>লুপ বিরতি</span>
+                      <span>{bi('লুপ বিরতি', 'Loop Delay')}</span>
                     </span>
                     <div className="grid grid-cols-4 gap-1">
                       {STUDIO_ALARM_DELAYS_MS.map((ms) => {
@@ -1163,7 +1282,7 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
               <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200/80 dark:border-zinc-700/80 space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-                    Select Voice Talent
+                    {bi('ভয়েস ট্যালেন্ট নির্বাচন', 'Select Voice Talent')}
                   </span>
                   <div className="flex items-center gap-3">
                     {onOpenVoiceCompare && (
@@ -1173,7 +1292,7 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
                         className="inline-flex items-center gap-1 text-[11px] font-semibold text-zinc-600 dark:text-zinc-300 hover:text-indigo-600 dark:hover:text-amber-400"
                       >
                         <ArrowLeftRight size={12} />
-                        <span>Compare A vs B</span>
+                        <span>{bi('তুলনা A vs B', 'Compare A vs B')}</span>
                       </button>
                     )}
                     {onOpenVoiceCloneTool && (
@@ -1183,7 +1302,7 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
                         className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-600 dark:text-amber-400 hover:underline"
                       >
                         <Mic size={12} />
-                        <span>নতুন ভয়েস রেকর্ড</span>
+                        <span>{bi('নতুন ভয়েস রেকর্ড', 'Record New Voice')}</span>
                         <ArrowRight size={11} />
                       </button>
                     )}
@@ -1204,7 +1323,7 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
                         : 'text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800'
                     }`}
                   >
-                    স্টুডিও ভয়েস ({voices.length})
+                    {bi('স্টুডিও ভয়েস', 'Studio Voices')} ({voices.length})
                   </button>
                   <button
                     type="button"
@@ -1223,7 +1342,7 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
                     }`}
                   >
                     <UserCheck size={12} />
-                    <span>আমার ভয়েস ({customVoices.length})</span>
+                    <span>{bi('আমার ভয়েস', 'My Voices')} ({customVoices.length})</span>
                   </button>
                 </div>
 
@@ -1242,7 +1361,7 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
                       >
                         {customVoices.map((cv) => (
                           <option key={cv.id} value={cv.id}>
-                            {cv.name} — {cv.gender}, {cv.pitchLabel} ({cv.durationSec}s)
+                            {cv.name} — {localizeGender(cv.gender, lang)}, {localizePitch(cv.pitchLabel, lang)} ({cv.durationSec}s)
                           </option>
                         ))}
                       </select>
@@ -1251,7 +1370,7 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
                       </div>
                     </div>
                     <p className="text-xs text-zinc-600 dark:text-zinc-300 leading-relaxed">
-                      <strong>Voice DNA:</strong> {activeCustomVoice.toneDescription}
+                      <strong>{bi('ভয়েস ডিএনএ:', 'Voice DNA:')}</strong> {activeCustomVoice.toneDescription}
                     </p>
                   </div>
                 ) : (
@@ -1270,7 +1389,7 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
                       >
                         {voices.map((v) => (
                           <option key={v.name} value={v.name}>
-                            {v.name} — {v.analysis.gender}, {v.pitch} ({v.characteristics[0]})
+                            {v.name} — {localizeGender(v.analysis.gender, lang)}, {localizePitch(v.pitch, lang)} ({localizeTrait(v.characteristics[0], lang)})
                           </option>
                         ))}
                       </select>
@@ -1280,7 +1399,9 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
                     </div>
                     {currentVoice && (
                       <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">
-                        {currentVoice.analysis.characteristics.join(' • ')}
+                        {currentVoice.analysis.characteristics
+                          .map((c) => localizeTrait(c, lang))
+                          .join(' • ')}
                       </p>
                     )}
                   </>
@@ -1298,7 +1419,11 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
                     handleGenerateAndPlay();
                   }
                 }}
-                aria-label={isPlaying ? 'Stop speech playback' : 'Generate and play speech'}
+                aria-label={
+                  isPlaying
+                    ? bi('স্পিচ প্লেব্যাক থামান', 'Stop speech playback')
+                    : bi('স্পিচ তৈরি করে শুনুন', 'Generate and play speech')
+                }
                 className={`relative h-36 rounded-2xl bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 overflow-hidden flex items-center justify-center transition-colors ${
                   isLoading ? 'cursor-wait' : 'cursor-pointer hover:border-indigo-300 dark:hover:border-indigo-700'
                 }`}
@@ -1315,7 +1440,7 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
                   <div className="flex flex-col items-center gap-2 text-indigo-600 dark:text-indigo-400 z-10">
                     <Loader2 size={28} className="animate-spin" />
                     <span className="text-xs font-medium tracking-wide">
-                      Synthesizing speech...
+                      {bi('ভয়েস তৈরি হচ্ছে...', 'Synthesizing speech...')}
                     </span>
                   </div>
                 ) : isPlaying ? (
@@ -1331,7 +1456,7 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
                       <Volume2 size={20} className="text-zinc-700 dark:text-zinc-300" />
                     </div>
                     <span className="text-xs font-medium">
-                      Click to generate &amp; listen
+                      {bi('জেনারেট ও শুনতে ক্লিক করুন', 'Click to generate & listen')}
                     </span>
                   </div>
                 )}
@@ -1372,10 +1497,10 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
                   )}
                   <span>
                     {isLoading
-                      ? 'Generating Audio...'
+                      ? bi('অডিও তৈরি হচ্ছে...', 'Generating Audio...')
                       : isPlaying
-                      ? 'Stop Speaking'
-                      : 'Generate & Speak'}
+                      ? bi('বলা থামান', 'Stop Speaking')
+                      : bi('তৈরি করুন ও বলুন', 'Generate & Speak')}
                   </span>
                 </button>
 
@@ -1388,13 +1513,19 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
                         ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800'
                         : 'bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-700'
                     }`}
-                    title="Repeat continuously like a wake-up alarm"
+                    title={bi(
+                      'অ্যালার্মের মতো একটানা পুনরাবৃত্তি করুন',
+                      'Repeat continuously like a wake-up alarm'
+                    )}
                   >
                     <Repeat size={14} />
                     <span>
                       {isLooping
-                        ? `Alarm On (${(effectiveAlarmDelayMs / 1000).toFixed(effectiveAlarmDelayMs === 1200 ? 1 : 0)}s)`
-                        : 'Alarm Loop'}
+                        ? bi(
+                            `অ্যালার্ম চালু (${(effectiveAlarmDelayMs / 1000).toFixed(effectiveAlarmDelayMs === 1200 ? 1 : 0)}s)`,
+                            `Alarm On (${(effectiveAlarmDelayMs / 1000).toFixed(effectiveAlarmDelayMs === 1200 ? 1 : 0)}s)`
+                          )
+                        : bi('অ্যালার্ম লুপ', 'Alarm Loop')}
                     </span>
                   </button>
 
@@ -1409,13 +1540,19 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
                     ) : (
                       <Download size={14} />
                     )}
-                    <span>{downloaded ? 'Saved WAV' : 'Download WAV'}</span>
+                    <span>
+                      {downloaded ? bi('WAV সেভ হয়েছে', 'Saved WAV') : bi('WAV ডাউনলোড', 'Download WAV')}
+                    </span>
                   </button>
                 </div>
 
                 {isAdmin && backendAvailable === false && (
                   <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/70 text-xs text-amber-800 dark:text-amber-200 leading-relaxed">
-                    <strong>Admin Notice (Static Host):</strong> এই ডোমেইনে এখন Node ব্যাকএন্ড সংযুক্ত নেই। GitHub Pages-কেও ডায়নামিক করতে <strong>Admin Panel → Fee &amp; Quota Settings</strong>-এ গিয়ে আপনার Render/Node সার্ভারের URL সেভ করুন—সব ইউজারের জন্য সাথে সাথে Gemini বাংলা ভয়েস চালু হয়ে যাবে।
+                    <strong>{bi('অ্যাডমিন নোটিশ (Static Host):', 'Admin Notice (Static Host):')}</strong>{' '}
+                    {bi(
+                      'এই ডোমেইনে এখন Node ব্যাকএন্ড সংযুক্ত নেই। GitHub Pages-কেও ডায়নামিক করতে Admin Panel → Fee & Quota Settings-এ গিয়ে আপনার Render/Node সার্ভারের URL সেভ করুন—সব ইউজারের জন্য সাথে সাথে Gemini বাংলা ভয়েস চালু হয়ে যাবে।',
+                      'No Node backend is currently connected on this host. Save your Render/Node backend URL in Admin Panel → Fee & Quota Settings to enable Gemini AI TTS globally.'
+                    )}
                   </div>
                 )}
 
@@ -1423,8 +1560,11 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
                   <Sparkles size={12} className="text-indigo-500" />
                   <span>
                     {isUsingDeviceSpeech
-                      ? 'Playing via Browser Device Speech (Static Fallback)'
-                      : 'Powered by Gemini 3.8 Flash Lite TTS'}
+                      ? bi(
+                          'ব্রাউজার ডিভাইস স্পিচ দিয়ে চলছে (Static Fallback)',
+                          'Playing via Browser Device Speech (Static Fallback)'
+                        )
+                      : bi('Gemini 3.8 Flash Lite TTS দ্বারা চালিত', 'Powered by Gemini 3.8 Flash Lite TTS')}
                   </span>
                 </div>
               </div>
@@ -1438,19 +1578,28 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
             <div className="space-y-1.5">
               <div className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest text-amber-600 dark:text-amber-400">
                 <Crown size={14} />
-                <span>Monthly vs Yearly Pro Perks</span>
+                <span>{bi('Monthly বনাম Yearly প্রো সুবিধা', 'Monthly vs Yearly Pro Perks')}</span>
               </div>
               <h3 className="text-2xl font-serif font-medium text-zinc-900 dark:text-white">
-                ভয়েস স্টুডিও Monthly ও Yearly প্যাকেজের সুবিধার ব্যবধান
+                {bi(
+                  'ভয়েস স্টুডিও Monthly ও Yearly প্যাকেজের সুবিধার ব্যবধান',
+                  'Voice Studio Monthly vs Yearly Package Comparison'
+                )}
               </h3>
               <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400">
                 {userPlan === 'pro' && !isAdmin
-                  ? `আপনার বর্তমান প্ল্যান: ${
-                      proPackageType === 'yearly'
-                        ? 'Yearly Pro (৩৬৫ দিন)'
-                        : 'Monthly Pro (৩০ দিন)'
-                    }${expiryDateLabel ? ` · মেয়াদ শেষ: ${expiryDateLabel}` : ''}`
-                  : `ফ্রি প্ল্যানে সর্বোচ্চ ১,০০০ অক্ষর • আজ ব্যবহার: ${usedToday}/${freeDailyLimit} বার • বোনাস: ${bonusCredits} টি`}
+                  ? bi(
+                      `আপনার বর্তমান প্ল্যান: ${
+                        proPackageType === 'yearly' ? 'Yearly Pro (৩৬৫ দিন)' : 'Monthly Pro (৩০ দিন)'
+                      }${expiryDateLabel ? ` · মেয়াদ শেষ: ${expiryDateLabel}` : ''}`,
+                      `Current Plan: ${
+                        proPackageType === 'yearly' ? 'Yearly Pro (365 days)' : 'Monthly Pro (30 days)'
+                      }${expiryDateLabel ? ` · Expires: ${expiryDateLabel}` : ''}`
+                    )
+                  : bi(
+                      `ফ্রি প্ল্যানে সর্বোচ্চ ১,০০০ অক্ষর • আজ ব্যবহার: ${usedToday}/${freeDailyLimit} বার • বোনাস: ${bonusCredits} টি`,
+                      `Free plan up to 1,000 chars • Used today: ${usedToday}/${freeDailyLimit} • Bonus: ${bonusCredits}`
+                    )}
               </p>
             </div>
 
@@ -1461,7 +1610,7 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
                 className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/50 text-xs font-semibold transition-colors whitespace-nowrap shrink-0"
               >
                 <Shield size={14} />
-                <span>প্যাকেজের দাম পরিবর্তন করুন (Admin)</span>
+                <span>{bi('প্যাকেজের দাম পরিবর্তন করুন (Admin)', 'Edit Package Pricing (Admin)')}</span>
               </button>
             )}
           </div>
@@ -1479,23 +1628,23 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
                 <div className="flex items-center justify-between gap-2">
                   <div className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
                     <CalendarDays size={14} />
-                    <span>Monthly Package</span>
+                    <span>{bi('মান্থলি প্যাকেজ', 'Monthly Package')}</span>
                   </div>
                   <span className="px-2.5 py-0.5 rounded-md text-[11px] font-semibold bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300">
-                    {STUDIO_TIER_LIMITS.monthly.validityLabel}
+                    {bi(STUDIO_TIER_LIMITS.monthly.validityLabel, '30 Days Validity')}
                   </span>
                 </div>
 
                 <div>
                   <h4 className="text-xl font-serif font-medium text-zinc-900 dark:text-white">
-                    মাসিক স্টুডিও প্যাক
+                    {bi('মাসিক স্টুডিও প্যাক', 'Monthly Studio Pack')}
                   </h4>
                   <div className="mt-2 flex items-baseline gap-1.5">
                     <span className="text-3xl font-bold text-zinc-900 dark:text-white tabular-nums">
                       {monthlyPriceLabel}
                     </span>
                     <span className="text-xs text-zinc-500 dark:text-zinc-400">
-                      / ৩০ দিন
+                      {bi('/ ৩০ দিন', '/ 30 days')}
                     </span>
                   </div>
                 </div>
@@ -1503,30 +1652,45 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
                 <ul className="space-y-2.5 text-xs sm:text-sm text-zinc-600 dark:text-zinc-300">
                   <li className="flex items-start gap-2">
                     <CheckCircle2 size={15} className="text-indigo-600 dark:text-indigo-400 shrink-0 mt-0.5" />
-                    <span>প্রতি স্ক্রিপ্টে <strong>২,৫০০ অক্ষর</strong> (ফ্রি-র ২.৫×) ও আনলিমিটেড দৈনিক ব্যবহার</span>
+                    <span>
+                      {bi(
+                        <>প্রতি স্ক্রিপ্টে <strong>২,৫০০ অক্ষর</strong> (ফ্রি-র ২.৫×) ও আনলিমিটেড দৈনিক ব্যবহার</>,
+                        <>Up to <strong>2,500 chars</strong> per script (2.5× Free) &amp; unlimited daily generations</>
+                      )}
+                    </span>
                   </li>
                   <li className="flex items-start gap-2">
                     <CheckCircle2 size={15} className="text-indigo-600 dark:text-indigo-400 shrink-0 mt-0.5" />
-                    <span>৪টি স্ট্যান্ডার্ড ভয়েস স্টাইল, ৩০টি ভয়েস ও WAV ডাউনলোড</span>
+                    <span>
+                      {bi(
+                        '৪টি স্ট্যান্ডার্ড ভয়েস স্টাইল, ৩০টি ভয়েস ও WAV ডাউনলোড',
+                        '4 standard voice styles, 30 studio voices & WAV downloads'
+                      )}
+                    </span>
                   </li>
                   <li className="flex items-start gap-2">
                     <CheckCircle2 size={15} className="text-indigo-600 dark:text-indigo-400 shrink-0 mt-0.5" />
-                    <span>সর্বোচ্চ <strong>৩টি</strong> ব্যক্তিগত কাস্টম স্ক্রিপ্ট সেভ ও ফিক্সড ১.২স লুপ</span>
+                    <span>
+                      {bi(
+                        <>সর্বোচ্চ <strong>৩টি</strong> ব্যক্তিগত কাস্টম স্ক্রিপ্ট সেভ ও ফিক্সড ১.২স লুপ</>,
+                        <>Save up to <strong>3</strong> custom scripts &amp; fixed 1.2s alarm loop</>
+                      )}
+                    </span>
                   </li>
                 </ul>
               </div>
 
               {isAdmin ? (
                 <div className="text-xs font-semibold text-zinc-500 dark:text-zinc-400">
-                  Admin অ্যাকাউন্টে সব ফিচার আনলিমিটেড চালু আছে
+                  {bi('Admin অ্যাকাউন্টে সব ফিচার আনলিমিটেড চালু আছে', 'All features unlocked on Admin account')}
                 </div>
               ) : userPlan === 'pro' && proPackageType !== 'yearly' ? (
                 <div className="w-full py-2.5 px-4 rounded-xl bg-indigo-600/10 border border-indigo-300 dark:border-indigo-700 text-indigo-700 dark:text-indigo-300 text-xs font-semibold text-center">
-                  বর্তমান Monthly প্যাকেজ সক্রিয় ✓
+                  {bi('বর্তমান Monthly প্যাকেজ সক্রিয় ✓', 'Current Monthly Package Active ✓')}
                 </div>
               ) : userPlan === 'pro' && proPackageType === 'yearly' ? (
                 <div className="w-full py-2.5 px-4 rounded-xl bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400 text-xs font-medium text-center">
-                  আপনি উচ্চতর Yearly প্যাকেজে আছেন
+                  {bi('আপনি উচ্চতর Yearly প্যাকেজে আছেন', 'You are on the higher Yearly plan')}
                 </div>
               ) : (
                 <button
@@ -1535,7 +1699,7 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
                   className="w-full inline-flex items-center justify-center gap-2 py-3 px-5 rounded-xl bg-zinc-900 dark:bg-indigo-600 hover:bg-zinc-800 dark:hover:bg-indigo-500 text-white text-sm font-semibold transition-colors"
                 >
                   <Crown size={15} />
-                  <span>Monthly প্যাকেজ নিন</span>
+                  <span>{bi('Monthly প্যাকেজ নিন', 'Get Monthly Package')}</span>
                 </button>
               )}
             </div>
@@ -1552,23 +1716,26 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
                 <div className="flex items-center justify-between gap-2">
                   <div className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400">
                     <Crown size={14} />
-                    <span>Yearly Studio Pro</span>
+                    <span>{bi('ইয়ারলি স্টুডিও প্রো', 'Yearly Studio Pro')}</span>
                   </div>
                   <span className="px-2.5 py-0.5 rounded-md text-[11px] font-bold bg-amber-500 text-zinc-950">
-                    সর্বোচ্চ সুবিধা · ৩৬৫ দিন
+                    {bi('সর্বোচ্চ সুবিধা · ৩৬৫ দিন', 'Best Value · 365 Days')}
                   </span>
                 </div>
 
                 <div>
                   <h4 className="text-xl font-serif font-medium text-zinc-900 dark:text-white">
-                    বাৎসরিক প্রো প্যাক (Monthly-র সব সুবিধা +)
+                    {bi(
+                      'বাৎসরিক প্রো প্যাক (Monthly-র সব সুবিধা +)',
+                      'Annual Pro Pack (All Monthly perks +)'
+                    )}
                   </h4>
                   <div className="mt-2 flex items-baseline gap-1.5">
                     <span className="text-3xl font-bold text-zinc-900 dark:text-white tabular-nums">
                       {yearlyPriceLabel}
                     </span>
                     <span className="text-xs text-zinc-500 dark:text-zinc-400">
-                      / ৩৬৫ দিন (১ বছর)
+                      {bi('/ ৩৬৫ দিন (১ বছর)', '/ 365 days (1 year)')}
                     </span>
                   </div>
                 </div>
@@ -1576,30 +1743,50 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
                 <ul className="space-y-2.5 text-xs sm:text-sm text-zinc-700 dark:text-zinc-300">
                   <li className="flex items-start gap-2">
                     <CheckCircle2 size={15} className="text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-                    <span>প্রতি স্ক্রিপ্টে <strong>৫,০০০ অক্ষর</strong> (Monthly-র ২× দ্বিগুণ দৈর্ঘ্য)</span>
+                    <span>
+                      {bi(
+                        <>প্রতি স্ক্রিপ্টে <strong>৫,০০০ অক্ষর</strong> (Monthly-র ২× দ্বিগুণ দৈর্ঘ্য)</>,
+                        <>Up to <strong>5,000 chars</strong> per script (2× Monthly limit)</>
+                      )}
+                    </span>
                   </li>
                   <li className="flex items-start gap-2">
                     <CheckCircle2 size={15} className="text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-                    <span><strong>+৪টি এক্সক্লুসিভ স্টাইল:</strong> Documentary, News Anchor, Podcast &amp; Mindful Calm</span>
+                    <span>
+                      {bi(
+                        <><strong>+৪টি এক্সক্লুসিভ স্টাইল:</strong> ডকুমেন্টারি, নিউজ অ্যাঙ্কর, পডকাস্ট ও ধ্যানমগ্ন শান্ত গাইড</>,
+                        <><strong>+4 Exclusive Styles:</strong> Documentary, News Anchor, Podcast &amp; Mindful Calm</>
+                      )}
+                    </span>
                   </li>
                   <li className="flex items-start gap-2">
                     <CheckCircle2 size={15} className="text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-                    <span><strong>অডিও কন্ট্রোল:</strong> স্পিড (0.85x–1.25x), +৪০% অ্যালার্ম বুস্ট ও কাস্টম লুপ বিরতি (1.2s–10s)</span>
+                    <span>
+                      {bi(
+                        <><strong>অডিও কন্ট্রোল:</strong> স্পিড (0.85x–1.25x), +৪০% অ্যালার্ম বুস্ট ও কাস্টম লুপ বিরতি (1.2s–10s)</>,
+                        <><strong>Audio Controls:</strong> Speed (0.85x–1.25x), +40% Loud Boost &amp; custom loop delay (1.2s–10s)</>
+                      )}
+                    </span>
                   </li>
                   <li className="flex items-start gap-2">
                     <CheckCircle2 size={15} className="text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-                    <span><strong>২৫টি</strong> কাস্টম স্ক্রিপ্ট লাইব্রেরি (Monthly: ৩টি) ও বড় বাৎসরিক সাশ্রয়</span>
+                    <span>
+                      {bi(
+                        <><strong>২৫টি</strong> কাস্টম স্ক্রিপ্ট লাইব্রেরি (Monthly: ৩টি) ও বড় বাৎসরিক সাশ্রয়</>,
+                        <><strong>25</strong> saved scripts library (vs. 3 on Monthly) &amp; annual savings</>
+                      )}
+                    </span>
                   </li>
                 </ul>
               </div>
 
               {isAdmin ? (
                 <div className="text-xs font-semibold text-amber-700 dark:text-amber-400">
-                  Admin অ্যাকাউন্টে সব ফিচার আনলিমিটেড চালু আছে
+                  {bi('Admin অ্যাকাউন্টে সব ফিচার আনলিমিটেড চালু আছে', 'All features unlocked on Admin account')}
                 </div>
               ) : userPlan === 'pro' && proPackageType === 'yearly' ? (
                 <div className="w-full py-2.5 px-4 rounded-xl bg-amber-500/15 border border-amber-400 dark:border-amber-700 text-amber-800 dark:text-amber-300 text-xs font-semibold text-center">
-                  বর্তমান Yearly প্যাকেজ সক্রিয় ✓
+                  {bi('বর্তমান Yearly প্যাকেজ সক্রিয় ✓', 'Current Yearly Package Active ✓')}
                 </div>
               ) : (
                 <button
@@ -1608,7 +1795,11 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
                   className="w-full inline-flex items-center justify-center gap-2 py-3 px-5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-sm font-semibold transition-colors shadow-sm"
                 >
                   <Crown size={15} />
-                  <span>{userPlan === 'pro' ? 'Yearly-তে আপগ্রেড করুন' : 'Yearly প্যাকেজ নিন'}</span>
+                  <span>
+                    {userPlan === 'pro'
+                      ? bi('Yearly-তে আপগ্রেড করুন', 'Upgrade to Yearly')
+                      : bi('Yearly প্যাকেজ নিন', 'Get Yearly Package')}
+                  </span>
                 </button>
               )}
             </div>
@@ -1619,31 +1810,51 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
             <table className="w-full text-left border-collapse text-xs">
               <thead>
                 <tr className="bg-zinc-50 dark:bg-zinc-800/70 text-zinc-500 dark:text-zinc-400 border-b border-zinc-200 dark:border-zinc-800">
-                  <th className="py-2.5 px-4 font-semibold">সুবিধা (Studio Feature)</th>
-                  <th className="py-2.5 px-4 font-semibold text-indigo-600 dark:text-indigo-400">Monthly (৩০ দিন)</th>
-                  <th className="py-2.5 px-4 font-semibold text-amber-700 dark:text-amber-400">Yearly (৩৬৫ দিন)</th>
+                  <th className="py-2.5 px-4 font-semibold">{bi('সুবিধা (Studio Feature)', 'Studio Feature')}</th>
+                  <th className="py-2.5 px-4 font-semibold text-indigo-600 dark:text-indigo-400">
+                    {bi('Monthly (৩০ দিন)', 'Monthly (30 Days)')}
+                  </th>
+                  <th className="py-2.5 px-4 font-semibold text-amber-700 dark:text-amber-400">
+                    {bi('Yearly (৩৬৫ দিন)', 'Yearly (365 Days)')}
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800 text-zinc-700 dark:text-zinc-300">
                 <tr>
-                  <td className="py-2.5 px-4 font-medium">একবারে স্ক্রিপ্টের অক্ষর সীমা</td>
-                  <td className="py-2.5 px-4 tabular-nums">২,৫০০ অক্ষর</td>
-                  <td className="py-2.5 px-4 tabular-nums font-semibold text-amber-700 dark:text-amber-300">৫,০০০ অক্ষর (২×)</td>
+                  <td className="py-2.5 px-4 font-medium">
+                    {bi('একবারে স্ক্রিপ্টের অক্ষর সীমা', 'Script length per generation')}
+                  </td>
+                  <td className="py-2.5 px-4 tabular-nums">{bi('২,৫০০ অক্ষর', '2,500 chars')}</td>
+                  <td className="py-2.5 px-4 tabular-nums font-semibold text-amber-700 dark:text-amber-300">
+                    {bi('৫,০০০ অক্ষর (২×)', '5,000 chars (2×)')}
+                  </td>
                 </tr>
                 <tr>
-                  <td className="py-2.5 px-4 font-medium">ভয়েস ডেলিভারি স্টাইল প্রিসেট</td>
-                  <td className="py-2.5 px-4">৪টি স্ট্যান্ডার্ড স্টাইল</td>
-                  <td className="py-2.5 px-4 font-semibold text-amber-700 dark:text-amber-300">৮টি স্টাইল (+৪ এক্সক্লুসিভ প্রো)</td>
+                  <td className="py-2.5 px-4 font-medium">
+                    {bi('ভয়েস ডেলিভারি স্টাইল প্রিসেট', 'Delivery style presets')}
+                  </td>
+                  <td className="py-2.5 px-4">{bi('৪টি স্ট্যান্ডার্ড স্টাইল', '4 Standard styles')}</td>
+                  <td className="py-2.5 px-4 font-semibold text-amber-700 dark:text-amber-300">
+                    {bi('৮টি স্টাইল (+৪ এক্সক্লুসিভ প্রো)', '8 styles (+4 exclusive Pro)')}
+                  </td>
                 </tr>
                 <tr>
-                  <td className="py-2.5 px-4 font-medium">প্লেব্যাক স্পিড ও লাউড অ্যালার্ম বুস্ট</td>
-                  <td className="py-2.5 px-4 text-zinc-400">ফিক্সড 1.0x</td>
-                  <td className="py-2.5 px-4 font-semibold text-amber-700 dark:text-amber-300">0.85x–1.25x + ৪0% সাউন্ড বুস্ট</td>
+                  <td className="py-2.5 px-4 font-medium">
+                    {bi('প্লেব্যাক স্পিড ও লাউড অ্যালার্ম বুস্ট', 'Playback speed & loud alarm boost')}
+                  </td>
+                  <td className="py-2.5 px-4 text-zinc-400">{bi('ফিক্সড 1.0x', 'Fixed 1.0x')}</td>
+                  <td className="py-2.5 px-4 font-semibold text-amber-700 dark:text-amber-300">
+                    {bi('0.85x–1.25x + ৪০% সাউন্ড বুস্ট', '0.85x–1.25x + 40% sound boost')}
+                  </td>
                 </tr>
                 <tr>
-                  <td className="py-2.5 px-4 font-medium">অ্যালার্ম লুপ বিরতি ও সেভড স্ক্রিপ্ট</td>
-                  <td className="py-2.5 px-4 tabular-nums">১.২s ফিক্সড · ৩টি স্ক্রিপ্ট</td>
-                  <td className="py-2.5 px-4 tabular-nums font-semibold text-amber-700 dark:text-amber-300">১.২s–১০s কাস্টম · ২৫টি স্ক্রিপ্ট</td>
+                  <td className="py-2.5 px-4 font-medium">
+                    {bi('অ্যালার্ম লুপ বিরতি ও সেভড স্ক্রিপ্ট', 'Alarm loop delay & saved scripts')}
+                  </td>
+                  <td className="py-2.5 px-4 tabular-nums">{bi('১.২s ফিক্সড · ৩টি স্ক্রিপ্ট', '1.2s fixed · 3 scripts')}</td>
+                  <td className="py-2.5 px-4 tabular-nums font-semibold text-amber-700 dark:text-amber-300">
+                    {bi('১.২s–১০s কাস্টম · ২৫টি স্ক্রিপ্ট', '1.2s–10s custom · 25 scripts')}
+                  </td>
                 </tr>
               </tbody>
             </table>
@@ -1657,13 +1868,23 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
         />
 
         <footer className="mt-8 pt-6 border-t border-zinc-200/70 dark:border-zinc-800/80 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-zinc-400 dark:text-zinc-500">
-          <span>© 2026 Srabon Go — All Rights Reserved</span>
+          <span>
+            {bi('© ২০২৬ শ্রাবণ গো — সর্বস্বত্ব সংরক্ষিত', '© 2026 Srabon Go — All Rights Reserved')}
+          </span>
           {onOpenLegal && (
             <div className="flex items-center gap-4">
-              <button type="button" onClick={() => onOpenLegal('about')} className="hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors">About</button>
-              <button type="button" onClick={() => onOpenLegal('privacy')} className="hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors">Privacy Policy</button>
-              <button type="button" onClick={() => onOpenLegal('terms')} className="hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors">Terms</button>
-              <button type="button" onClick={() => onOpenLegal('contact')} className="hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors">Contact</button>
+              <button type="button" onClick={() => onOpenLegal('about')} className="hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors">
+                {bi('আমাদের সম্পর্কে', 'About')}
+              </button>
+              <button type="button" onClick={() => onOpenLegal('privacy')} className="hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors">
+                {bi('গোপনীয়তা নীতি', 'Privacy Policy')}
+              </button>
+              <button type="button" onClick={() => onOpenLegal('terms')} className="hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors">
+                {bi('শর্তাবলি', 'Terms')}
+              </button>
+              <button type="button" onClick={() => onOpenLegal('contact')} className="hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors">
+                {bi('যোগাযোগ', 'Contact')}
+              </button>
             </div>
           )}
         </footer>

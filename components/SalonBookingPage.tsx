@@ -49,6 +49,12 @@ import {
 } from '../utils/salon';
 import { generateAiSalonCoupon } from '../utils/salonCoupon';
 import { STUDIO_MEDIA } from '../utils/studioAlbums';
+import {
+  copyTextSafely,
+  localizeBookingStatus,
+  localizeSalonService,
+  useLanguage,
+} from '../utils/i18n';
 
 interface SalonBookingPageProps {
   user: User;
@@ -75,13 +81,6 @@ function getMaxBookingDate(): string {
   return `${y}-${m}-${d}`;
 }
 
-const STATUS_LABELS: Record<SalonBooking['status'], string> = {
-  pending: 'অপেক্ষমান (Pending)',
-  confirmed: 'কনফার্মড (Confirmed)',
-  completed: 'সম্পন্ন (Completed)',
-  cancelled: 'বাতিল (Cancelled)',
-};
-
 const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
   user,
   isAdmin,
@@ -89,6 +88,7 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
   onBackHome,
   onOpenAdminPanel,
 }) => {
+  const { lang, bi } = useLanguage();
   const [selectedServiceKey, setSelectedServiceKey] = useState<SalonServiceKey>('haircut');
   const [bookingDate, setBookingDate] = useState<string>(getTodayLocalDate());
   const [timeSlot, setTimeSlot] = useState<string>(SALON_TIME_SLOTS[1]);
@@ -119,6 +119,7 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
 
   const selectedService =
     SALON_SERVICES.find((s) => s.key === selectedServiceKey) || SALON_SERVICES[0];
+  const localizedSelected = localizeSalonService(selectedService.key, lang);
   const currentServicePrice = salonConfig[selectedService.priceField];
   const currentBookingFee = salonConfig.bookingFee;
   const discountAmount =
@@ -127,21 +128,30 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
       : 0;
   const totalPayable = Math.max(0, currentServicePrice + currentBookingFee - discountAmount);
 
+  const displayOpenHours =
+    salonConfig.openHours === 'সকাল ৯:০০ টা – রাত ১০:০০ টা (প্রতিদিন)'
+      ? bi('সকাল ৯:০০ টা – রাত ১০:০০ টা (প্রতিদিন)', '9:00 AM – 10:00 PM (Daily)')
+      : salonConfig.openHours;
+
   const liveWhatsAppUrl = buildSalonWhatsAppUrl({
     salonName: salonConfig.salonName,
     adminPhone: salonConfig.phone,
     customerName,
     customerPhone,
-    serviceTitle: `${selectedService.title} (${selectedService.bengaliTitle})`,
+    serviceTitle: `${localizedSelected.primaryTitle} (${localizedSelected.secondaryTitle})`,
     bookingDate,
     timeSlot,
     couponCode: canApplyCoupon && coupon ? coupon.code : undefined,
     discountLabel:
       canApplyCoupon && coupon
-        ? `${coupon.discountPercent}% ছাড় / -${formatSalonPrice(discountAmount, salonConfig.currencySymbol)}`
+        ? bi(
+            `${coupon.discountPercent}% ছাড় / -${formatSalonPrice(discountAmount, salonConfig.currencySymbol)}`,
+            `${coupon.discountPercent}% off / -${formatSalonPrice(discountAmount, salonConfig.currencySymbol)}`
+          )
         : undefined,
     totalPriceLabel: formatSalonPrice(totalPayable, salonConfig.currencySymbol),
     notes,
+    lang,
   });
 
   useEffect(() => {
@@ -207,7 +217,12 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
     setCouponFeedback(null);
 
     if (!isEmailVerified) {
-      setCouponFeedback('AI কুপন পেতে অনুগ্রহ করে আগে আপনার Gmail অ্যাকাউন্ট ভেরিফাই করুন।');
+      setCouponFeedback(
+        bi(
+          'AI কুপন পেতে অনুগ্রহ করে আগে আপনার Gmail অ্যাকাউন্ট ভেরিফাই করুন।',
+          'Please verify your Gmail account first to unlock your AI coupon.'
+        )
+      );
       return;
     }
 
@@ -234,7 +249,10 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
       setCouponFeedback(
         isAdmin
           ? msg
-          : 'এই মুহূর্তে AI কুপন তৈরি করা যাচ্ছে না। অনুগ্রহ করে কিছুক্ষণ পর আবার চেষ্টা করুন।'
+          : bi(
+              'এই মুহূর্তে AI কুপন তৈরি করা যাচ্ছে না। অনুগ্রহ করে কিছুক্ষণ পর আবার চেষ্টা করুন।',
+              'Could not generate an AI coupon right now. Please try again shortly.'
+            )
       );
     } finally {
       setGeneratingCoupon(false);
@@ -243,12 +261,10 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
 
   const handleCopyCouponCode = async () => {
     if (!coupon?.code) return;
-    try {
-      await navigator.clipboard.writeText(coupon.code);
+    const copied = await copyTextSafely(coupon.code);
+    if (copied) {
       setCopiedCoupon(true);
       setTimeout(() => setCopiedCoupon(false), 2000);
-    } catch {
-      // Ignore clipboard failures in restricted iframes
     }
   };
 
@@ -259,24 +275,39 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
     setBookingSuccess(null);
 
     if (!salonConfig.isBookingOpen) {
-      setFormError('অনলাইন বুকিং সাময়িকভাবে বন্ধ আছে। অনুগ্রহ করে ফোনে যোগাযোগ করুন।');
+      setFormError(
+        bi(
+          'অনলাইন বুকিং সাময়িকভাবে বন্ধ আছে। অনুগ্রহ করে ফোনে যোগাযোগ করুন।',
+          'Online booking is temporarily closed. Please contact us by phone.'
+        )
+      );
       return;
     }
 
     const cleanName = customerName.trim();
     if (cleanName.length < 2) {
-      setFormError('অনুগ্রহ করে আপনার পুরো নাম লিখুন (কমপক্ষে ২ অক্ষর)।');
+      setFormError(
+        bi(
+          'অনুগ্রহ করে আপনার পুরো নাম লিখুন (কমপক্ষে ২ অক্ষর)।',
+          'Please enter your full name (at least 2 characters).'
+        )
+      );
       return;
     }
 
     const cleanPhone = customerPhone.trim();
     if (!/^[0-9+\-\s()]{6,25}$/.test(cleanPhone)) {
-      setFormError('সঠিক মোবাইল নম্বর দিন (যেমন 017XXXXXXXX)।');
+      setFormError(
+        bi(
+          'সঠিক মোবাইল নম্বর দিন (যেমন 017XXXXXXXX)।',
+          'Please enter a valid mobile number (e.g., 017XXXXXXXX).'
+        )
+      );
       return;
     }
 
     if (!/^\d{4}-\d{2}-\d{2}$/.test(bookingDate)) {
-      setFormError('সঠিক তারিখ নির্বাচন করুন।');
+      setFormError(bi('সঠিক তারিখ নির্বাচন করুন।', 'Please select a valid date.'));
       return;
     }
 
@@ -342,28 +373,44 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
           adminPhone: salonConfig.phone,
           customerName: cleanName,
           customerPhone: cleanPhone,
-          serviceTitle: `${selectedService.title} (${selectedService.bengaliTitle})`,
+          serviceTitle: `${localizedSelected.primaryTitle} (${localizedSelected.secondaryTitle})`,
           bookingDate,
           timeSlot,
           couponCode: usingCouponNow && coupon ? coupon.code : undefined,
           discountLabel:
             usingCouponNow && coupon
-              ? `${coupon.discountPercent}% ছাড় / -${formatSalonPrice(appliedDiscountAmount, salonConfig.currencySymbol)}`
+              ? bi(
+                  `${coupon.discountPercent}% ছাড় / -${formatSalonPrice(appliedDiscountAmount, salonConfig.currencySymbol)}`,
+                  `${coupon.discountPercent}% off / -${formatSalonPrice(appliedDiscountAmount, salonConfig.currencySymbol)}`
+                )
               : undefined,
           totalPriceLabel: formatSalonPrice(finalTotalPrice, salonConfig.currencySymbol),
           notes: cleanNotes,
+          lang,
         })
       );
       setNotes('');
       setBookingSuccess(
         usingCouponNow && coupon
-          ? `AI কুপন (${coupon.code}) সহ আপনার "${selectedService.title}" বুকিং (${bookingDate}, ${timeSlot}) সফলভাবে জমা হয়েছে!`
-          : `আপনার "${selectedService.title}" বুকিং (${bookingDate}, ${timeSlot}) সফলভাবে জমা হয়েছে!`
+          ? bi(
+              `AI কুপন (${coupon.code}) সহ আপনার "${localizedSelected.primaryTitle}" বুকিং (${bookingDate}, ${timeSlot}) সফলভাবে জমা হয়েছে!`,
+              `Your "${localizedSelected.primaryTitle}" booking (${bookingDate}, ${timeSlot}) with AI coupon (${coupon.code}) was submitted successfully!`
+            )
+          : bi(
+              `আপনার "${localizedSelected.primaryTitle}" বুকিং (${bookingDate}, ${timeSlot}) সফলভাবে জমা হয়েছে!`,
+              `Your "${localizedSelected.primaryTitle}" booking (${bookingDate}, ${timeSlot}) was submitted successfully!`
+            )
       );
     } catch (error: any) {
-      const msg = error?.message || 'বুকিং জমা দেওয়া যায়নি। আবার চেষ্টা করুন।';
+      const msg = error?.message || bi('বুকিং জমা দেওয়া যায়নি। আবার চেষ্টা করুন।', 'Could not submit booking. Please try again.');
       if (isAdmin) setFormError(msg);
-      else setFormError('বুকিং জমা দিতে সমস্যা হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।');
+      else
+        setFormError(
+          bi(
+            'বুকিং জমা দিতে সমস্যা হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।',
+            'There was an issue submitting your booking. Please try again.'
+          )
+        );
       reportFirestoreError(error, OperationType.CREATE, 'salonBookings');
     } finally {
       setSubmitting(false);
@@ -372,6 +419,7 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
 
   const handleCancelMyBooking = async (bookingId: string) => {
     if (cancellingId) return;
+    setFormError(null);
     setCancellingId(bookingId);
     try {
       await updateDoc(doc(db, 'salonBookings', bookingId), {
@@ -379,8 +427,17 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
         updatedAt: serverTimestamp(),
       });
     } catch (error: any) {
-      const msg = error?.message || 'বুকিং বাতিল করা যায়নি।';
-      if (isAdmin) setFormError(msg);
+      const msg = error?.message || bi('বুকিং বাতিল করা যায়নি।', 'Could not cancel booking.');
+      if (isAdmin) {
+        setFormError(msg);
+      } else {
+        setFormError(
+          bi(
+            'বুকিং বাতিল করা যায়নি। অনুগ্রহ করে একটু পর আবার চেষ্টা করুন।',
+            'Could not cancel the booking. Please try again in a moment.'
+          )
+        );
+      }
       reportFirestoreError(error, OperationType.UPDATE, `salonBookings/${bookingId}`);
     } finally {
       setCancellingId(null);
@@ -398,7 +455,7 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
             className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-xs font-semibold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors whitespace-nowrap shrink-0"
           >
             <ArrowLeft size={14} />
-            <span>হোম পেজে ফিরে যান</span>
+            <span>{bi('হোম পেজে ফিরে যান', 'Back to Home')}</span>
           </button>
 
           {isAdmin && onOpenAdminPanel && (
@@ -408,7 +465,7 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
               className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/50 text-xs font-semibold transition-colors whitespace-nowrap shrink-0"
             >
               <Shield size={14} />
-              <span>বুকিং প্রাইস পরিবর্তন করুন (Admin)</span>
+              <span>{bi('বুকিং প্রাইস পরিবর্তন করুন (অ্যাডমিন)', 'Update Booking Prices (Admin)')}</span>
             </button>
           )}
         </div>
@@ -420,7 +477,7 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
               <div className="space-y-3 max-w-2xl">
                 <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-amber-400">
                   <Scissors size={14} />
-                  <span>Men&apos;s Hair Cutting &amp; Grooming Salon</span>
+                  <span>{bi('মেনজ হেয়ার কাটিং ও গ্রুমিং সেলুন', "Men's Hair Cutting & Grooming Salon")}</span>
                 </div>
                 <h1 className="text-3xl sm:text-4xl font-serif font-medium tracking-tight text-white">
                   {salonConfig.salonName}
@@ -438,10 +495,10 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
                       {salonConfig.phone}
                     </span>
                   )}
-                  {salonConfig.openHours && (
+                  {displayOpenHours && (
                     <span className="inline-flex items-center gap-1.5">
                       <Clock size={14} className="text-amber-400 shrink-0" />
-                      {salonConfig.openHours}
+                      {displayOpenHours}
                     </span>
                   )}
                 </div>
@@ -450,7 +507,7 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
               <div className="inline-flex flex-wrap items-center justify-between gap-4 bg-black/35 border border-amber-500/20 rounded-2xl px-5 py-3.5">
                 <div>
                   <p className="text-[11px] uppercase tracking-wider text-amber-200/70">
-                    বুকিং অবস্থা
+                    {bi('বুকিং অবস্থা', 'Booking Status')}
                   </p>
                   <p
                     className={`text-sm font-semibold mt-0.5 ${
@@ -458,13 +515,13 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
                     }`}
                   >
                     {salonConfig.isBookingOpen
-                      ? 'অনলাইন বুকিং চালু আছে'
-                      : 'বুকিং সাময়িকভাবে বন্ধ'}
+                      ? bi('অনলাইন বুকিং চালু আছে', 'Online Booking Open')
+                      : bi('বুকিং সাময়িকভাবে বন্ধ', 'Booking Temporarily Closed')}
                   </p>
                 </div>
                 <div className="text-right">
                   <p className="text-[11px] uppercase tracking-wider text-amber-200/70">
-                    অনলাইন বুকিং ফি
+                    {bi('অনলাইন বুকিং ফি', 'Online Booking Fee')}
                   </p>
                   <p className="text-base font-bold text-amber-400 tabular-nums mt-0.5">
                     {formatSalonPrice(salonConfig.bookingFee, salonConfig.currencySymbol)}
@@ -491,30 +548,36 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
             <div className="space-y-1.5 max-w-2xl">
               <div className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400">
                 <Sparkles size={13} />
-                <span>Verified Gmail · One-Time AI Discount Coupon</span>
+                <span>{bi('ভেরিফাইড Gmail · একবার ব্যবহারযোগ্য AI ডিসকাউন্ট কুপন', 'Verified Gmail · One-Time AI Discount Coupon')}</span>
               </div>
 
               {loadingCoupon ? (
                 <div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400 py-1">
                   <Loader2 size={14} className="animate-spin" />
-                  <span>আপনার কুপন স্ট্যাটাস যাচাই করা হচ্ছে...</span>
+                  <span>{bi('আপনার কুপন স্ট্যাটাস যাচাই করা হচ্ছে...', 'Checking your coupon status...')}</span>
                 </div>
               ) : !isEmailVerified ? (
                 <>
                   <h2 className="text-base sm:text-lg font-serif font-medium text-zinc-900 dark:text-white">
-                    Gmail ভেরিফিকেশন সম্পন্ন করুন
+                    {bi('Gmail ভেরিফিকেশন সম্পন্ন করুন', 'Complete Gmail Verification')}
                   </h2>
                   <p className="text-xs text-zinc-600 dark:text-zinc-300 leading-relaxed">
-                    প্রতিটি ভেরিফাইড Gmail অ্যাকাউন্ট প্রথমবার সেলুন পেজে একটিমাত্র বিশেষ AI ডিসকাউন্ট কুপন আনলক ও ব্যবহার করতে পারে।
+                    {bi(
+                      'প্রতিটি ভেরিফাইড Gmail অ্যাকাউন্ট প্রথমবার সেলুন পেজে একটিমাত্র বিশেষ AI ডিসকাউন্ট কুপন আনলক ও ব্যবহার করতে পারে।',
+                      'Each verified Gmail account can unlock and redeem one exclusive AI discount coupon on the salon page.'
+                    )}
                   </p>
                 </>
               ) : !coupon ? (
                 <>
                   <h2 className="text-base sm:text-lg font-serif font-medium text-zinc-900 dark:text-white">
-                    আপনার প্রথমবার Gmail ভেরিফাইড AI সেলুন কুপন নিন!
+                    {bi('আপনার প্রথমবার Gmail ভেরিফাইড AI সেলুন কুপন নিন!', 'Claim Your One-Time Gmail Verified AI Salon Coupon!')}
                   </h2>
                   <p className="text-xs text-zinc-600 dark:text-zinc-300 leading-relaxed">
-                    প্রতিটি ইউজার ভেরিফাইড Gmail দিয়ে একবারই একটি AI জেনারেটেড ডিসকাউন্ট কুপন (১৫%–২৫% ছাড়) তৈরি করে যেকোনো ১টি বুকিংয়ে ব্যবহার করতে পারবেন।
+                    {bi(
+                      'প্রতিটি ইউজার ভেরিফাইড Gmail দিয়ে একবারই একটি AI জেনারেটেড ডিসকাউন্ট কুপন (১৫%–২৫% ছাড়) তৈরি করে যেকোনো ১টি বুকিংয়ে ব্যবহার করতে পারবেন।',
+                      'Each verified Gmail user can generate one AI discount coupon (15%–25% off) once and apply it to any single booking.'
+                    )}
                   </p>
                 </>
               ) : coupon.status === 'available' ? (
@@ -524,7 +587,7 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
                       {coupon.title}
                     </h2>
                     <span className="px-2 py-0.5 rounded-md text-[11px] font-bold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300">
-                      {coupon.discountPercent}% ছাড় · ব্যবহারযোগ্য
+                      {bi(`${coupon.discountPercent}% ছাড় · ব্যবহারযোগ্য`, `${coupon.discountPercent}% Off · Available`)}
                     </span>
                   </div>
                   <p className="text-xs text-zinc-600 dark:text-zinc-300 leading-relaxed">
@@ -538,11 +601,18 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
                       {coupon.title}
                     </h2>
                     <span className="px-2 py-0.5 rounded-md text-[11px] font-bold bg-zinc-200 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
-                      ব্যবহৃত (Used)
+                      {bi('ব্যবহৃত', 'Used')}
                     </span>
                   </div>
                   <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">
-                    আপনার একটিমাত্র ভেরিফাইড Gmail AI কুপন (<span className="font-mono font-semibold">{coupon.code}</span> · {coupon.discountPercent}% ছাড়) ইতিমধ্যে ব্যবহার হয়ে গেছে। প্রতি ইউজার একবারই এই অফার পান।
+                    {bi(
+                      <>
+                        আপনার একটিমাত্র ভেরিফাইড Gmail AI কুপন (<span className="font-mono font-semibold">{coupon.code}</span> · {coupon.discountPercent}% ছাড়) ইতিমধ্যে ব্যবহার হয়ে গেছে। প্রতি ইউজার একবারই এই অফার পান।
+                      </>,
+                      <>
+                        Your one-time verified Gmail AI coupon (<span className="font-mono font-semibold">{coupon.code}</span> · {coupon.discountPercent}% off) has already been redeemed. Limited to one per user.
+                      </>
+                    )}
                   </p>
                 </>
               )}
@@ -567,7 +637,11 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
                   ) : (
                     <Sparkles size={15} />
                   )}
-                  <span>{generatingCoupon ? 'AI কুপন তৈরি হচ্ছে...' : 'AI কুপন জেনারেট করুন'}</span>
+                  <span>
+                    {generatingCoupon
+                      ? bi('AI কুপন তৈরি হচ্ছে...', 'Generating AI Coupon...')
+                      : bi('AI কুপন জেনারেট করুন', 'Generate AI Coupon')}
+                  </span>
                 </button>
               )}
 
@@ -582,7 +656,7 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
                       type="button"
                       onClick={handleCopyCouponCode}
                       className="p-1 rounded-md text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors"
-                      title="Copy coupon code"
+                      title={bi('কুপন কোড কপি করুন', 'Copy coupon code')}
                     >
                       {copiedCoupon ? <Check size={13} className="text-emerald-600" /> : <Copy size={13} />}
                     </button>
@@ -599,7 +673,9 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
                   >
                     <CheckCircle2 size={14} />
                     <span>
-                      {canApplyCoupon ? 'কুপন প্রয়োগ করা হয়েছে ✓' : 'এই বুকিংয়ে ব্যবহার করুন'}
+                      {canApplyCoupon
+                        ? bi('কুপন প্রয়োগ করা হয়েছে ✓', 'Coupon Applied ✓')
+                        : bi('এই বুকিংয়ে ব্যবহার করুন', 'Use in This Booking')}
                     </span>
                   </button>
                 </>
@@ -623,10 +699,10 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
           <div className="lg:col-span-7 space-y-4">
             <div className="flex items-baseline justify-between">
               <h2 className="text-lg font-serif font-medium text-zinc-900 dark:text-white">
-                সার্ভিস নির্বাচন করুন
+                {bi('সার্ভিস নির্বাচন করুন', 'Select a Service')}
               </h2>
               <span className="text-xs text-zinc-500 dark:text-zinc-400">
-                সকল প্রাইস অ্যাডমিন কর্তৃক আপডেটযোগ্য
+                {bi('সকল প্রাইস অ্যাডমিন কর্তৃক আপডেটযোগ্য', 'All prices configurable by Admin')}
               </span>
             </div>
 
@@ -634,6 +710,7 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
               {SALON_SERVICES.map((service) => {
                 const price = salonConfig[service.priceField];
                 const isSelected = selectedServiceKey === service.key;
+                const localized = localizeSalonService(service.key, lang);
                 return (
                   <button
                     key={service.key}
@@ -651,14 +728,14 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
                           {service.number}
                         </span>
                         <h3 className="text-base font-serif font-medium text-zinc-900 dark:text-white">
-                          {service.title}
+                          {localized.primaryTitle}
                         </h3>
                       </div>
                       <p className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
-                        {service.bengaliTitle} · {service.duration}
+                        {localized.secondaryTitle} · {localized.duration}
                       </p>
                       <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">
-                        {service.description}
+                        {localized.description}
                       </p>
                     </div>
 
@@ -667,7 +744,7 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
                         {formatSalonPrice(price, salonConfig.currencySymbol)}
                       </span>
                       <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">
-                        {isSelected ? 'নির্বাচিত ✓' : 'সিলেক্ট করুন'}
+                        {isSelected ? bi('নির্বাচিত ✓', 'Selected ✓') : bi('সিলেক্ট করুন', 'Select')}
                       </p>
                     </div>
                   </button>
@@ -683,10 +760,10 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
           >
             <div className="border-b border-zinc-100 dark:border-zinc-800 pb-4">
               <h2 className="text-lg font-serif font-medium text-zinc-900 dark:text-white">
-                অ্যাপয়েন্টমেন্ট বুক করুন
+                {bi('অ্যাপয়েন্টমেন্ট বুক করুন', 'Book Appointment')}
               </h2>
               <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-                {selectedService.title} ({selectedService.bengaliTitle})
+                {localizedSelected.primaryTitle} ({localizedSelected.secondaryTitle})
               </p>
             </div>
 
@@ -710,7 +787,7 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition-colors"
                   >
                     <MessageCircle size={13} />
-                    <span>WhatsApp-এ অ্যাডমিনকে পাঠান</span>
+                    <span>{bi('WhatsApp-এ অ্যাডমিনকে পাঠান', 'Send to Admin on WhatsApp')}</span>
                   </a>
                 )}
               </div>
@@ -719,7 +796,7 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
             <div className="space-y-4">
               <div>
                 <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1.5">
-                  তারিখ (Booking Date)
+                  {bi('তারিখ নির্বাচন করুন', 'Booking Date')}
                 </label>
                 <div className="relative">
                   <Calendar
@@ -740,7 +817,7 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
 
               <div>
                 <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1.5">
-                  সময় নির্বাচন করুন (Time Slot)
+                  {bi('সময় নির্বাচন করুন', 'Select Time Slot')}
                 </label>
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-2 gap-2">
                   {SALON_TIME_SLOTS.map((slot) => (
@@ -762,7 +839,7 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
 
               <div>
                 <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1.5">
-                  আপনার নাম (Full Name)
+                  {bi('আপনার নাম', 'Full Name')}
                 </label>
                 <input
                   type="text"
@@ -771,14 +848,14 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
                   maxLength={100}
                   value={customerName}
                   onChange={(e) => setCustomerName(e.target.value)}
-                  placeholder="আপনার নাম লিখুন"
+                  placeholder={bi('আপনার নাম লিখুন', 'Enter your full name')}
                   className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-sm text-zinc-900 dark:text-white"
                 />
               </div>
 
               <div>
                 <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1.5">
-                  মোবাইল নম্বর (Phone Number)
+                  {bi('মোবাইল নম্বর', 'Mobile Number')}
                 </label>
                 <input
                   type="tel"
@@ -794,14 +871,17 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
 
               <div>
                 <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1.5">
-                  অতিরিক্ত নোট (ঐচ্ছিক)
+                  {bi('অতিরিক্ত নোট (ঐচ্ছিক)', 'Additional Notes (Optional)')}
                 </label>
                 <textarea
                   rows={2}
                   maxLength={300}
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  placeholder="যেমন: মিডল ফেড, ছোট দাড়ি, বা পছন্দের স্টাইল"
+                  placeholder={bi(
+                    'যেমন: মিডল ফেড, ছোট দাড়ি, বা পছন্দের স্টাইল',
+                    'e.g., mid fade, short beard trim, or preferred style'
+                  )}
                   className="w-full px-3.5 py-2 rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-sm text-zinc-900 dark:text-white resize-none"
                 />
               </div>
@@ -810,13 +890,15 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
             {/* Live Price Breakdown */}
             <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/70 border border-zinc-200 dark:border-zinc-700 space-y-2 text-xs">
               <div className="flex items-center justify-between text-zinc-600 dark:text-zinc-300">
-                <span>সার্ভিস প্রাইস ({selectedService.title})</span>
+                <span>
+                  {bi('সার্ভিস প্রাইস', 'Service Price')} ({localizedSelected.primaryTitle})
+                </span>
                 <span className="font-semibold tabular-nums">
                   {formatSalonPrice(currentServicePrice, salonConfig.currencySymbol)}
                 </span>
               </div>
               <div className="flex items-center justify-between text-zinc-600 dark:text-zinc-300">
-                <span>বুকিং চার্জ (Booking Fee)</span>
+                <span>{bi('বুকিং চার্জ', 'Booking Fee')}</span>
                 <span className="font-semibold tabular-nums">
                   {formatSalonPrice(currentBookingFee, salonConfig.currencySymbol)}
                 </span>
@@ -824,7 +906,7 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
               {canApplyCoupon && coupon && discountAmount > 0 && (
                 <div className="flex items-center justify-between text-emerald-600 dark:text-emerald-400 font-semibold">
                   <span>
-                    AI কুপন ছাড় ({coupon.code} · {coupon.discountPercent}%)
+                    {bi('AI কুপন ছাড়', 'AI Coupon Discount')} ({coupon.code} · {coupon.discountPercent}%)
                   </span>
                   <span className="tabular-nums">
                     -{formatSalonPrice(discountAmount, salonConfig.currencySymbol)}
@@ -832,7 +914,7 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
                 </div>
               )}
               <div className="pt-2 border-t border-zinc-200 dark:border-zinc-700 flex items-center justify-between text-sm font-bold text-zinc-900 dark:text-white">
-                <span>সর্বমোট বিল (Total)</span>
+                <span>{bi('সর্বমোট বিল', 'Total Payable')}</span>
                 <span className="text-amber-600 dark:text-amber-400 tabular-nums">
                   {formatSalonPrice(totalPayable, salonConfig.currencySymbol)}
                 </span>
@@ -851,8 +933,8 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
               )}
               <span>
                 {salonConfig.isBookingOpen
-                  ? 'বুকিং কনফার্ম করুন'
-                  : 'অনলাইন বুকিং বন্ধ আছে'}
+                  ? bi('বুকিং কনফার্ম করুন', 'Confirm Booking')
+                  : bi('অনলাইন বুকিং বন্ধ আছে', 'Online Booking Closed')}
               </span>
             </button>
 
@@ -865,15 +947,21 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
                   className="w-full inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs sm:text-sm font-semibold transition-colors"
                 >
                   <MessageCircle size={15} />
-                  <span>WhatsApp-এ বুকিং রিকোয়েস্ট পাঠান</span>
+                  <span>{bi('WhatsApp-এ বুকিং রিকোয়েস্ট পাঠান', 'Send Booking Request on WhatsApp')}</span>
                 </a>
                 <p className="text-[11px] text-center text-zinc-500 dark:text-zinc-400 tabular-nums">
-                  অ্যাডমিনের WhatsApp ({salonConfig.phone})-এ নাম, তারিখ ও সার্ভিস অটো-ফিল হয়ে যাবে।
+                  {bi(
+                    `অ্যাডমিনের WhatsApp (${salonConfig.phone})-এ নাম, তারিখ ও সার্ভিস অটো-ফিল হয়ে যাবে।`,
+                    `Name, date, and service will auto-fill to Admin WhatsApp (${salonConfig.phone}).`
+                  )}
                 </p>
               </div>
             ) : (
               <p className="text-[11px] text-center text-zinc-500 dark:text-zinc-400">
-                WhatsApp-এ পাঠাতে অ্যাডমিন প্যানেল থেকে সঠিক সেলুন ফোন নম্বর সেট করুন।
+                {bi(
+                  'WhatsApp-এ পাঠাতে অ্যাডমিন প্যানেল থেকে সঠিক সেলুন ফোন নম্বর সেট করুন।',
+                  'Set a valid salon phone number in the Admin Panel to enable WhatsApp requests.'
+                )}
               </p>
             )}
           </form>
@@ -883,10 +971,10 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
         <section className="rounded-3xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-6 space-y-4">
           <div className="flex items-baseline justify-between">
             <h2 className="text-lg font-serif font-medium text-zinc-900 dark:text-white">
-              আমার সেলুন বুকিংসমূহ
+              {bi('আমার সেলুন বুকিংসমূহ', 'My Salon Bookings')}
             </h2>
             <span className="text-xs text-zinc-500 dark:text-zinc-400 tabular-nums">
-              মোট {myBookings.length}টি
+              {bi(`মোট ${myBookings.length}টি`, `Total ${myBookings.length}`)}
             </span>
           </div>
 
@@ -896,11 +984,18 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
             </div>
           ) : myBookings.length === 0 ? (
             <p className="text-sm text-zinc-500 dark:text-zinc-400 py-6 text-center">
-              আপনার এখনও কোনো বুকিং নেই। উপরের ফর্ম থেকে আপনার প্রথম অ্যাপয়েন্টমেন্ট বুক করুন।
+              {bi(
+                'আপনার এখনও কোনো বুকিং নেই। উপরের ফর্ম থেকে আপনার প্রথম অ্যাপয়েন্টমেন্ট বুক করুন।',
+                'You have no bookings yet. Book your first appointment using the form above.'
+              )}
             </p>
           ) : (
             <div className="space-y-3">
-              {myBookings.map((b) => (
+              {myBookings.map((b) => {
+                const localizedBookingService = b.serviceKey
+                  ? localizeSalonService(b.serviceKey, lang).primaryTitle
+                  : b.serviceTitle;
+                return (
                 <div
                   key={b.id}
                   className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200/80 dark:border-zinc-700/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
@@ -908,7 +1003,7 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
                   <div className="space-y-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-sm font-semibold text-zinc-900 dark:text-white">
-                        {b.serviceTitle}
+                        {localizedBookingService}
                       </span>
                       <span
                         className={`px-2 py-0.5 rounded-md text-[11px] font-semibold ${
@@ -921,32 +1016,32 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
                             : 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300'
                         }`}
                       >
-                        {STATUS_LABELS[b.status]}
+                        {localizeBookingStatus(b.status, lang)}
                       </span>
                       {b.couponCode && (
                         <span className="px-2 py-0.5 rounded-md text-[11px] font-mono font-semibold bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300">
-                          AI Coupon: {b.couponCode}
+                          {bi('AI কুপন:', 'AI Coupon:')} {b.couponCode}
                           {typeof b.discountPercent === 'number' ? ` (-${b.discountPercent}%)` : ''}
                         </span>
                       )}
                     </div>
                     <p className="text-xs text-zinc-600 dark:text-zinc-300 tabular-nums">
-                      তারিখ: {b.bookingDate} · সময়: {b.timeSlot} · ফোন: {b.customerPhone}
+                      {bi('তারিখ:', 'Date:')} {b.bookingDate} · {bi('সময়:', 'Time:')} {b.timeSlot} · {bi('ফোন:', 'Phone:')} {b.customerPhone}
                     </p>
                     <p className="text-xs text-zinc-500 dark:text-zinc-400 tabular-nums">
-                      সার্ভিস: {formatSalonPrice(b.servicePrice, salonConfig.currencySymbol)} + বুকিং ফি:{' '}
+                      {bi('সার্ভিস:', 'Service:')} {formatSalonPrice(b.servicePrice, salonConfig.currencySymbol)} + {bi('বুকিং ফি:', 'Booking Fee:')}{' '}
                       {formatSalonPrice(b.bookingFee, salonConfig.currencySymbol)}
                       {typeof b.discountAmount === 'number' && b.discountAmount > 0
-                        ? ` - ছাড়: ${formatSalonPrice(b.discountAmount, salonConfig.currencySymbol)}`
+                        ? ` - ${bi('ছাড়:', 'Discount:')} ${formatSalonPrice(b.discountAmount, salonConfig.currencySymbol)}`
                         : ''}{' '}
-                      = মোট:{' '}
+                      = {bi('মোট:', 'Total:')}{' '}
                       <strong className="text-zinc-900 dark:text-white">
                         {formatSalonPrice(b.totalPrice, salonConfig.currencySymbol)}
                       </strong>
                     </p>
                     {b.notes && (
                       <p className="text-xs text-zinc-500 dark:text-zinc-400 italic">
-                        নোট: {b.notes}
+                        {bi('নোট:', 'Note:')} {b.notes}
                       </p>
                     )}
                   </div>
@@ -958,16 +1053,20 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
                         adminPhone: salonConfig.phone,
                         customerName: b.customerName,
                         customerPhone: b.customerPhone,
-                        serviceTitle: b.serviceTitle,
+                        serviceTitle: localizedBookingService,
                         bookingDate: b.bookingDate,
                         timeSlot: b.timeSlot,
                         couponCode: b.couponCode,
                         discountLabel:
                           typeof b.discountPercent === 'number' && typeof b.discountAmount === 'number'
-                            ? `${b.discountPercent}% ছাড় / -${formatSalonPrice(b.discountAmount, salonConfig.currencySymbol)}`
+                            ? bi(
+                                `${b.discountPercent}% ছাড় / -${formatSalonPrice(b.discountAmount, salonConfig.currencySymbol)}`,
+                                `${b.discountPercent}% off / -${formatSalonPrice(b.discountAmount, salonConfig.currencySymbol)}`
+                              )
                             : undefined,
                         totalPriceLabel: formatSalonPrice(b.totalPrice, salonConfig.currencySymbol),
                         notes: b.notes,
+                        lang,
                       });
                       return itemWaUrl ? (
                         <a
@@ -994,12 +1093,13 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
                         ) : (
                           <XCircle size={13} />
                         )}
-                        <span>বাতিল করুন</span>
+                        <span>{bi('বাতিল করুন', 'Cancel Booking')}</span>
                       </button>
                     )}
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </section>

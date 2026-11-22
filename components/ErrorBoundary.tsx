@@ -6,6 +6,7 @@ import React from 'react';
 import { AlertCircle, RotateCcw } from 'lucide-react';
 import { auth } from '../firebase';
 import { reportAppIssue } from '../utils/appIssues';
+import { getStoredLanguage } from '../utils/i18n';
 
 const ADMIN_EMAIL = 'srabon10010@gmail.com';
 
@@ -45,6 +46,21 @@ class ErrorBoundary extends React.Component<
       const isAdmin = Boolean(
         currentUser?.emailVerified && currentUser?.email?.toLowerCase() === ADMIN_EMAIL
       );
+      const lang = getStoredLanguage();
+      const heading = isAdmin
+        ? lang === 'bn'
+          ? 'কিছু একটি সমস্যা হয়েছে'
+          : 'Something went wrong'
+        : lang === 'bn'
+        ? 'পেজটি পুনরায় লোড করুন'
+        : 'Please reload the page';
+      const description = isAdmin
+        ? this.state.errorMessage
+        : lang === 'bn'
+        ? 'অনুগ্রহ করে পেজটি রিলোড করে আবার ব্যবহার করুন।'
+        : 'Please reload the page and try again.';
+      const reloadLabel = lang === 'bn' ? 'পেজ রিলোড করুন' : 'Reload Page';
+
       return (
         <div className="min-h-screen w-screen bg-[#FDFDFD] dark:bg-[#09090b] text-zinc-900 dark:text-zinc-100 flex items-center justify-center p-6">
           <div className="max-w-md w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-8 shadow-xl text-center space-y-5">
@@ -53,12 +69,10 @@ class ErrorBoundary extends React.Component<
             </div>
             <div className="space-y-2">
               <h2 className="text-xl font-serif font-medium">
-                {isAdmin ? 'Something went wrong' : 'পেজটি পুনরায় লোড করুন'}
+                {heading}
               </h2>
               <p className="text-xs text-zinc-500 dark:text-zinc-400 break-words">
-                {isAdmin
-                  ? this.state.errorMessage
-                  : 'অনুগ্রহ করে পেজটি রিলোড করে আবার ব্যবহার করুন।'}
+                {description}
               </p>
             </div>
             <button
@@ -67,7 +81,7 @@ class ErrorBoundary extends React.Component<
               className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-zinc-900 dark:bg-indigo-600 text-white text-sm font-medium hover:bg-zinc-800 dark:hover:bg-indigo-500 transition-colors"
             >
               <RotateCcw size={15} />
-              <span>Reload Page</span>
+              <span>{reloadLabel}</span>
             </button>
           </div>
         </div>

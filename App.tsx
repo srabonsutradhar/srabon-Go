@@ -43,6 +43,12 @@ import {
   loadCustomVoiceProfiles,
   persistCustomVoiceProfiles,
 } from './utils/voiceClone';
+import {
+  localizeGender,
+  localizePitch,
+  localizeTrait,
+  useLanguage,
+} from './utils/i18n';
 
 const ADMIN_EMAIL = 'srabon10010@gmail.com';
 
@@ -82,6 +88,7 @@ function sanitizeFavorites(list: unknown): string[] {
 }
 
 const App: React.FC = () => {
+  const { lang, bi } = useLanguage();
   const [user, setUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [playingVoice, setPlayingVoice] = useState<string | null>(null);
@@ -789,14 +796,20 @@ const App: React.FC = () => {
       const matchGender = filters.gender === 'All' || voice.analysis.gender === filters.gender;
       const matchPitch = filters.pitch === 'All' || voice.analysis.pitch === filters.pitch;
       
-      const searchLower = filters.search.toLowerCase();
-      const matchSearch = filters.search === '' || 
+      const searchLower = filters.search.trim().toLowerCase();
+      const bnGender = localizeGender(voice.analysis.gender, 'bn').toLowerCase();
+      const bnPitch = localizePitch(voice.pitch, 'bn').toLowerCase();
+      const bnAnalysisPitch = localizePitch(voice.analysis.pitch, 'bn').toLowerCase();
+      const matchSearch = searchLower === '' || 
         voice.name.toLowerCase().includes(searchLower) || 
-        voice.characteristics.some(c => c.toLowerCase().includes(searchLower)) ||
-        voice.analysis.characteristics.some(c => c.toLowerCase().includes(searchLower)) ||
+        voice.characteristics.some(c => c.toLowerCase().includes(searchLower) || localizeTrait(c, 'bn').toLowerCase().includes(searchLower)) ||
+        voice.analysis.characteristics.some(c => c.toLowerCase().includes(searchLower) || localizeTrait(c, 'bn').toLowerCase().includes(searchLower)) ||
         voice.analysis.gender.toLowerCase().startsWith(searchLower) ||
+        bnGender.includes(searchLower) ||
         voice.pitch.toLowerCase().includes(searchLower) ||
-        voice.analysis.pitch.toLowerCase().includes(searchLower);
+        voice.analysis.pitch.toLowerCase().includes(searchLower) ||
+        bnPitch.includes(searchLower) ||
+        bnAnalysisPitch.includes(searchLower);
 
       return matchGender && matchPitch && matchSearch;
     });
@@ -923,7 +936,9 @@ const App: React.FC = () => {
       <div className="h-screen w-screen bg-[#f4f6fb] dark:bg-[#070b14] text-slate-900 dark:text-slate-100 flex items-center justify-center">
         <div className="flex flex-col items-center gap-3 text-slate-600 dark:text-slate-300">
           <Loader2 size={28} className="animate-spin text-indigo-600 dark:text-amber-400" />
-          <p className="text-sm font-medium">Checking Google sign-in...</p>
+          <p className="text-sm font-medium">
+            {bi('গুগল সাইন-ইন যাচাই করা হচ্ছে...', 'Checking Google sign-in...')}
+          </p>
         </div>
       </div>
     );
@@ -1138,26 +1153,34 @@ const App: React.FC = () => {
                               <Heart size={28} className="text-rose-400 dark:text-rose-400" />
                           </div>
                           <h3 className="text-xl font-serif text-zinc-900 dark:text-white mb-2">
-                            {favorites.length === 0 ? 'No favorite voices yet' : 'No matching favorites'}
+                            {favorites.length === 0
+                              ? bi('এখনো কোনো পছন্দের ভয়েস নেই', 'No favorite voices yet')
+                              : bi('ফিল্টারের সাথে কোনো পছন্দের ভয়েস মেলেনি', 'No matching favorites')}
                           </h3>
                           <p className="text-zinc-500 dark:text-zinc-400 mb-6 max-w-sm mx-auto">
                             {favorites.length === 0
-                              ? 'Click the heart icon on any voice card in Grid or Carousel view to save it here.'
-                              : 'None of your favorite voices match the current search or filter criteria.'}
+                              ? bi(
+                                  'গ্রিড বা ক্যারোসেল ভিউ থেকে যেকোনো ভয়েস কার্ডের হার্ট আইকনে ক্লিক করে এখানে সংরক্ষণ করুন।',
+                                  'Click the heart icon on any voice card in Grid or Carousel view to save it here.'
+                                )
+                              : bi(
+                                  'আপনার পছন্দের কোনো ভয়েস বর্তমান সার্চ বা ফিল্টারের সাথে মেলেনি।',
+                                  'None of your favorite voices match the current search or filter criteria.'
+                                )}
                           </p>
                           {favorites.length === 0 ? (
                             <button 
                                 onClick={() => setViewMode('grid')}
                                 className="px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-blue-600 text-white rounded-full text-sm font-semibold hover:from-indigo-500 hover:to-blue-500 shadow-md shadow-indigo-500/20 transition-all"
                             >
-                                Browse Voices
+                                {bi('সব ভয়েস দেখুন', 'Browse Voices')}
                             </button>
                           ) : (
                             <button 
                                 onClick={() => setFilters({ gender: 'All', pitch: 'All', search: '' })}
                                 className="px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-blue-600 text-white rounded-full text-sm font-semibold hover:from-indigo-500 hover:to-blue-500 shadow-md shadow-indigo-500/20 transition-all"
                             >
-                                Clear Filters
+                                {bi('ফিল্টার মুছুন', 'Clear Filters')}
                             </button>
                           )}
                       </div>
@@ -1168,13 +1191,17 @@ const App: React.FC = () => {
                           <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 mb-6 shadow-sm">
                               <Info size={32} className="text-indigo-500 dark:text-indigo-400" />
                           </div>
-                          <h3 className="text-xl font-serif text-slate-900 dark:text-white mb-2">No voices found</h3>
-                          <p className="text-slate-500 dark:text-slate-400 mb-6">Try adjusting your filters or use AI Match.</p>
+                          <h3 className="text-xl font-serif text-slate-900 dark:text-white mb-2">
+                            {bi('কোনো ভয়েস পাওয়া যায়নি', 'No voices found')}
+                          </h3>
+                          <p className="text-slate-500 dark:text-slate-400 mb-6">
+                            {bi('ফিল্টার পরিবর্তন করে দেখুন অথবা AI ম্যাচ ব্যবহার করুন।', 'Try adjusting your filters or use AI Match.')}
+                          </p>
                           <button 
                               onClick={() => setShowVoiceFinder(true)}
                               className="px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-blue-600 text-white rounded-full text-sm font-semibold hover:from-indigo-500 hover:to-blue-500 shadow-md shadow-indigo-500/20 transition-all"
                           >
-                              Open AI Casting
+                              {bi('AI কাস্টিং খুলুন', 'Open AI Casting')}
                           </button>
                       </div>
                   </div>
@@ -1193,10 +1220,16 @@ const App: React.FC = () => {
                         <ArrowLeftRight size={12} />
                         <span>
                           {compareVoices.length === 2
-                            ? `Compare ${compareVoices[0]} vs ${compareVoices[1]}`
+                            ? bi(
+                                `তুলনা: ${compareVoices[0]} বনাম ${compareVoices[1]}`,
+                                `Compare ${compareVoices[0]} vs ${compareVoices[1]}`
+                              )
                             : compareVoices.length === 1
-                            ? `Comparing ${compareVoices[0]} (+1)`
-                            : 'Compare Voices'}
+                            ? bi(
+                                `তুলনায়: ${compareVoices[0]} (+১টি)`,
+                                `Comparing ${compareVoices[0]} (+1)`
+                              )
+                            : bi('ভয়েস তুলনা করুন', 'Compare Voices')}
                         </span>
                       </button>
                   </div>
@@ -1281,7 +1314,7 @@ const App: React.FC = () => {
       {/* Separate Admin-only Floating Issue Notification Box */}
       {isAdmin && unreadIssuesCount > 0 && !showAdminNotifications && !floatingNoticeHidden && (
         <aside
-          aria-label="Admin Issue Notification"
+          aria-label={bi('অ্যাডমিন সমস্যা নোটিফিকেশন', 'Admin Issue Notification')}
           className="fixed bottom-16 sm:bottom-4 right-4 z-[80] w-[calc(100%-2rem)] max-w-sm rounded-2xl bg-white dark:bg-zinc-900 border border-rose-200 dark:border-rose-900 shadow-2xl p-4 space-y-3 animate-slide-up"
         >
           <div className="flex items-start justify-between gap-3">
@@ -1291,10 +1324,16 @@ const App: React.FC = () => {
               </div>
               <div>
                 <p className="text-xs font-bold text-zinc-900 dark:text-white">
-                  অ্যাডমিন নোটিফিকেশন বক্স ({unreadIssuesCount})
+                  {bi(
+                    `অ্যাডমিন নোটিফিকেশন বক্স (${unreadIssuesCount})`,
+                    `Admin Notification Box (${unreadIssuesCount})`
+                  )}
                 </p>
                 <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                  অ্যাপে নতুন সমস্যা পাওয়া গেছে (শুধু আপনি দেখছেন)
+                  {bi(
+                    'অ্যাপে নতুন সমস্যা পাওয়া গেছে (শুধু আপনি দেখছেন)',
+                    'New app issue detected (visible to Admin only)'
+                  )}
                 </p>
               </div>
             </div>
@@ -1302,7 +1341,7 @@ const App: React.FC = () => {
               type="button"
               onClick={() => setFloatingNoticeHidden(true)}
               className="p-1 rounded-lg text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors"
-              aria-label="Hide notification preview"
+              aria-label={bi('নোটিফিকেশন প্রিভিউ লুকান', 'Hide notification preview')}
             >
               <X size={14} />
             </button>
@@ -1324,14 +1363,14 @@ const App: React.FC = () => {
               onClick={() => setFloatingNoticeHidden(true)}
               className="px-3 py-1.5 rounded-lg text-xs font-medium text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 transition-colors"
             >
-              পরে দেখুন
+              {bi('পরে দেখুন', 'Later')}
             </button>
             <button
               type="button"
               onClick={() => setShowAdminNotifications(true)}
               className="px-3.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold transition-colors"
             >
-              নোটিফিকেশন বক্স খুলুন
+              {bi('নোটিফিকেশন বক্স খুলুন', 'Open Notification Box')}
             </button>
           </div>
         </aside>
@@ -1350,11 +1389,13 @@ const App: React.FC = () => {
           type="button"
           onClick={() => setShowChatHub(true)}
           className="fixed bottom-4 left-4 z-[70] inline-flex items-center gap-2 px-4 py-2.5 rounded-full bg-gradient-to-r from-indigo-600 via-blue-600 to-violet-600 hover:from-indigo-500 hover:via-blue-500 hover:to-violet-500 text-white shadow-xl shadow-indigo-600/25 border border-white/20 transition-all hover:scale-105 active:scale-95"
-          aria-label="Open Chat List"
-          title="চ্যাট লিস্ট · মতামত ও আলোচনা"
+          aria-label={bi('চ্যাট লিস্ট খুলুন', 'Open Chat List')}
+          title={bi('চ্যাট লিস্ট · মতামত ও আলোচনা', 'Chat List · Feedback & Support')}
         >
           <MessageSquare size={16} />
-          <span className="text-xs font-semibold tracking-wide">চ্যাট ও মতামত</span>
+          <span className="text-xs font-semibold tracking-wide">
+            {bi('চ্যাট ও মতামত', 'Chat & Feedback')}
+          </span>
           {unreadChatCount > 0 && (
             <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-500 text-white tabular-nums">
               {unreadChatCount > 99 ? '99+' : unreadChatCount}

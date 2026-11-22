@@ -22,6 +22,7 @@ export interface VoiceAlbumEdition {
   titleBn: string;
   titleEn: string;
   subtitleBn: string;
+  subtitleEn: string;
   coverImg: string;
   featuredVoiceNames: string[];
   accentTextClass: string;
@@ -36,6 +37,7 @@ export const FEATURED_VOICE_ALBUMS: VoiceAlbumEdition[] = [
     titleBn: 'গোল্ডেন স্টোরিটেলার অ্যালবাম',
     titleEn: 'Golden Storyteller Edition',
     subtitleBn: 'গল্প বলা, ডকুমেন্টারি ও গভীর ভয়েসওভারের জন্য উষ্ণ ও সমৃদ্ধ কণ্ঠস্বর।',
+    subtitleEn: 'Warm, rich voices crafted for storytelling, documentaries, and deep voiceovers.',
     coverImg: albumWarmStorytellerImg,
     featuredVoiceNames: ['Charon', 'Fenrir', 'Orus'],
     accentTextClass: 'text-amber-700 dark:text-amber-300',
@@ -51,6 +53,7 @@ export const FEATURED_VOICE_ALBUMS: VoiceAlbumEdition[] = [
     titleBn: 'ব্রাইট মর্নিং ও মেলোডিক অ্যালবাম',
     titleEn: 'Emerald Morning Brights',
     subtitleBn: 'সকালের অ্যালার্ম, পড়াশোনার রিমাইন্ডার ও প্রাণবন্ত রিলসের জন্য স্পষ্ট উজ্জ্বল কণ্ঠ।',
+    subtitleEn: 'Crisp, upbeat voices tailored for morning alarms, study reminders, and reels.',
     coverImg: albumBrightMelodicImg,
     featuredVoiceNames: ['Zephyr', 'Kore', 'Leda', 'Puck'],
     accentTextClass: 'text-teal-700 dark:text-teal-300',
@@ -66,6 +69,7 @@ export const FEATURED_VOICE_ALBUMS: VoiceAlbumEdition[] = [
     titleBn: 'মিডনাইট কাম ও ফোকাস অ্যালবাম',
     titleEn: 'Midnight Calm & Focus',
     subtitleBn: 'শান্ত বর্ণনা, টিউটোরিয়াল ও রাতের নিরিবিলি অধ্যয়নের জন্য কোমল সুরেলা কণ্ঠ।',
+    subtitleEn: 'Gentle, soothing voices ideal for calm narration, tutorials, and late-night study.',
     coverImg: albumCalmNocturneImg,
     featuredVoiceNames: ['Aoede', 'Callirrhoe'],
     accentTextClass: 'text-indigo-700 dark:text-indigo-300',

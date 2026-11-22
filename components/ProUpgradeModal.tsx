@@ -40,6 +40,12 @@ import {
   UserPlan,
 } from '../types';
 import { claimReferralCode, normalizeReferralCode } from '../utils/referral';
+import {
+  useLanguage,
+  copyTextSafely,
+  localizeDate,
+  localizeUpgradeStatus,
+} from '../utils/i18n';
 
 interface ProUpgradeModalProps {
   user: User;
@@ -84,6 +90,7 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
   initialPackage = 'monthly',
   onClose,
 }) => {
+  const { lang, bi } = useLanguage();
   const monthlyPrice = billingConfig.monthlyFee || billingConfig.feeAmount || '50 BDT';
   const yearlyPrice = billingConfig.yearlyFee || '480 BDT';
   const [activeTab, setActiveTab] = useState<'refer' | 'pro'>(initialTab);
@@ -161,25 +168,28 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
     return () => unsubscribe();
   }, [user.uid, user.emailVerified]);
 
-  const handleCopyAccount = () => {
+  const handleCopyAccount = async () => {
     if (!billingConfig.paymentAccount) return;
-    navigator.clipboard.writeText(billingConfig.paymentAccount);
-    setCopiedAccount(true);
-    setTimeout(() => setCopiedAccount(false), 2000);
+    if (await copyTextSafely(billingConfig.paymentAccount)) {
+      setCopiedAccount(true);
+      setTimeout(() => setCopiedAccount(false), 2000);
+    }
   };
 
-  const handleCopyReferralLink = () => {
+  const handleCopyReferralLink = async () => {
     if (!referralLink) return;
-    navigator.clipboard.writeText(referralLink);
-    setCopiedLink(true);
-    setTimeout(() => setCopiedLink(false), 2000);
+    if (await copyTextSafely(referralLink)) {
+      setCopiedLink(true);
+      setTimeout(() => setCopiedLink(false), 2000);
+    }
   };
 
-  const handleCopyReferralCode = () => {
+  const handleCopyReferralCode = async () => {
     if (!referralCode) return;
-    navigator.clipboard.writeText(referralCode);
-    setCopiedCode(true);
-    setTimeout(() => setCopiedCode(false), 2000);
+    if (await copyTextSafely(referralCode)) {
+      setCopiedCode(true);
+      setTimeout(() => setCopiedCode(false), 2000);
+    }
   };
 
   const handleShareReferral = async () => {
@@ -187,14 +197,17 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
     if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
       try {
         await navigator.share({
-          title: 'Srabon Go — AI Voice Studio',
-          text: `Srabon Go ব্যবহার করে দেখুন! আমার রেফার কোড (${referralCode}) দিয়ে সাইন-ইন করুন:`,
+          title: bi('শ্রাবণ গো — এআই ভয়েস স্টুডিও', 'Srabon Go — AI Voice Studio'),
+          text: bi(
+            `Srabon Go ব্যবহার করে দেখুন! আমার রেফার কোড (${referralCode}) দিয়ে সাইন-ইন করুন:`,
+            `Try Srabon Go! Sign in with my referral code (${referralCode}):`
+          ),
           url: referralLink,
         });
         return;
       } catch {}
     }
-    handleCopyReferralLink();
+    await handleCopyReferralLink();
   };
 
   const handleClaimFriendCode = async (e: React.FormEvent) => {
@@ -204,7 +217,10 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
     if (cleaned.length < 6) {
       setRefMessage({
         type: 'error',
-        text: 'অনুগ্রহ করে সঠিক ৬-১৬ অক্ষরের রেফার কোড লিখুন।',
+        text: bi(
+          'অনুগ্রহ করে সঠিক ৬-১৬ অক্ষরের রেফার কোড লিখুন।',
+          'Please enter a valid 6–16 character referral code.'
+        ),
       });
       return;
     }
@@ -218,34 +234,54 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
         onReferralClaimed();
         setRefMessage({
           type: 'success',
-          text: 'রেফার কোড সফলভাবে যুক্ত হয়েছে! আপনার বন্ধু ১০টি বোনাস ক্রেডিট পেয়েছেন।',
+          text: bi(
+            'রেফার কোড সফলভাবে যুক্ত হয়েছে! আপনার বন্ধু ১০টি বোনাস ক্রেডিট পেয়েছেন।',
+            'Referral code applied! Your friend has received 10 bonus credits.'
+          ),
         });
       } else if (result.status === 'already_claimed') {
         onReferralClaimed();
         setRefMessage({
           type: 'error',
-          text: 'আপনি ইতিমধ্যেই একটি রেফার কোড ব্যবহার করেছেন।',
+          text: bi(
+            'আপনি ইতিমধ্যেই একটি রেফার কোড ব্যবহার করেছেন।',
+            'You have already claimed a referral code.'
+          ),
         });
       } else if (result.status === 'self_referral') {
         setRefMessage({
           type: 'error',
-          text: 'আপনি নিজের রেফার কোড নিজে ব্যবহার করতে পারবেন না।',
+          text: bi(
+            'আপনি নিজের রেফার কোড নিজে ব্যবহার করতে পারবেন না।',
+            'You cannot use your own referral code.'
+          ),
         });
       } else {
         setRefMessage({
           type: 'error',
-          text: 'এই রেফার কোডটি সঠিক নয় বা খুঁজে পাওয়া যায়নি।',
+          text: bi(
+            'এই রেফার কোডটি সঠিক নয় বা খুঁজে পাওয়া যায়নি।',
+            'This referral code is invalid or could not be found.'
+          ),
         });
       }
     } catch (err: any) {
-      const msg = err?.message || 'রেফার কোড যাচাই করতে সমস্যা হয়েছে।';
+      const msg =
+        err?.message ||
+        bi(
+          'রেফার কোড যাচাই করতে সমস্যা হয়েছে।',
+          'Could not verify the referral code.'
+        );
       reportAppIssue({ source: 'ProUpgrade:Referral', severity: 'error', message: msg });
-      if (isAdmin) {
-        setRefMessage({
-          type: 'error',
-          text: msg,
-        });
-      }
+      setRefMessage({
+        type: 'error',
+        text: isAdmin
+          ? msg
+          : bi(
+              'রেফার কোড যাচাই করতে সমস্যা হয়েছে। অনুগ্রহ করে পরে আবার চেষ্টা করুন।',
+              'Could not verify referral code. Please try again later.'
+            ),
+      });
     } finally {
       setClaimingRef(false);
     }
@@ -261,15 +297,27 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
     const cleanNote = note.trim().slice(0, 300);
 
     if (cleanSender.length < 4) {
-      setSubmitError('অনুগ্রহ করে আপনার পেমেন্ট নম্বরটি সঠিকভাবে লিখুন (কমপক্ষে ৪ অক্ষর)।');
+      setSubmitError(
+        bi(
+          'অনুগ্রহ করে আপনার পেমেন্ট নম্বরটি সঠিকভাবে লিখুন (কমপক্ষে ৪ অক্ষর)।',
+          'Please enter your payment sender number properly (at least 4 characters).'
+        )
+      );
       return;
     }
     if (cleanTrx.length < 3) {
-      setSubmitError('অনুগ্রহ করে আপনার Transaction ID / রেফারেন্স লিখুন।');
+      setSubmitError(
+        bi(
+          'অনুগ্রহ করে আপনার Transaction ID / রেফারেন্স লিখুন।',
+          'Please enter your Transaction ID / reference.'
+        )
+      );
       return;
     }
     if (!cleanAmount) {
-      setSubmitError('অনুগ্রহ করে পাঠানো টাকার পরিমাণ লিখুন।');
+      setSubmitError(
+        bi('অনুগ্রহ করে পাঠানো টাকার পরিমাণ লিখুন।', 'Please enter the amount paid.')
+      );
       return;
     }
 
@@ -303,7 +351,13 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
     } catch (err: any) {
       const msg = err?.message || 'Request submission failed.';
       if (isAdmin) setSubmitError(msg);
-      else setSubmitError('রিকোয়েস্ট পাঠাতে সমস্যা হয়েছে। অনুগ্রহ করে কিছুক্ষণ পর আবার চেষ্টা করুন।');
+      else
+        setSubmitError(
+          bi(
+            'রিকোয়েস্ট পাঠাতে সমস্যা হয়েছে। অনুগ্রহ করে কিছুক্ষণ পর আবার চেষ্টা করুন।',
+            'Failed to submit request. Please try again in a moment.'
+          )
+        );
       reportFirestoreError(err, OperationType.CREATE, reqPath);
     } finally {
       setSubmitting(false);
@@ -334,8 +388,8 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
                 {activeTab === 'refer' ? <Gift size={13} /> : <Crown size={13} />}
                 <span>
                   {activeTab === 'refer'
-                    ? 'Refer Friends • +10 Credits Each'
-                    : 'Srabon Go Pro Access'}
+                    ? bi('বন্ধুদের রেফার করুন • প্রতি জনে +১০ ক্রেডিট', 'Refer Friends • +10 Credits Each')
+                    : bi('শ্রাবণ গো প্রো অ্যাক্সেস', 'Srabon Go Pro Access')}
                 </span>
               </div>
               <h2
@@ -343,22 +397,28 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
                 className="text-2xl font-serif font-medium text-zinc-900 dark:text-white"
               >
                 {activeTab === 'refer'
-                  ? 'বন্ধুদের রেফার করে ১০ ক্রেডিট করে নিন'
+                  ? bi('বন্ধুদের রেফার করে ১০ ক্রেডিট করে নিন', 'Refer Friends & Earn 10 Credits Each')
                   : userPlan === 'pro' || isAdmin
-                  ? 'আপনার Pro অ্যাক্সেস সক্রিয় আছে'
-                  : 'আনলিমিটেড ভয়েস স্টুডিও আনলক করুন'}
+                  ? bi('আপনার Pro অ্যাক্সেস সক্রিয় আছে', 'Your Pro Access is Active')
+                  : bi('আনলিমিটেড ভয়েস স্টুডিও আনলক করুন', 'Unlock Unlimited Voice Studio')}
               </h2>
               <p className="text-xs text-zinc-500 dark:text-zinc-400">
                 {userPlan === 'pro' || isAdmin
-                  ? `আপনি আনলিমিটেড অ্যাক্সেস পাচ্ছেন। বোনাস ক্রেডিট: ${bonusCredits}`
-                  : `আজকের ফ্রি ব্যবহার: ${usedToday} / ${billingConfig.freeDailyLimit} বার • বোনাস ক্রেডিট: ${bonusCredits} টি`}
+                  ? bi(
+                      `আপনি আনলিমিটেড অ্যাক্সেস পাচ্ছেন। বোনাস ক্রেডিট: ${bonusCredits}`,
+                      `You have unlimited access. Bonus credits: ${bonusCredits}`
+                    )
+                  : bi(
+                      `আজকের ফ্রি ব্যবহার: ${usedToday} / ${billingConfig.freeDailyLimit} বার • বোনাস ক্রেডিট: ${bonusCredits} টি`,
+                      `Free usage today: ${usedToday} / ${billingConfig.freeDailyLimit} • Bonus credits: ${bonusCredits}`
+                    )}
               </p>
             </div>
             <button
               type="button"
               onClick={onClose}
               className="p-2 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors"
-              aria-label="Close"
+              aria-label={bi('বন্ধ করুন', 'Close')}
             >
               <X size={18} />
             </button>
@@ -376,7 +436,7 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
               }`}
             >
               <Gift size={14} />
-              <span>Refer & Earn (+10 Cr)</span>
+              <span>{bi('রেফার ও আর্ন (+১০ ক্রেডিট)', 'Refer & Earn (+10 Cr)')}</span>
             </button>
             <button
               type="button"
@@ -388,7 +448,7 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
               }`}
             >
               <Crown size={14} />
-              <span>Unlock Pro</span>
+              <span>{bi('Pro আনলক করুন', 'Unlock Pro')}</span>
             </button>
           </div>
 
@@ -400,20 +460,26 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
                 <div className="p-4 rounded-2xl bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/60">
                   <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
                     <Sparkles size={12} />
-                    <span>মোট বোনাস ক্রেডিট</span>
+                    <span>{bi('মোট বোনাস ক্রেডিট', 'Total Bonus Credits')}</span>
                   </div>
-                  <p className="text-2xl font-bold text-zinc-900 dark:text-white mt-1">
-                    {bonusCredits} <span className="text-xs font-medium text-zinc-500">Credits</span>
+                  <p className="text-2xl font-bold text-zinc-900 dark:text-white mt-1 tabular-nums">
+                    {bonusCredits}{' '}
+                    <span className="text-xs font-medium text-zinc-500">
+                      {bi('ক্রেডিট', 'Credits')}
+                    </span>
                   </p>
                 </div>
 
                 <div className="p-4 rounded-2xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-100 dark:border-emerald-900/60">
                   <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
                     <Users size={12} />
-                    <span>সফল রেফার</span>
+                    <span>{bi('সফল রেফার', 'Successful Referrals')}</span>
                   </div>
-                  <p className="text-2xl font-bold text-zinc-900 dark:text-white mt-1">
-                    {referralCount} <span className="text-xs font-medium text-zinc-500">Friends</span>
+                  <p className="text-2xl font-bold text-zinc-900 dark:text-white mt-1 tabular-nums">
+                    {referralCount}{' '}
+                    <span className="text-xs font-medium text-zinc-500">
+                      {bi('জন বন্ধু', 'Friends')}
+                    </span>
                   </p>
                 </div>
               </div>
@@ -421,18 +487,26 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
               {/* Share Link Box */}
               <div className="p-4 sm:p-5 rounded-2xl bg-zinc-50 dark:bg-zinc-800/70 border border-zinc-200 dark:border-zinc-700 space-y-3">
                 <p className="text-xs text-zinc-700 dark:text-zinc-300 leading-relaxed">
-                  আপনার নিচের রেফার লিংক বা কোড বন্ধুদের মাঝে শেয়ার করুন। প্রতিটি নতুন বন্ধু এই লিংকে ঢুকে গুগল লগইন করলেই আপনি সাথে সাথে{' '}
-                  <strong className="text-indigo-600 dark:text-indigo-400">১০টি করে ফ্রি ক্রেডিট</strong> পাবেন! দৈনিক ফ্রি লিমিট শেষ হলে এই ক্রেডিটগুলো স্বয়ংক্রিয়ভাবে ব্যবহার হবে।
+                  {bi(
+                    <>
+                      আপনার নিচের রেফার লিংক বা কোড বন্ধুদের মাঝে শেয়ার করুন। প্রতিটি নতুন বন্ধু এই লিংকে ঢুকে গুগল লগইন করলেই আপনি সাথে সাথে{' '}
+                      <strong className="text-indigo-600 dark:text-indigo-400">১০টি করে ফ্রি ক্রেডিট</strong> পাবেন! দৈনিক ফ্রি লিমিট শেষ হলে এই ক্রেডিটগুলো স্বয়ংক্রিয়ভাবে ব্যবহার হবে।
+                    </>,
+                    <>
+                      Share your referral link or code below with friends. Whenever a new friend signs in via your link, you immediately receive{' '}
+                      <strong className="text-indigo-600 dark:text-indigo-400">10 free credits</strong>! These credits are used automatically after your daily free quota runs out.
+                    </>
+                  )}
                 </p>
 
                 {/* Referral Code */}
                 <div className="flex items-center justify-between gap-2 px-3.5 py-2 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700">
                   <div>
                     <span className="text-[10px] uppercase tracking-wider text-zinc-400 block">
-                      আপনার রেফার কোড
+                      {bi('আপনার রেফার কোড', 'Your Referral Code')}
                     </span>
                     <span className="text-sm font-mono font-bold tracking-wider text-zinc-900 dark:text-white">
-                      {referralCode || 'Generating...'}
+                      {referralCode || bi('তৈরি হচ্ছে...', 'Generating...')}
                     </span>
                   </div>
                   <button
@@ -442,7 +516,7 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
                     className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-xs font-medium text-zinc-700 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
                   >
                     {copiedCode ? <Check size={13} className="text-emerald-500" /> : <Copy size={13} />}
-                    <span>{copiedCode ? 'Copied' : 'Copy Code'}</span>
+                    <span>{copiedCode ? bi('কপি হয়েছে', 'Copied') : bi('কোড কপি', 'Copy Code')}</span>
                   </button>
                 </div>
 
@@ -450,10 +524,10 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
                 <div className="flex items-center justify-between gap-2 px-3.5 py-2 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700">
                   <div className="min-w-0 flex-1">
                     <span className="text-[10px] uppercase tracking-wider text-zinc-400 block">
-                      আপনার রেফার লিংক
+                      {bi('আপনার রেফার লিংক', 'Your Referral Link')}
                     </span>
                     <span className="text-xs font-mono text-zinc-700 dark:text-zinc-300 truncate block">
-                      {referralLink || 'Loading...'}
+                      {referralLink || bi('লোড হচ্ছে...', 'Loading...')}
                     </span>
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0">
@@ -464,7 +538,7 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
                       className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-xs font-medium text-zinc-700 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
                     >
                       {copiedLink ? <Check size={13} className="text-emerald-500" /> : <Copy size={13} />}
-                      <span>{copiedLink ? 'Copied' : 'Copy'}</span>
+                      <span>{copiedLink ? bi('কপি হয়েছে', 'Copied') : bi('কপি', 'Copy')}</span>
                     </button>
                     <button
                       type="button"
@@ -473,7 +547,7 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
                       className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold transition-colors"
                     >
                       <Share2 size={13} />
-                      <span>Share</span>
+                      <span>{bi('শেয়ার', 'Share')}</span>
                     </button>
                   </div>
                 </div>
@@ -489,7 +563,10 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
                     htmlFor="friend-ref-code"
                     className="block text-xs font-semibold text-zinc-700 dark:text-zinc-200"
                   >
-                    কোনো বন্ধুর রেফার কোড থাকলে এখানে দিন (একবার ব্যবহারযোগ্য)
+                    {bi(
+                      'কোনো বন্ধুর রেফার কোড থাকলে এখানে দিন (একবার ব্যবহারযোগ্য)',
+                      'Have a friend’s referral code? Enter it here (one-time use)'
+                    )}
                   </label>
                   <div className="flex gap-2">
                     <input
@@ -498,7 +575,7 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
                       value={friendCodeInput}
                       onChange={(e) => setFriendCodeInput(e.target.value.toUpperCase())}
                       maxLength={16}
-                      placeholder="e.g. SRB7K9M2Q4"
+                      placeholder={bi('যেমন: SRB7K9M2Q4', 'e.g. SRB7K9M2Q4')}
                       className="flex-1 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 px-3 py-2 text-sm font-mono uppercase text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:focus:ring-indigo-900"
                     />
                     <button
@@ -506,7 +583,7 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
                       disabled={claimingRef || !friendCodeInput.trim()}
                       className="px-4 py-2 rounded-xl bg-zinc-900 dark:bg-indigo-600 hover:bg-zinc-800 dark:hover:bg-indigo-500 text-white text-xs font-semibold transition-colors disabled:opacity-50"
                     >
-                      {claimingRef ? <Loader2 size={14} className="animate-spin" /> : 'Apply'}
+                      {claimingRef ? <Loader2 size={14} className="animate-spin" /> : bi('প্রয়োগ', 'Apply')}
                     </button>
                   </div>
                   {refMessage && (
@@ -534,22 +611,33 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
                   <div className="text-xs space-y-0.5">
                     <p className="font-semibold">
                       {isAdmin
-                        ? 'Admin Account (Unlimited · Yearly Studio Pro Perks)'
+                        ? bi(
+                            'Admin অ্যাকাউন্ট (আনলিমিটেড · ইয়ারলি স্টুডিও প্রো সুবিধা)',
+                            'Admin Account (Unlimited · Yearly Studio Pro Perks)'
+                          )
                         : proPackageType === 'yearly'
-                        ? 'Yearly Pro Package Active (৩৬৫ দিন · সব প্রিমিয়াম সুবিধা)'
-                        : 'Monthly Pro Package Active (৩০ দিন)'}
+                        ? bi(
+                            'Yearly Pro প্যাকেজ সক্রিয় (৩৬৫ দিন · সব প্রিমিয়াম সুবিধা)',
+                            'Yearly Pro Package Active (365 Days · All Premium Perks)'
+                          )
+                        : bi('Monthly Pro প্যাকেজ সক্রিয় (৩০ দিন)', 'Monthly Pro Package Active (30 Days)')}
                     </p>
                     <p className="opacity-85">
                       {isAdmin || proPackageType === 'yearly'
-                        ? 'সর্বোচ্চ ৫,০০০ অক্ষর, প্লেব্যাক স্পিড, লাউড অ্যালার্ম বুস্ট, ৮টি ভয়েস স্টাইল ও ২৫টি স্ক্রিপ্ট সেভ চালু আছে'
-                        : 'আপনি চাইলে নিচ থেকে Yearly প্যাকেজে আপগ্রেড করে ২× স্ক্রিপ্ট, স্পিড, বুস্ট ও প্রো স্টাইল চালু করতে পারেন'}
+                        ? bi(
+                            'সর্বোচ্চ ৫,০০০ অক্ষর, প্লেব্যাক স্পিড, লাউড অ্যালার্ম বুস্ট, ৮টি ভয়েস স্টাইল ও ২৫টি স্ক্রিপ্ট সেভ চালু আছে',
+                            '5,000 max characters, playback speed, loud alarm boost, 8 voice styles & 25 saved scripts enabled'
+                          )
+                        : bi(
+                            'আপনি চাইলে নিচ থেকে Yearly প্যাকেজে আপগ্রেড করে ২× স্ক্রিপ্ট, স্পিড, বুস্ট ও প্রো স্টাইল চালু করতে পারেন',
+                            'Upgrade to Yearly below to unlock 2× script length, speed, boost & pro styles'
+                          )}
                       {proExpiresAtMs && proExpiresAtMs > Date.now() && !isAdmin
-                        ? ` • মেয়াদ শেষ: ${new Date(proExpiresAtMs).toLocaleDateString('bn-BD', {
-                            year: 'numeric',
-                            month: 'short',
-                            day: 'numeric',
-                          })}`
-                        : '।'}
+                        ? bi(
+                            ` • মেয়াদ শেষ: ${localizeDate(proExpiresAtMs, lang)}`,
+                            ` • Expires: ${localizeDate(proExpiresAtMs, lang)}`
+                          )
+                        : '.'}
                     </p>
                   </div>
                 </div>
@@ -571,10 +659,10 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
                       <div>
                         <div className="flex items-center justify-between gap-1">
                           <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
-                            Monthly
+                            {bi('মান্থলি', 'Monthly')}
                           </span>
                           <span className="text-[10px] font-semibold text-zinc-500 dark:text-zinc-400">
-                            {STUDIO_TIER_LIMITS.monthly.validityLabel}
+                            {bi('৩০ দিন মেয়াদ', '30 Days Validity')}
                           </span>
                         </div>
                         <p className="text-lg font-bold text-zinc-900 dark:text-white mt-1 tabular-nums">
@@ -582,10 +670,18 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
                         </p>
                       </div>
                       <ul className="space-y-1 text-[11px] text-zinc-600 dark:text-zinc-300">
-                        <li>• {STUDIO_TIER_LIMITS.monthly.maxScriptChars.toLocaleString('en-US')} অক্ষর / স্ক্রিপ্ট</li>
-                        <li>• ৪টি স্ট্যান্ডার্ড ভয়েস স্টাইল</li>
-                        <li>• {STUDIO_TIER_LIMITS.monthly.maxSavedScripts}টি কাস্টম স্ক্রিপ্ট সেভ</li>
-                        <li className="text-zinc-400">• সাধারণ স্পিড ও ফিক্সড ১.২স লুপ</li>
+                        <li>
+                          • {STUDIO_TIER_LIMITS.monthly.maxScriptChars.toLocaleString(lang === 'bn' ? 'bn-BD' : 'en-US')}{' '}
+                          {bi('অক্ষর / স্ক্রিপ্ট', 'chars / script')}
+                        </li>
+                        <li>• {bi('৪টি স্ট্যান্ডার্ড ভয়েস স্টাইল', '4 standard voice styles')}</li>
+                        <li>
+                          • {STUDIO_TIER_LIMITS.monthly.maxSavedScripts}
+                          {bi('টি কাস্টম স্ক্রিপ্ট সেভ', ' saved custom scripts')}
+                        </li>
+                        <li className="text-zinc-400">
+                          • {bi('সাধারণ স্পিড ও ফিক্সড ১.২স লুপ', 'Standard 1.0x speed & fixed 1.2s loop')}
+                        </li>
                       </ul>
                     </button>
 
@@ -601,10 +697,10 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
                       <div>
                         <div className="flex items-center justify-between gap-1">
                           <span className="text-[11px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400">
-                            Yearly (Best Value)
+                            {bi('ইয়ারলি (সেরা অফার)', 'Yearly (Best Value)')}
                           </span>
                           <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500 text-zinc-950">
-                            ৩৬৫ দিন
+                            {bi('৩৬৫ দিন', '365 Days')}
                           </span>
                         </div>
                         <p className="text-lg font-bold text-zinc-900 dark:text-white mt-1 tabular-nums">
@@ -612,10 +708,32 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
                         </p>
                       </div>
                       <ul className="space-y-1 text-[11px] text-zinc-700 dark:text-zinc-200">
-                        <li>• <strong>{STUDIO_TIER_LIMITS.yearly.maxScriptChars.toLocaleString('en-US')} অক্ষর</strong> / স্ক্রিপ্ট (২× বড়)</li>
-                        <li>• <strong>+৪টি এক্সক্লুসিভ স্টুডিও স্টাইল</strong> (মোট ৮টি)</li>
-                        <li>• <strong>{STUDIO_TIER_LIMITS.yearly.maxSavedScripts}টি</strong> কাস্টম স্ক্রিপ্ট লাইব্রেরি</li>
-                        <li>• <strong>স্পিড (0.85x–1.25x), +৪০% বুস্ট ও কাস্টম লুপ</strong></li>
+                        <li>
+                          •{' '}
+                          <strong>
+                            {STUDIO_TIER_LIMITS.yearly.maxScriptChars.toLocaleString(lang === 'bn' ? 'bn-BD' : 'en-US')}{' '}
+                            {bi('অক্ষর', 'chars')}
+                          </strong>{' '}
+                          {bi('/ স্ক্রিপ্ট (২× বড়)', '/ script (2× larger)')}
+                        </li>
+                        <li>
+                          •{' '}
+                          <strong>{bi('+৪টি এক্সক্লুসিভ স্টুডিও স্টাইল', '+4 exclusive studio styles')}</strong>{' '}
+                          {bi('(মোট ৮টি)', '(8 total)')}
+                        </li>
+                        <li>
+                          • <strong>{STUDIO_TIER_LIMITS.yearly.maxSavedScripts}{bi('টি', '')}</strong>{' '}
+                          {bi('কাস্টম স্ক্রিপ্ট লাইব্রেরি', 'saved scripts library')}
+                        </li>
+                        <li>
+                          •{' '}
+                          <strong>
+                            {bi(
+                              'স্পিড (0.85x–1.25x), +৪০% বুস্ট ও কাস্টম লুপ',
+                              'Speed (0.85x–1.25x), +40% boost & custom loop'
+                            )}
+                          </strong>
+                        </li>
                       </ul>
                     </button>
                   </div>
@@ -625,8 +743,8 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
                       <div>
                         <p className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
                           {selectedPackage === 'yearly'
-                            ? 'Yearly প্যাকেজ ফি (৩৬৫ দিন)'
-                            : 'Monthly প্যাকেজ ফি (৩০ দিন)'}
+                            ? bi('Yearly প্যাকেজ ফি (৩৬৫ দিন)', 'Yearly Package Fee (365 Days)')
+                            : bi('Monthly প্যাকেজ ফি (৩০ দিন)', 'Monthly Package Fee (30 Days)')}
                         </p>
                         <p className="text-xl font-bold text-zinc-900 dark:text-white">
                           {selectedPackage === 'yearly' ? yearlyPrice : monthlyPrice}
@@ -634,7 +752,7 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
                       </div>
                       <div className="text-right">
                         <p className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
-                          পেমেন্ট মাধ্যম
+                          {bi('পেমেন্ট মাধ্যম', 'Payment Method')}
                         </p>
                         <p className="text-sm font-semibold text-indigo-600 dark:text-indigo-400">
                           {billingConfig.paymentMethod}
@@ -645,7 +763,9 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
                     {billingConfig.paymentAccount ? (
                       <div className="flex items-center justify-between gap-2 px-3.5 py-2.5 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700">
                         <div className="min-w-0">
-                          <span className="text-[11px] text-zinc-400 block">পেমেন্ট নম্বর / অ্যাকাউন্ট</span>
+                          <span className="text-[11px] text-zinc-400 block">
+                            {bi('পেমেন্ট নম্বর / অ্যাকাউন্ট', 'Payment Number / Account')}
+                          </span>
                           <span className="text-sm font-mono font-semibold text-zinc-900 dark:text-white break-all">
                             {billingConfig.paymentAccount}
                           </span>
@@ -656,17 +776,24 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
                           className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-xs font-medium text-zinc-700 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
                         >
                           {copiedAccount ? <Check size={13} className="text-emerald-500" /> : <Copy size={13} />}
-                          <span>{copiedAccount ? 'Copied' : 'Copy'}</span>
+                          <span>{copiedAccount ? bi('কপি হয়েছে', 'Copied') : bi('কপি', 'Copy')}</span>
                         </button>
                       </div>
                     ) : (
                       <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 text-xs text-amber-800 dark:text-amber-300">
-                        অ্যাডমিন এখনও পেমেন্ট নম্বর সেট করেননি। অ্যাডমিন প্যানেল থেকে পেমেন্ট নম্বর সেট করার পর এখানে দেখাবে।
+                        {bi(
+                          'অ্যাডমিন এখনও পেমেন্ট নম্বর সেট করেননি। অ্যাডমিন প্যানেল থেকে পেমেন্ট নম্বর সেট করার পর এখানে দেখাবে।',
+                          'Admin has not configured a payment number yet. Once set from the Admin Panel, it will appear here.'
+                        )}
                       </div>
                     )}
 
                     <p className="text-xs text-zinc-600 dark:text-zinc-300 leading-relaxed">
-                      {billingConfig.instructions}
+                      {lang === 'en' &&
+                      billingConfig.instructions ===
+                        'উপরের নম্বরে সেন্ড মানি / পেমেন্ট করে নিচের ফর্মে আপনার Transaction ID (TrxID) জমা দিন।'
+                        ? 'Send Money / Pay to the account above and submit your Transaction ID (TrxID) in the form below.'
+                        : billingConfig.instructions}
                     </p>
                   </div>
                 </div>
@@ -676,13 +803,13 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
                 <form onSubmit={handleSubmit} className="space-y-4">
                   <h3 className="text-sm font-semibold text-zinc-900 dark:text-white flex items-center gap-2">
                     <Sparkles size={15} className="text-indigo-500" />
-                    <span>পেমেন্টের তথ্য জমা দিন</span>
+                    <span>{bi('পেমেন্টের তথ্য জমা দিন', 'Submit Payment Details')}</span>
                   </h3>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1">
-                        পেমেন্ট মেথড
+                        {bi('পেমেন্ট মেথড', 'Payment Method')}
                       </label>
                       <select
                         value={paymentMethod}
@@ -691,7 +818,7 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
                       >
                         {PAYMENT_METHODS.map((m) => (
                           <option key={m} value={m}>
-                            {m}
+                            {m === 'Bank / Other' ? bi('ব্যাংক / অন্যান্য', 'Bank / Other') : m}
                           </option>
                         ))}
                       </select>
@@ -699,21 +826,21 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
 
                     <div>
                       <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1">
-                        পাঠানো টাকার পরিমাণ
+                        {bi('পাঠানো টাকার পরিমাণ', 'Amount Sent')}
                       </label>
                       <input
                         type="text"
                         value={amountText}
                         onChange={(e) => setAmountText(e.target.value)}
                         maxLength={40}
-                        placeholder="e.g. 50 BDT"
+                        placeholder={bi('যেমন: 50 BDT', 'e.g. 50 BDT')}
                         className="w-full rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-3 py-2 text-sm text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:focus:ring-indigo-900"
                       />
                     </div>
 
                     <div>
                       <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1">
-                        যে নম্বর থেকে পাঠিয়েছেন
+                        {bi('যে নম্বর থেকে পাঠিয়েছেন', 'Sender Account / Number')}
                       </label>
                       <input
                         type="text"
@@ -727,14 +854,14 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
 
                     <div>
                       <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1">
-                        Transaction ID (TrxID)
+                        {bi('ট্রানজেকশন আইডি (TrxID)', 'Transaction ID (TrxID)')}
                       </label>
                       <input
                         type="text"
                         value={transactionId}
                         onChange={(e) => setTransactionId(e.target.value)}
                         maxLength={64}
-                        placeholder="e.g. BGD9X2K10"
+                        placeholder={bi('যেমন: BGD9X2K10', 'e.g. BGD9X2K10')}
                         className="w-full rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-3 py-2 text-sm text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:focus:ring-indigo-900"
                       />
                     </div>
@@ -742,14 +869,14 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
 
                   <div>
                     <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1">
-                      নোট (ঐচ্ছিক)
+                      {bi('নোট (ঐচ্ছিক)', 'Note (Optional)')}
                     </label>
                     <input
                       type="text"
                       value={note}
                       onChange={(e) => setNote(e.target.value)}
                       maxLength={300}
-                      placeholder="অতিরিক্ত কোনো তথ্য থাকলে লিখুন..."
+                      placeholder={bi('অতিরিক্ত কোনো তথ্য থাকলে লিখুন...', 'Any additional notes...')}
                       className="w-full rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-3 py-2 text-sm text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:focus:ring-indigo-900"
                     />
                   </div>
@@ -764,7 +891,12 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
                   {submitSuccess && (
                     <div className="flex items-start gap-2 p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 text-xs text-emerald-700 dark:text-emerald-300">
                       <CheckCircle2 size={15} className="shrink-0 mt-0.5" />
-                      <span>আপনার রিকোয়েস্ট জমা হয়েছে! অ্যাডমিন যাচাই করে অনুমোদন দিলেই Pro চালু হয়ে যাবে।</span>
+                      <span>
+                        {bi(
+                          'আপনার রিকোয়েস্ট জমা হয়েছে! অ্যাডমিন যাচাই করে অনুমোদন দিলেই Pro চালু হয়ে যাবে।',
+                          'Your request has been submitted! Pro access activates once the admin verifies and approves it.'
+                        )}
+                      </span>
                     </div>
                   )}
 
@@ -780,10 +912,10 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
                     )}
                     <span>
                       {hasPending
-                        ? 'একটি রিকোয়েস্ট পেন্ডিং রয়েছে...'
+                        ? bi('একটি রিকোয়েস্ট পেন্ডিং রয়েছে...', 'A request is pending...')
                         : submitting
-                        ? 'জমা হচ্ছে...'
-                        : 'Pro আনলক রিকোয়েস্ট পাঠান'}
+                        ? bi('জমা হচ্ছে...', 'Submitting...')
+                        : bi('Pro আনলক রিকোয়েস্ট পাঠান', 'Submit Pro Unlock Request')}
                     </span>
                   </button>
                 </form>
@@ -792,7 +924,7 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
               {myRequests.length > 0 && (
                 <div className="space-y-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
                   <p className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
-                    আপনার রিকোয়েস্টের অবস্থা
+                    {bi('আপনার রিকোয়েস্টের অবস্থা', 'Your Request Status')}
                   </p>
                   <div className="space-y-2">
                     {myRequests.map((req) => (
@@ -802,7 +934,10 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
                       >
                         <div className="min-w-0">
                           <p className="font-medium text-zinc-900 dark:text-white truncate">
-                            {req.packageType === 'yearly' ? 'Yearly (৩৬৫ দিন)' : 'Monthly (৩০ দিন)'} • {req.paymentMethod} • TrxID: {req.transactionId}
+                            {req.packageType === 'yearly'
+                              ? bi('Yearly (৩৬৫ দিন)', 'Yearly (365 Days)')
+                              : bi('Monthly (৩০ দিন)', 'Monthly (30 Days)')}{' '}
+                            • {req.paymentMethod} • TrxID: {req.transactionId}
                           </p>
                           <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
                             {req.amountText} • {req.senderNumber}
@@ -824,7 +959,7 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
                           ) : (
                             <Clock size={12} />
                           )}
-                          <span className="capitalize">{req.status}</span>
+                          <span>{localizeUpgradeStatus(req.status, lang)}</span>
                         </span>
                       </div>
                     ))}

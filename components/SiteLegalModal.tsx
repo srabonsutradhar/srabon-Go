@@ -4,6 +4,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { X, ShieldCheck, FileText, Info, Mail, Copy, Check } from 'lucide-react';
+import { copyTextSafely, useLanguage } from '../utils/i18n';
 
 export type LegalTab = 'about' | 'privacy' | 'terms' | 'contact';
 
@@ -18,6 +19,7 @@ const SiteLegalModal: React.FC<SiteLegalModalProps> = ({
   initialTab = 'about',
   onClose,
 }) => {
+  const { bi } = useLanguage();
   const [activeTab, setActiveTab] = useState<LegalTab>(initialTab);
   const [copiedEmail, setCopiedEmail] = useState(false);
 
@@ -33,10 +35,12 @@ const SiteLegalModal: React.FC<SiteLegalModalProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onClose]);
 
-  const handleCopyEmail = () => {
-    navigator.clipboard.writeText(SUPPORT_EMAIL);
-    setCopiedEmail(true);
-    window.setTimeout(() => setCopiedEmail(false), 2000);
+  const handleCopyEmail = async () => {
+    const ok = await copyTextSafely(SUPPORT_EMAIL);
+    if (ok) {
+      setCopiedEmail(true);
+      window.setTimeout(() => setCopiedEmail(false), 2000);
+    }
   };
 
   return (
@@ -59,17 +63,20 @@ const SiteLegalModal: React.FC<SiteLegalModalProps> = ({
               id="site-legal-title"
               className="text-xl font-serif font-medium text-zinc-900 dark:text-white"
             >
-              Srabon Go — Information &amp; Legal
+              {bi('শ্রাবণ গো — তথ্য ও নীতিমালা', 'Srabon Go — Information & Legal')}
             </h2>
             <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-              About, Privacy Policy, Terms of Service, and Contact Support
+              {bi(
+                'আমাদের সম্পর্কে, গোপনীয়তা নীতি, ব্যবহারের শর্তাবলি ও সাপোর্ট যোগাযোগ',
+                'About, Privacy Policy, Terms of Service, and Contact Support'
+              )}
             </p>
           </div>
           <button
             type="button"
             onClick={onClose}
             className="p-2 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors"
-            aria-label="Close"
+            aria-label={bi('বন্ধ করুন', 'Close')}
           >
             <X size={18} />
           </button>
@@ -87,7 +94,7 @@ const SiteLegalModal: React.FC<SiteLegalModalProps> = ({
             }`}
           >
             <Info size={13} />
-            <span>About</span>
+            <span>{bi('পরিচিতি', 'About')}</span>
           </button>
           <button
             type="button"
@@ -99,7 +106,7 @@ const SiteLegalModal: React.FC<SiteLegalModalProps> = ({
             }`}
           >
             <ShieldCheck size={13} />
-            <span>Privacy Policy</span>
+            <span>{bi('গোপনীয়তা নীতি', 'Privacy Policy')}</span>
           </button>
           <button
             type="button"
@@ -111,7 +118,7 @@ const SiteLegalModal: React.FC<SiteLegalModalProps> = ({
             }`}
           >
             <FileText size={13} />
-            <span>Terms of Service</span>
+            <span>{bi('শর্তাবলি', 'Terms of Service')}</span>
           </button>
           <button
             type="button"
@@ -123,7 +130,7 @@ const SiteLegalModal: React.FC<SiteLegalModalProps> = ({
             }`}
           >
             <Mail size={13} />
-            <span>Contact</span>
+            <span>{bi('যোগাযোগ', 'Contact')}</span>
           </button>
         </div>
 
@@ -132,13 +139,19 @@ const SiteLegalModal: React.FC<SiteLegalModalProps> = ({
           {activeTab === 'about' && (
             <div className="space-y-3">
               <h3 className="text-base font-semibold text-zinc-900 dark:text-white">
-                About Srabon Go Voice Library
+                {bi('শ্রাবণ গো ভয়েস লাইব্রেরি সম্পর্কে', 'About Srabon Go Voice Library')}
               </h3>
               <p>
-                <strong>Srabon Go</strong> is a multilingual AI Voice Studio and Voice Casting platform built for creators, students, educators, and storytellers. Preview 30 distinct vocal personalities, generate spoken audio in Bengali, English, and global languages, and export crisp 24 kHz WAV recordings.
+                {bi(
+                  'শ্রাবণ গো হলো নির্মাতা, শিক্ষার্থী, শিক্ষক ও গল্পকারদের জন্য নির্মিত একটি বহুভাষিক এআই ভয়েস স্টুডিও এবং ভয়েস কাস্টিং প্ল্যাটফর্ম। এখানে ৩০টি আলাদা কণ্ঠস্বর প্রিভিউ করা, বাংলা ও ইংরেজিসহ বিশ্বব্যাপী বিভিন্ন ভাষায় অডিও তৈরি এবং পরিষ্কার ২৪ kHz WAV ফাইল ডাউনলোড করা যায়।',
+                  'Srabon Go is a multilingual AI Voice Studio and Voice Casting platform built for creators, students, educators, and storytellers. Preview 30 distinct vocal personalities, generate spoken audio in Bengali, English, and global languages, and export crisp 24 kHz WAV recordings.'
+                )}
               </p>
               <p>
-                Key capabilities include an expressive Text-to-Speech Studio with Alarm Loop playback, an AI Casting Director that recommends voices and director prompts for your script, synchronized Google Favorites, and a referral rewards program (+10 bonus credits per friend).
+                {bi(
+                  'প্রধান সুবিধার মধ্যে রয়েছে অ্যালার্ম লুপসহ টেক্সট-টু-স্পিচ স্টুডিও, এআই কাস্টিং ডিরেক্টর, ব্যক্তিগত ভয়েস রেকর্ডিং ও ক্যালিব্রেশন, পাশাপাশি গুগল সিনক্রোনাইজড ফেভারিটস ও রেফারেল পুরস্কার (+১০ বোনাস ক্রেডিট)।',
+                  'Key capabilities include an expressive Text-to-Speech Studio with Alarm Loop playback, an AI Casting Director that recommends voices and director prompts for your script, personal voice recording & calibration, synchronized Google Favorites, and a referral rewards program (+10 bonus credits per friend).'
+                )}
               </p>
             </div>
           )}
@@ -146,19 +159,35 @@ const SiteLegalModal: React.FC<SiteLegalModalProps> = ({
           {activeTab === 'privacy' && (
             <div className="space-y-3 text-xs sm:text-sm">
               <h3 className="text-base font-semibold text-zinc-900 dark:text-white">
-                Privacy Policy
+                {bi('গোপনীয়তা নীতি (Privacy Policy)', 'Privacy Policy')}
               </h3>
               <p>
-                <strong>1. Account Information:</strong> When you sign in with Google, we store your basic profile fields (name, email address, and profile photo URL) along with your saved voice favorites, daily quota counter, referral code, and bonus credit balance in Firebase Firestore.
+                <strong>{bi('১. অ্যাকাউন্ট তথ্য:', '1. Account Information:')}</strong>{' '}
+                {bi(
+                  'গুগল দিয়ে সাইন-ইন করলে আমরা আপনার প্রোফাইলের মৌলিক তথ্য (নাম, ইমেইল ও ছবি), সংরক্ষিত পছন্দের ভয়েস, দৈনিক ব্যবহারের হিসাব, রেফারেল কোড এবং বোনাস ক্রেডিট ফায়ারবেস ফায়ারস্টোরে সংরক্ষণ করি।',
+                  'When you sign in with Google, we store your basic profile fields (name, email address, and profile photo URL) along with your saved voice favorites, daily quota counter, referral code, and bonus credit balance in Firebase Firestore.'
+                )}
               </p>
               <p>
-                <strong>2. Scripts &amp; Audio Synthesis:</strong> Text scripts entered into Voice Studio or AI Casting Director are sent securely to our server-side synthesis endpoint to generate audio or voice recommendations and are not archived to your profile.
+                <strong>{bi('২. স্ক্রিপ্ট ও অডিও জেনারেশন:', '2. Scripts & Audio Synthesis:')}</strong>{' '}
+                {bi(
+                  'ভয়েস স্টুডিও বা এআই কাস্টিং ডিরেক্টরে লেখা টেক্সট নিরাপদভাবে আমাদের সার্ভার-সাইড এন্ডপয়েন্টে অডিও ও ভয়েস পরামর্শ তৈরির জন্য পাঠানো হয় এবং সার্ভারে সংরক্ষিত থাকে না।',
+                  'Text scripts entered into Voice Studio or AI Casting Director are sent securely to our server-side synthesis endpoint to generate audio or voice recommendations and are not archived to your profile.'
+                )}
               </p>
               <p>
-                <strong>3. Access Control &amp; Security:</strong> Your profile data is protected by owner-only Firestore security rules. We never sell or rent user email addresses or personal information to third parties.
+                <strong>{bi('৩. নিরাপত্তা ও অ্যাক্সেস নিয়ন্ত্রণ:', '3. Access Control & Security:')}</strong>{' '}
+                {bi(
+                  'আপনার প্রোফাইল ডেটা শুধুমাত্র অ্যাকাউন্ট-মালিকানাধীন ফায়ারস্টোর নিয়ম দ্বারা সুরক্ষিত। আমরা কখনোই ব্যবহারকারীর তথ্য তৃতীয় পক্ষের কাছে বিক্রি বা ভাড়া দিই না।',
+                  'Your profile data is protected by owner-only Firestore security rules. We never sell or rent user email addresses or personal information to third parties.'
+                )}
               </p>
               <p>
-                <strong>4. Cookies &amp; Advertising:</strong> Essential browser storage preserves your dark/light theme preference, referral code attribution, and active session. When Google AdSense or Google Ads tags are configured, Google may use cookies in accordance with its advertising policies.
+                <strong>{bi('৪. কুকি ও বিজ্ঞাপন:', '4. Cookies & Advertising:')}</strong>{' '}
+                {bi(
+                  'ব্রাউজার স্টোরেজে আপনার থিম (লাইট/ডার্ক), ভাষা পছন্দ, রেফারেল কোড ও সেশন তথ্য সংরক্ষিত থাকে। Google AdSense বা Ads চালু থাকলে গুগলের নীতিমালা অনুযায়ী কুকি ব্যবহৃত হতে পারে।',
+                  'Essential browser storage preserves your dark/light theme preference, language choice, referral code attribution, and active session. When Google AdSense or Google Ads tags are configured, Google may use cookies in accordance with its advertising policies.'
+                )}
               </p>
             </div>
           )}
@@ -166,16 +195,28 @@ const SiteLegalModal: React.FC<SiteLegalModalProps> = ({
           {activeTab === 'terms' && (
             <div className="space-y-3 text-xs sm:text-sm">
               <h3 className="text-base font-semibold text-zinc-900 dark:text-white">
-                Terms of Service
+                {bi('ব্যবহারের শর্তাবলি (Terms of Service)', 'Terms of Service')}
               </h3>
               <p>
-                <strong>1. Acceptable Use:</strong> You agree to use Srabon Go responsibly and not generate unlawful, abusive, deceptive, or impersonating audio content without authorization.
+                <strong>{bi('১. বৈধ ব্যবহার:', '1. Acceptable Use:')}</strong>{' '}
+                {bi(
+                  'আপনি দায়িত্বশীলভাবে শ্রাবণ গো ব্যবহার করবেন এবং অনুমতি ছাড়া কোনো বেআইনি, ক্ষতিকর, প্রতারণামূলক বা অন্যের কণ্ঠস্বর নকল করার কাজে অডিও তৈরি করবেন না।',
+                  'You agree to use Srabon Go responsibly and not generate unlawful, abusive, deceptive, or impersonating audio content without authorization.'
+                )}
               </p>
               <p>
-                <strong>2. Free Quotas, Referrals &amp; Pro Access:</strong> Free accounts receive a daily generation allowance plus bonus credits earned via verified friend referrals (+10 credits per eligible sign-in). Self-referrals and automated abuse are prohibited.
+                <strong>{bi('২. ফ্রি কোটা, রেফারেল ও প্রো অ্যাক্সেস:', '2. Free Quotas, Referrals & Pro Access:')}</strong>{' '}
+                {bi(
+                  'ফ্রি অ্যাকাউন্টে দৈনিক নির্দিষ্ট জেনারেশন লিমিট ও বৈধ রেফারেলের মাধ্যমে (+১০ ক্রেডিট) বোনাস পাওয়া যায়। ভুয়া রেফারেল বা অটোমেটেড অপব্যবহার নিষিদ্ধ।',
+                  'Free accounts receive a daily generation allowance plus bonus credits earned via verified friend referrals (+10 credits per eligible sign-in). Self-referrals and automated abuse are prohibited.'
+                )}
               </p>
               <p>
-                <strong>3. Intellectual Property:</strong> © 2026 Srabon Go — All Rights Reserved. Unauthorized copying, cloning, redistribution, or claiming ownership of Srabon Go branding, configuration, or source code is strictly prohibited.
+                <strong>{bi('৩. মেধাস্বত্ব:', '3. Intellectual Property:')}</strong>{' '}
+                {bi(
+                  '© ২০২৬ শ্রাবণ গো — সর্বস্বত্ব সংরক্ষিত। অনুমতি ব্যতীত ব্র্যান্ডিং, কনফিগারেশন বা সোর্স কোড কপি বা পুনঃবিতরণ সম্পূর্ণ নিষিদ্ধ।',
+                  '© 2026 Srabon Go — All Rights Reserved. Unauthorized copying, cloning, redistribution, or claiming ownership of Srabon Go branding, configuration, or source code is strictly prohibited.'
+                )}
               </p>
             </div>
           )}
@@ -183,15 +224,18 @@ const SiteLegalModal: React.FC<SiteLegalModalProps> = ({
           {activeTab === 'contact' && (
             <div className="space-y-4">
               <h3 className="text-base font-semibold text-zinc-900 dark:text-white">
-                Contact &amp; Support
+                {bi('যোগাযোগ ও সহায়তা', 'Contact & Support')}
               </h3>
               <p className="text-sm">
-                Need help with Pro activation, referral credits, or technical feedback? Reach out directly to the Srabon Go team:
+                {bi(
+                  'প্রো প্যাক সক্রিয় করা, রেফারেল ক্রেডিট বা যেকোনো কারিগরি সহায়তার জন্য সরাসরি শ্রাবণ গো টিমের সাথে যোগাযোগ করুন:',
+                  'Need help with Pro activation, referral credits, or technical feedback? Reach out directly to the Srabon Go team:'
+                )}
               </p>
               <div className="flex items-center justify-between gap-3 p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/70 border border-zinc-200 dark:border-zinc-700">
                 <div>
                   <span className="text-[11px] uppercase tracking-wider text-zinc-400 block">
-                    Support Email
+                    {bi('সাপোর্ট ইমেইল', 'Support Email')}
                   </span>
                   <a
                     href={`mailto:${SUPPORT_EMAIL}`}
@@ -210,7 +254,9 @@ const SiteLegalModal: React.FC<SiteLegalModalProps> = ({
                   ) : (
                     <Copy size={13} />
                   )}
-                  <span>{copiedEmail ? 'Copied' : 'Copy Email'}</span>
+                  <span>
+                    {copiedEmail ? bi('কপি হয়েছে', 'Copied') : bi('ইমেইল কপি করুন', 'Copy Email')}
+                  </span>
                 </button>
               </div>
             </div>
@@ -220,14 +266,14 @@ const SiteLegalModal: React.FC<SiteLegalModalProps> = ({
         {/* Footer */}
         <div className="px-6 py-4 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between gap-4 bg-zinc-50/70 dark:bg-zinc-900/70">
           <span className="text-xs text-zinc-400 dark:text-zinc-500">
-            © 2026 Srabon Go — All Rights Reserved
+            {bi('© ২০২৬ শ্রাবণ গো — সর্বস্বত্ব সংরক্ষিত', '© 2026 Srabon Go — All Rights Reserved')}
           </span>
           <button
             type="button"
             onClick={onClose}
             className="px-4 py-2 rounded-full bg-zinc-900 dark:bg-indigo-600 text-white text-xs font-semibold hover:bg-zinc-800 dark:hover:bg-indigo-500 transition-colors"
           >
-            Close
+            {bi('বন্ধ করুন', 'Close')}
           </button>
         </div>
       </div>

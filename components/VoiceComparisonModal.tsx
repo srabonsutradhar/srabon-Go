@@ -22,6 +22,13 @@ import { Voice } from '../types';
 import AudioVisualizer from './AudioVisualizer';
 import { getVoiceAlbumVisual } from '../utils/studioAlbums';
 import { isBenignAudioInterrupt } from '../utils/appIssues';
+import {
+  useLanguage,
+  localizeGender,
+  localizePitch,
+  localizeTrait,
+  localizeAlbumLabel,
+} from '../utils/i18n';
 
 interface VoiceComparisonModalProps {
   voices: Voice[];
@@ -61,6 +68,7 @@ const VoiceComparisonModal: React.FC<VoiceComparisonModalProps> = ({
   onClose,
   isDarkMode = false,
 }) => {
+  const { lang, bi } = useLanguage();
   const safeInitialA = useMemo(() => {
     return voices.find((v) => v.name === initialVoiceA)?.name || voices[0]?.name || '';
   }, [voices, initialVoiceA]);
@@ -194,7 +202,7 @@ const VoiceComparisonModal: React.FC<VoiceComparisonModalProps> = ({
         ...prev,
         [side]: {
           ...prev[side],
-          error: 'Could not load audio sample for this voice.',
+          error: bi('এই ভয়েসের অডিও স্যাম্পল লোড করা যায়নি।', 'Could not load audio sample for this voice.'),
         },
       }));
     }
@@ -290,7 +298,7 @@ const VoiceComparisonModal: React.FC<VoiceComparisonModalProps> = ({
 
     return (
       <section
-        aria-label={`Voice ${side}: ${voice.name}`}
+        aria-label={bi(`ভয়েস ${side}: ${voice.name}`, `Voice ${side}: ${voice.name}`)}
         className={`flex flex-col justify-between rounded-2xl border p-5 transition-colors ${
           isPlayingThis
             ? 'bg-indigo-50/60 dark:bg-indigo-950/35 border-indigo-400 dark:border-indigo-600'
@@ -301,7 +309,7 @@ const VoiceComparisonModal: React.FC<VoiceComparisonModalProps> = ({
           {/* Slot Selector Row */}
           <div className="flex items-center justify-between gap-2">
             <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              Option {side} {isPlayingThis ? '· Playing' : ''}
+              {bi(`অপশন ${side}`, `Option ${side}`)} {isPlayingThis ? bi('· চলছে', '· Playing') : ''}
             </span>
             {onToggleFavorite && (
               <button
@@ -312,7 +320,7 @@ const VoiceComparisonModal: React.FC<VoiceComparisonModalProps> = ({
                     ? 'bg-rose-50 dark:bg-rose-950/60 border-rose-200 dark:border-rose-800 text-rose-500'
                     : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-400 hover:text-rose-500'
                 }`}
-                aria-label={isFav ? `Remove ${voice.name} from favorites` : `Favorite ${voice.name}`}
+                aria-label={isFav ? bi(`${voice.name} পছন্দ থেকে সরান`, `Remove ${voice.name} from favorites`) : bi(`${voice.name} পছন্দে রাখুন`, `Favorite ${voice.name}`)}
                 aria-pressed={isFav}
               >
                 <Heart size={14} className={isFav ? 'fill-current' : ''} />
@@ -322,15 +330,15 @@ const VoiceComparisonModal: React.FC<VoiceComparisonModalProps> = ({
 
           <div className="relative">
             <select
-              aria-label={`Select voice for Option ${side}`}
+              aria-label={bi(`অপশন ${side}-এর ভয়েস বেছে নিন`, `Select voice for Option ${side}`)}
               value={voice.name}
               onChange={(e) => handleSelectVoiceForSlot(side, e.target.value)}
               className="appearance-none w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white py-2.5 pl-3.5 pr-9 rounded-xl text-sm font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 cursor-pointer"
             >
               {voices.map((v) => (
                 <option key={v.name} value={v.name}>
-                  {v.name} — {v.analysis.gender}, {v.analysis.pitch}
-                  {v.name === otherName ? ' (Currently other slot)' : ''}
+                  {v.name} — {localizeGender(v.analysis.gender, lang)}, {localizePitch(v.analysis.pitch, lang)}
+                  {v.name === otherName ? bi(' (অন্য স্লটে আছে)', ' (Currently other slot)') : ''}
                 </option>
               ))}
             </select>
@@ -344,7 +352,7 @@ const VoiceComparisonModal: React.FC<VoiceComparisonModalProps> = ({
             {!imgErrors[side] ? (
               <img
                 src={visual.coverImg}
-                alt={`${voice.name} studio cover`}
+                alt={bi(`${voice.name} স্টুডিও কভার`, `${voice.name} studio cover`)}
                 referrerPolicy="no-referrer"
                 onError={() => setImgErrors((prev) => ({ ...prev, [side]: true }))}
                 className={`absolute inset-0 w-full h-full object-cover transition-transform duration-500 ${
@@ -374,17 +382,17 @@ const VoiceComparisonModal: React.FC<VoiceComparisonModalProps> = ({
               type="button"
               onClick={() => handleToggleSlot(side)}
               className="relative z-20 inline-flex items-center gap-2.5 px-4 py-2.5 rounded-full bg-white/95 dark:bg-slate-950/90 text-slate-900 dark:text-white border border-white/40 shadow-lg hover:scale-105 active:scale-95 transition-transform text-xs font-semibold whitespace-nowrap"
-              aria-label={isPlayingThis ? `Pause ${voice.name}` : `Play ${voice.name}`}
+              aria-label={isPlayingThis ? bi(`${voice.name} বিরতি দিন`, `Pause ${voice.name}`) : bi(`${voice.name} শুনুন`, `Play ${voice.name}`)}
             >
               {isPlayingThis ? (
                 <>
                   <Pause size={14} className="text-indigo-600 dark:text-amber-400 fill-current" />
-                  <span>Pause Sample</span>
+                  <span>{bi('বিরতি দিন', 'Pause Sample')}</span>
                 </>
               ) : (
                 <>
                   <Play size={14} className="text-indigo-600 dark:text-amber-400 fill-current ml-0.5" />
-                  <span>Play Sample</span>
+                  <span>{bi('স্যাম্পল শুনুন', 'Play Sample')}</span>
                 </>
               )}
             </button>
@@ -394,12 +402,12 @@ const VoiceComparisonModal: React.FC<VoiceComparisonModalProps> = ({
           <div className="space-y-1.5">
             <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 font-mono tabular-nums">
               <span>{formatTime(prog.currentTime)}</span>
-              <span>{prog.duration > 0 ? formatTime(prog.duration) : 'Sample Clip'}</span>
+              <span>{prog.duration > 0 ? formatTime(prog.duration) : bi('স্যাম্পল ক্লিপ', 'Sample Clip')}</span>
             </div>
             <div
               role="slider"
               tabIndex={0}
-              aria-label={`Audio progress for ${voice.name}`}
+              aria-label={bi(`${voice.name}-এর অডিও অগ্রগতি`, `Audio progress for ${voice.name}`)}
               aria-valuemin={0}
               aria-valuemax={Math.round(prog.duration || 100)}
               aria-valuenow={Math.round(prog.currentTime)}
@@ -429,14 +437,17 @@ const VoiceComparisonModal: React.FC<VoiceComparisonModalProps> = ({
               {voice.name}
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-              {voice.analysis.gender}
+              {localizeGender(voice.analysis.gender, lang)}
               <span aria-hidden="true" className="mx-1.5">·</span>
-              {voice.analysis.pitch} Pitch ({voice.pitch})
+              {bi(
+                `${localizePitch(voice.analysis.pitch, lang)} পিচ (${localizePitch(voice.pitch, lang)})`,
+                `${localizePitch(voice.analysis.pitch, lang)} Pitch (${localizePitch(voice.pitch, lang)})`
+              )}
               <span aria-hidden="true" className="mx-1.5">·</span>
-              {visual.albumLabel}
+              {localizeAlbumLabel(visual.albumLabel, lang)}
             </p>
             <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
-              {voice.analysis.characteristics.join(' · ')}
+              {voice.analysis.characteristics.map((c) => localizeTrait(c, lang)).join(' · ')}
             </p>
           </div>
         </div>
@@ -452,7 +463,7 @@ const VoiceComparisonModal: React.FC<VoiceComparisonModalProps> = ({
             className="w-full inline-flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white text-xs sm:text-sm font-semibold shadow-sm transition-all whitespace-nowrap"
           >
             <AudioLines size={15} />
-            <span>Select {voice.name} for Studio</span>
+            <span>{bi(`স্টুডিওর জন্য ${voice.name} বেছে নিন`, `Select ${voice.name} for Studio`)}</span>
           </button>
         </div>
       </section>
@@ -504,7 +515,7 @@ const VoiceComparisonModal: React.FC<VoiceComparisonModalProps> = ({
           }
           setSlotProgress((prev) => ({
             ...prev,
-            A: { ...prev.A, error: 'Sample audio failed to load.' },
+            A: { ...prev.A, error: bi('স্যাম্পল অডিও লোড করা যায়নি।', 'Sample audio failed to load.') },
           }));
         }}
       />
@@ -536,7 +547,7 @@ const VoiceComparisonModal: React.FC<VoiceComparisonModalProps> = ({
           }
           setSlotProgress((prev) => ({
             ...prev,
-            B: { ...prev.B, error: 'Sample audio failed to load.' },
+            B: { ...prev.B, error: bi('স্যাম্পল অডিও লোড করা যায়নি।', 'Sample audio failed to load.') },
           }));
         }}
       />
@@ -546,14 +557,17 @@ const VoiceComparisonModal: React.FC<VoiceComparisonModalProps> = ({
         <header className="px-6 py-4 sm:py-5 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-4">
           <div className="space-y-0.5 min-w-0">
             <p className="text-xs font-semibold uppercase tracking-wider text-indigo-600 dark:text-amber-400">
-              Side-by-Side Audition
+              {bi('পাশাপাশি অডিশন', 'Side-by-Side Audition')}
             </p>
             <h2
               id="voice-compare-modal-title"
               className="text-xl sm:text-2xl font-serif font-medium text-slate-900 dark:text-white tracking-tight"
               style={{ textWrap: 'balance' }}
             >
-              Compare Voice Profiles ({voiceA?.name} vs {voiceB?.name})
+              {bi(
+                `ভয়েস প্রোফাইল তুলনা (${voiceA?.name} বনাম ${voiceB?.name})`,
+                `Compare Voice Profiles (${voiceA?.name} vs ${voiceB?.name})`
+              )}
             </h2>
           </div>
 
@@ -568,17 +582,21 @@ const VoiceComparisonModal: React.FC<VoiceComparisonModalProps> = ({
               }`}
             >
               <ListMusic size={14} />
-              <span>{sequenceActive ? 'Stop A → B Audition' : 'Play A → B Back-to-Back'}</span>
+              <span>
+                {sequenceActive
+                  ? bi('A → B অডিশন থামান', 'Stop A → B Audition')
+                  : bi('পরপর A → B শুনুন', 'Play A → B Back-to-Back')}
+              </span>
             </button>
 
             <button
               type="button"
               onClick={handleSwapVoices}
               className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors whitespace-nowrap shrink-0"
-              title="Swap Option A and Option B"
+              title={bi('অপশন A এবং B অদলবদল করুন', 'Swap Option A and Option B')}
             >
               <ArrowLeftRight size={14} />
-              <span>Swap</span>
+              <span>{bi('অদলবদল', 'Swap')}</span>
             </button>
 
             <button
@@ -588,7 +606,7 @@ const VoiceComparisonModal: React.FC<VoiceComparisonModalProps> = ({
                 onClose();
               }}
               className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors"
-              aria-label="Close voice comparison modal"
+              aria-label={bi('ভয়েস তুলনা বন্ধ করুন', 'Close voice comparison modal')}
             >
               <X size={18} />
             </button>
@@ -609,13 +627,13 @@ const VoiceComparisonModal: React.FC<VoiceComparisonModalProps> = ({
               <div className="px-4 py-3 bg-slate-50 dark:bg-slate-900/80 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-2">
                 <div className="inline-flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-200">
                   <Volume2 size={14} className="text-indigo-600 dark:text-amber-400" />
-                  <span>Direct Attribute Comparison</span>
+                  <span>{bi('সরাসরি বৈশিষ্ট্য তুলনা', 'Direct Attribute Comparison')}</span>
                 </div>
                 {areEqualAttributes && (
                   <span className="text-[11px] text-slate-500 dark:text-slate-400">
                     {areEqualAttributes.sameGender && areEqualAttributes.samePitch
-                      ? 'Similar vocal range — focus on timbre & delivery'
-                      : 'Contrasting vocal profiles'}
+                      ? bi('একই ধরনের ভোকাল রেঞ্জ — টোন ও বলার ভঙ্গিতে নজর দিন', 'Similar vocal range — focus on timbre & delivery')
+                      : bi('ভিন্নধর্মী ভোকাল প্রোফাইল', 'Contrasting vocal profiles')}
                   </span>
                 )}
               </div>
@@ -624,72 +642,72 @@ const VoiceComparisonModal: React.FC<VoiceComparisonModalProps> = ({
                 <table className="w-full text-left border-collapse text-xs sm:text-sm">
                   <thead>
                     <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 bg-white dark:bg-[#0b1120]">
-                      <th className="py-2.5 px-4 font-semibold w-1/4">Attribute</th>
+                      <th className="py-2.5 px-4 font-semibold w-1/4">{bi('বৈশিষ্ট্য', 'Attribute')}</th>
                       <th className="py-2.5 px-4 font-semibold text-indigo-700 dark:text-indigo-300 w-[37.5%]">
-                        Option A · {voiceA.name}
+                        {bi(`অপশন A · ${voiceA.name}`, `Option A · ${voiceA.name}`)}
                       </th>
                       <th className="py-2.5 px-4 font-semibold text-amber-700 dark:text-amber-300 w-[37.5%]">
-                        Option B · {voiceB.name}
+                        {bi(`অপশন B · ${voiceB.name}`, `Option B · ${voiceB.name}`)}
                       </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80 text-slate-700 dark:text-slate-300">
                     <tr>
                       <td className="py-2.5 px-4 font-medium text-slate-500 dark:text-slate-400">
-                        Gender
+                        {bi('লিঙ্গ', 'Gender')}
                       </td>
-                      <td className="py-2.5 px-4 font-medium">{voiceA.analysis.gender}</td>
-                      <td className="py-2.5 px-4 font-medium">{voiceB.analysis.gender}</td>
+                      <td className="py-2.5 px-4 font-medium">{localizeGender(voiceA.analysis.gender, lang)}</td>
+                      <td className="py-2.5 px-4 font-medium">{localizeGender(voiceB.analysis.gender, lang)}</td>
                     </tr>
                     <tr>
                       <td className="py-2.5 px-4 font-medium text-slate-500 dark:text-slate-400">
-                        Pitch Register
+                        {bi('পিচ রেজিস্টার', 'Pitch Register')}
                       </td>
                       <td className="py-2.5 px-4">
-                        {voiceA.analysis.pitch} ({voiceA.pitch})
+                        {localizePitch(voiceA.analysis.pitch, lang)} ({localizePitch(voiceA.pitch, lang)})
                       </td>
                       <td className="py-2.5 px-4">
-                        {voiceB.analysis.pitch} ({voiceB.pitch})
+                        {localizePitch(voiceB.analysis.pitch, lang)} ({localizePitch(voiceB.pitch, lang)})
                       </td>
                     </tr>
                     <tr>
                       <td className="py-2.5 px-4 font-medium text-slate-500 dark:text-slate-400">
-                        Primary Tone
+                        {bi('মূল টোন', 'Primary Tone')}
                       </td>
-                      <td className="py-2.5 px-4">{voiceA.characteristics[0]}</td>
-                      <td className="py-2.5 px-4">{voiceB.characteristics[0]}</td>
+                      <td className="py-2.5 px-4">{localizeTrait(voiceA.characteristics[0] || '', lang)}</td>
+                      <td className="py-2.5 px-4">{localizeTrait(voiceB.characteristics[0] || '', lang)}</td>
                     </tr>
                     <tr>
                       <td className="py-2.5 px-4 font-medium text-slate-500 dark:text-slate-400">
-                        Full Profile Traits
+                        {bi('সম্পূর্ণ প্রোফাইল বৈশিষ্ট্য', 'Full Profile Traits')}
                       </td>
                       <td className="py-2.5 px-4 leading-relaxed">
-                        {voiceA.analysis.characteristics.join(', ')}
+                        {voiceA.analysis.characteristics.map((c) => localizeTrait(c, lang)).join(', ')}
                       </td>
                       <td className="py-2.5 px-4 leading-relaxed">
-                        {voiceB.analysis.characteristics.join(', ')}
+                        {voiceB.analysis.characteristics.map((c) => localizeTrait(c, lang)).join(', ')}
                       </td>
                     </tr>
                     <tr>
                       <td className="py-2.5 px-4 font-medium text-slate-500 dark:text-slate-400">
-                        Favorites
+                        {bi('পছন্দের তালিকা', 'Favorites')}
                       </td>
                       <td className="py-2.5 px-4">
                         {favorites.includes(voiceA.name) ? (
                           <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-medium">
-                            <Check size={13} /> Saved
+                            <Check size={13} /> {bi('সংরক্ষিত', 'Saved')}
                           </span>
                         ) : (
-                          <span className="text-slate-400">Not saved</span>
+                          <span className="text-slate-400">{bi('সংরক্ষিত নয়', 'Not saved')}</span>
                         )}
                       </td>
                       <td className="py-2.5 px-4">
                         {favorites.includes(voiceB.name) ? (
                           <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-medium">
-                            <Check size={13} /> Saved
+                            <Check size={13} /> {bi('সংরক্ষিত', 'Saved')}
                           </span>
                         ) : (
-                          <span className="text-slate-400">Not saved</span>
+                          <span className="text-slate-400">{bi('সংরক্ষিত নয়', 'Not saved')}</span>
                         )}
                       </td>
                     </tr>

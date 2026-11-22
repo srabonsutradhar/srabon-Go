@@ -20,36 +20,29 @@ import {
   deleteSessionIssue,
   resolveSessionIssue,
 } from '../utils/appIssues';
+import { AppLanguage, localizeDateTime, useLanguage } from '../utils/i18n';
 
 interface AdminNotificationsBoxProps {
   issues: AppIssueRecord[];
   onClose: () => void;
 }
 
-function formatIssueTime(createdAt: any): string {
+function formatIssueTime(createdAt: any, lang: AppLanguage): string {
   const ms =
     typeof createdAt?.toMillis === 'function'
       ? createdAt.toMillis()
       : typeof createdAt === 'number'
       ? createdAt
       : null;
-  if (!ms) return 'Just now';
-  try {
-    return new Date(ms).toLocaleString(undefined, {
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  } catch {
-    return 'Recent';
-  }
+  if (!ms) return lang === 'bn' ? 'এইমাত্র' : 'Just now';
+  return localizeDateTime(ms, lang) || (lang === 'bn' ? 'সাম্প্রতিক' : 'Recent');
 }
 
 const AdminNotificationsBox: React.FC<AdminNotificationsBoxProps> = ({
   issues,
   onClose,
 }) => {
+  const { lang, bi } = useLanguage();
   const [filterTab, setFilterTab] = useState<'unread' | 'all'>('unread');
   const [busyId, setBusyId] = useState<string | null>(null);
   const [bulkBusy, setBulkBusy] = useState(false);
@@ -172,10 +165,13 @@ const AdminNotificationsBox: React.FC<AdminNotificationsBoxProps> = ({
                 id="admin-notifications-title"
                 className="text-lg font-serif font-medium text-zinc-900 dark:text-white"
               >
-                Admin Issue Notification Box
+                {bi('অ্যাডমিন সমস্যা নোটিফিকেশন বক্স', 'Admin Issue Notification Box')}
               </h2>
               <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                সাধারণ ইউজাররা কোনো সমস্যা দেখবে না—সব সমস্যা শুধু এখানে অ্যাডমিনের কাছে আসবে
+                {bi(
+                  'সাধারণ ইউজাররা কোনো সমস্যা দেখবে না—সব সমস্যা শুধু এখানে অ্যাডমিনের কাছে আসবে',
+                  'Regular users never see system errors—all issues arrive privately here for the admin'
+                )}
               </p>
             </div>
           </div>
@@ -184,7 +180,7 @@ const AdminNotificationsBox: React.FC<AdminNotificationsBoxProps> = ({
             type="button"
             onClick={onClose}
             className="p-2 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors"
-            aria-label="Close notification box"
+            aria-label={bi('নোটিফিকেশন বক্স বন্ধ করুন', 'Close notification box')}
           >
             <X size={18} />
           </button>
@@ -202,7 +198,7 @@ const AdminNotificationsBox: React.FC<AdminNotificationsBoxProps> = ({
                   : 'bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700'
               }`}
             >
-              Unread ({unreadIssues.length})
+              {bi(`অপঠিত (${unreadIssues.length})`, `Unread (${unreadIssues.length})`)}
             </button>
             <button
               type="button"
@@ -213,7 +209,7 @@ const AdminNotificationsBox: React.FC<AdminNotificationsBoxProps> = ({
                   : 'bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700'
               }`}
             >
-              All ({issues.length})
+              {bi(`সবগুলো (${issues.length})`, `All (${issues.length})`)}
             </button>
           </div>
 
@@ -226,7 +222,7 @@ const AdminNotificationsBox: React.FC<AdminNotificationsBoxProps> = ({
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 text-xs font-semibold transition-colors disabled:opacity-50"
               >
                 <CheckCheck size={13} />
-                <span>সবগুলো সমাধান চিহ্নিত করুন</span>
+                <span>{bi('সবগুলো সমাধান চিহ্নিত করুন', 'Mark All Resolved')}</span>
               </button>
             )}
             {issues.some((i) => i.status === 'resolved') && (
@@ -237,7 +233,7 @@ const AdminNotificationsBox: React.FC<AdminNotificationsBoxProps> = ({
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:text-red-600 dark:hover:text-red-400 text-xs font-semibold transition-colors disabled:opacity-50"
               >
                 <Trash2 size={13} />
-                <span>সমাধান হওয়া মুছুন</span>
+                <span>{bi('সমাধান হওয়া মুছুন', 'Clear Resolved')}</span>
               </button>
             )}
           </div>
@@ -252,11 +248,14 @@ const AdminNotificationsBox: React.FC<AdminNotificationsBoxProps> = ({
               </div>
               <p className="text-sm font-medium text-zinc-900 dark:text-white">
                 {filterTab === 'unread'
-                  ? 'এই মুহূর্তে কোনো নতুন সমস্যা বা এরর নেই'
-                  : 'কোনো নোটিফিকেশন জমা নেই'}
+                  ? bi('এই মুহূর্তে কোনো নতুন সমস্যা বা এরর নেই', 'No new issues or errors right now')
+                  : bi('কোনো নোটিফিকেশন জমা নেই', 'No notifications recorded')}
               </p>
               <p className="text-xs text-zinc-500 dark:text-zinc-400 max-w-sm mx-auto">
-                কোনো ইউজার সার্ভার, API Key, 429 রেট-লিমিট বা ডেটাবেস সমস্যার মুখোমুখি হলে সেটি সাথে সাথে এই বক্সে চলে আসবে।
+                {bi(
+                  'কোনো ইউজার সার্ভার, API Key, 429 রেট-লিমিট বা ডেটাবেস সমস্যার মুখোমুখি হলে সেটি সাথে সাথে এই বক্সে চলে আসবে।',
+                  'Whenever any user encounters a server, API key, 429 rate-limit, or database issue, it appears here immediately.'
+                )}
               </p>
             </div>
           ) : (
@@ -285,7 +284,7 @@ const AdminNotificationsBox: React.FC<AdminNotificationsBoxProps> = ({
                     </span>
                     <span className="text-zinc-400">·</span>
                     <span className="text-zinc-500 dark:text-zinc-400 tabular-nums">
-                      {formatIssueTime(issue.createdAt)}
+                      {formatIssueTime(issue.createdAt, lang)}
                     </span>
                     {issue.reporterEmail && (
                       <>
@@ -297,7 +296,7 @@ const AdminNotificationsBox: React.FC<AdminNotificationsBoxProps> = ({
                     )}
                     {issue.status === 'resolved' && (
                       <span className="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300">
-                        Resolved
+                        {bi('সমাধান হয়েছে', 'Resolved')}
                       </span>
                     )}
                   </div>
@@ -326,7 +325,7 @@ const AdminNotificationsBox: React.FC<AdminNotificationsBoxProps> = ({
                       ) : (
                         <CheckCircle2 size={13} />
                       )}
-                      <span>Resolved</span>
+                      <span>{bi('সমাধান হয়েছে', 'Resolved')}</span>
                     </button>
                   )}
                   <button
@@ -334,8 +333,8 @@ const AdminNotificationsBox: React.FC<AdminNotificationsBoxProps> = ({
                     disabled={busyId === issue.id}
                     onClick={() => handleDeleteIssue(issue)}
                     className="p-2 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 text-zinc-400 hover:text-red-600 dark:hover:text-red-400 transition-colors disabled:opacity-50"
-                    title="Delete notification"
-                    aria-label="Delete notification"
+                    title={bi('নোটিফিকেশন মুছুন', 'Delete notification')}
+                    aria-label={bi('নোটিফিকেশন মুছুন', 'Delete notification')}
                   >
                     <Trash2 size={14} />
                   </button>

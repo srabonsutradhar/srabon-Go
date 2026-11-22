@@ -9,6 +9,13 @@ import { Voice } from '../types';
 import AudioVisualizer from './AudioVisualizer';
 import { isBenignAudioInterrupt } from '../utils/appIssues';
 import { getVoiceAlbumVisual } from '../utils/studioAlbums';
+import {
+  useLanguage,
+  localizeGender,
+  localizePitch,
+  localizeTrait,
+  localizeAlbumLabel,
+} from '../utils/i18n';
 
 interface VoiceCardProps {
   voice: Voice;
@@ -35,8 +42,15 @@ const VoiceCard: React.FC<VoiceCardProps> = ({
   const onPlayToggleRef = useRef(onPlayToggle);
   onPlayToggleRef.current = onPlayToggle;
   const [imgError, setImgError] = useState(false);
+  const { lang, bi } = useLanguage();
 
   const visual = getVoiceAlbumVisual(voice);
+  const albumLabel = localizeAlbumLabel(visual.albumLabel, lang);
+  const genderLabel = localizeGender(voice.analysis.gender, lang);
+  const pitchLabel = localizePitch(voice.pitch, lang);
+  const localizedTraits = voice.analysis.characteristics
+    .map((c) => localizeTrait(c, lang))
+    .join(', ');
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -96,7 +110,7 @@ const VoiceCard: React.FC<VoiceCardProps> = ({
       role="button"
       tabIndex={0}
       onKeyDown={handleKeyDown}
-      aria-label={`Play sample for ${voice.name}`}
+      aria-label={bi(`${voice.name} ভয়েস স্যাম্পল চালান`, `Play sample for ${voice.name}`)}
     >
       {/* Album Artwork & Visualizer Area */}
       <div
@@ -105,7 +119,7 @@ const VoiceCard: React.FC<VoiceCardProps> = ({
         {!imgError ? (
           <img
             src={visual.coverImg}
-            alt={`${voice.name} — ${visual.albumLabel}`}
+            alt={`${voice.name} — ${albumLabel}`}
             referrerPolicy="no-referrer"
             onError={() => setImgError(true)}
             className={`absolute inset-0 w-full h-full object-cover transition-transform duration-500 ${
@@ -179,7 +193,7 @@ const VoiceCard: React.FC<VoiceCardProps> = ({
                 {voice.name}
               </h3>
               <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 truncate">
-                {voice.analysis.gender} · {voice.pitch} · {visual.albumLabel}
+                {genderLabel} · {pitchLabel} · {albumLabel}
               </p>
             </div>
 
@@ -202,11 +216,11 @@ const VoiceCard: React.FC<VoiceCardProps> = ({
                 }`}
                 aria-label={
                   isFavorite
-                    ? `Remove ${voice.name} from favorites`
-                    : `Add ${voice.name} to favorites`
+                    ? bi(`${voice.name} পছন্দ থেকে সরান`, `Remove ${voice.name} from favorites`)
+                    : bi(`${voice.name} পছন্দে যোগ করুন`, `Add ${voice.name} to favorites`)
                 }
                 aria-pressed={isFavorite}
-                title={isFavorite ? 'Remove from Favorites' : 'Add to Favorites'}
+                title={isFavorite ? bi('পছন্দ থেকে সরান', 'Remove from Favorites') : bi('পছন্দে যোগ করুন', 'Add to Favorites')}
               >
                 <Heart size={15} className={isFavorite ? 'fill-current' : ''} />
               </button>
@@ -217,7 +231,7 @@ const VoiceCard: React.FC<VoiceCardProps> = ({
         {/* Description + Compare & Studio quick actions */}
         <div className="flex items-end justify-between gap-2 pt-2">
           <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 leading-snug line-clamp-2 font-light">
-            {voice.analysis.characteristics.join(', ')}
+            {localizedTraits}
           </p>
           <div className="flex items-center gap-1.5 shrink-0">
             {onToggleCompare && (
@@ -240,12 +254,12 @@ const VoiceCard: React.FC<VoiceCardProps> = ({
                 }`}
                 title={
                   compareSlot
-                    ? `Selected as Option ${compareSlot} for comparison (click to remove)`
-                    : `Select ${voice.name} to compare side-by-side`
+                    ? bi(`তুলনার জন্য অপশন ${compareSlot} নির্বাচিত (সরাতে ক্লিক করুন)`, `Selected as Option ${compareSlot} for comparison (click to remove)`)
+                    : bi(`${voice.name} পাশাপাশি তুলনা করুন`, `Select ${voice.name} to compare side-by-side`)
                 }
               >
                 <ArrowLeftRight size={11} />
-                <span>{compareSlot ? `Slot ${compareSlot}` : 'Compare'}</span>
+                <span>{compareSlot ? bi(`স্লট ${compareSlot}`, `Slot ${compareSlot}`) : bi('তুলনা', 'Compare')}</span>
               </button>
             )}
             {onUseInStudio && (
@@ -256,10 +270,10 @@ const VoiceCard: React.FC<VoiceCardProps> = ({
                   onUseInStudio(voice.name);
                 }}
                 className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-all whitespace-nowrap ${visual.studioButtonClass}`}
-                title={`Speak script with ${voice.name}`}
+                title={bi(`${voice.name} দিয়ে স্ক্রিপ্ট বলান`, `Speak script with ${voice.name}`)}
               >
                 <AudioLines size={12} />
-                <span>Studio</span>
+                <span>{bi('স্টুডিও', 'Studio')}</span>
               </button>
             )}
           </div>

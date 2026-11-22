@@ -28,8 +28,10 @@ import {
   X,
   UserCheck,
   ArrowLeftRight,
+  Languages,
 } from 'lucide-react';
 import type { User } from 'firebase/auth';
+import { localizeGender, localizePitch, useLanguage } from '../utils/i18n';
 
 interface FilterBarProps {
   filters: FilterState;
@@ -59,7 +61,18 @@ interface FilterBarProps {
   compareCount?: number;
 }
 
-const VIEW_LABELS: Record<AppViewMode, string> = {
+const VIEW_LABELS_BN: Record<AppViewMode, string> = {
+  home: 'হোম',
+  studio: 'ভয়েস স্টুডিও',
+  'voice-clone': 'আমার ভয়েস প্রো',
+  salon: 'সেলুন',
+  ideas: 'আইডিয়া',
+  carousel: '3D ভয়েস',
+  grid: 'ভয়েসসমূহ',
+  favorites: 'পছন্দ',
+};
+
+const VIEW_LABELS_EN: Record<AppViewMode, string> = {
   home: 'Home',
   studio: 'Voice Studio',
   'voice-clone': 'My Voice Pro',
@@ -97,10 +110,12 @@ const FilterBar: React.FC<FilterBarProps> = ({
   onOpenVoiceCompare,
   compareCount = 0,
 }) => {
+  const { lang, setLang, bi } = useLanguage();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuContainerRef = useRef<HTMLDivElement | null>(null);
 
   const totalAlerts = unreadChatCount + (isAdmin ? unreadIssuesCount : 0);
+  const viewLabels = lang === 'bn' ? VIEW_LABELS_BN : VIEW_LABELS_EN;
 
   useEffect(() => {
     if (!isMenuOpen) return;
@@ -146,12 +161,12 @@ const FilterBar: React.FC<FilterBarProps> = ({
   };
 
   const primaryDesktopNav: { mode: AppViewMode; label: string }[] = [
-    { mode: 'home', label: 'Home' },
-    { mode: 'studio', label: 'Voice Studio' },
-    { mode: 'voice-clone', label: 'My Voice (Pro)' },
-    { mode: 'salon', label: 'Salon' },
-    { mode: 'ideas', label: 'Ideas' },
-    { mode: 'grid', label: 'Voices' },
+    { mode: 'home', label: bi('হোম', 'Home') },
+    { mode: 'studio', label: bi('ভয়েস স্টুডিও', 'Voice Studio') },
+    { mode: 'voice-clone', label: bi('আমার ভয়েস (Pro)', 'My Voice (Pro)') },
+    { mode: 'salon', label: bi('সেলুন', 'Salon') },
+    { mode: 'ideas', label: bi('আইডিয়া', 'Ideas') },
+    { mode: 'grid', label: bi('ভয়েসসমূহ', 'Voices') },
   ];
 
   const allMenuViews: {
@@ -160,24 +175,24 @@ const FilterBar: React.FC<FilterBarProps> = ({
     icon: React.ReactNode;
     badge?: number;
   }[] = [
-    { mode: 'home', label: 'Home', icon: <Home size={16} /> },
-    { mode: 'studio', label: 'Voice Studio', icon: <AudioLines size={16} /> },
+    { mode: 'home', label: bi('হোম', 'Home'), icon: <Home size={16} /> },
+    { mode: 'studio', label: bi('ভয়েস স্টুডিও', 'Voice Studio'), icon: <AudioLines size={16} /> },
     {
       mode: 'voice-clone',
-      label: 'My Voice (Pro)',
+      label: bi('আমার ভয়েস (Pro)', 'My Voice (Pro)'),
       icon: <UserCheck size={16} className="text-amber-500" />,
     },
-    { mode: 'salon', label: 'Jagannath Salon', icon: <Scissors size={16} /> },
-    { mode: 'ideas', label: 'AI Ideas', icon: <TrendingUp size={16} /> },
-    { mode: 'grid', label: 'Voice Grid', icon: <LayoutGrid size={16} /> },
+    { mode: 'salon', label: bi('জগন্নাথ সেলুন', 'Jagannath Salon'), icon: <Scissors size={16} /> },
+    { mode: 'ideas', label: bi('এআই আইডিয়া', 'AI Ideas'), icon: <TrendingUp size={16} /> },
+    { mode: 'grid', label: bi('ভয়েস গ্রিড', 'Voice Grid'), icon: <LayoutGrid size={16} /> },
     {
       mode: 'carousel',
-      label: '3D Carousel',
+      label: bi('3D ক্যারোসেল', '3D Carousel'),
       icon: <GalleryHorizontalEnd size={16} />,
     },
     {
       mode: 'favorites',
-      label: 'Favorites',
+      label: bi('পছন্দসমূহ', 'Favorites'),
       icon: (
         <Heart
           size={16}
@@ -194,20 +209,20 @@ const FilterBar: React.FC<FilterBarProps> = ({
 
   return (
     <header className="relative z-50 w-full bg-white/85 dark:bg-[#0b1120]/90 backdrop-blur-xl border-b border-indigo-100/80 dark:border-indigo-950/80 transition-colors duration-300">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between gap-4 sm:gap-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between gap-3 sm:gap-6">
         {/* Zone 1: Clean Brand Wordmark (+ quiet mobile page indicator) */}
         <div className="flex items-center gap-2.5 min-w-0 shrink-0">
           <button
             type="button"
             onClick={() => handleNavigate('home')}
             className="flex items-center gap-2.5 text-left whitespace-nowrap shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 rounded-lg"
-            title="হোম পেজ"
+            title={bi('হোম পেজ', 'Home Page')}
           >
             <div className="w-8 h-8 sm:w-9 sm:h-9 bg-gradient-to-br from-indigo-600 via-blue-600 to-amber-500 rounded-xl flex items-center justify-center shrink-0 shadow-sm shadow-indigo-500/20">
               <Mic size={17} className="text-white" />
             </div>
             <span className="text-base sm:text-lg font-bold tracking-tight text-slate-900 dark:text-white font-display whitespace-nowrap">
-              Srabon Go
+              {bi('শ্রাবণ গো', 'Srabon Go')}
             </span>
           </button>
           <span
@@ -216,15 +231,15 @@ const FilterBar: React.FC<FilterBarProps> = ({
           >
             ·
           </span>
-          <span className="lg:hidden text-xs font-medium text-indigo-600 dark:text-amber-300 truncate max-w-[110px]">
-            {VIEW_LABELS[viewMode]}
+          <span className="lg:hidden text-xs font-medium text-indigo-600 dark:text-amber-300 truncate max-w-[100px]">
+            {viewLabels[viewMode]}
           </span>
         </div>
 
         {/* Zone 2: Clean Desktop Navigation Links (hidden on smaller screens, moved into 3-dot menu) */}
         <nav
-          aria-label="Primary"
-          className="hidden lg:flex items-center gap-7 text-sm font-medium"
+          aria-label={bi('প্রধান নেভিগেশন', 'Primary')}
+          className="hidden lg:flex items-center gap-6 text-sm font-medium"
         >
           {primaryDesktopNav.map((item) => {
             const active =
@@ -248,19 +263,52 @@ const FilterBar: React.FC<FilterBarProps> = ({
           })}
         </nav>
 
-        {/* Zone 3: Single Clean Three-Dot Menu Icon Containing All Other Options */}
+        {/* Zone 3: Instant বাংলা | EN Toggle + Clean Three-Dot Menu Icon */}
         <div
           ref={menuContainerRef}
-          className="relative flex items-center justify-end shrink-0"
+          className="relative flex items-center justify-end gap-2 shrink-0"
         >
+          <div
+            role="group"
+            aria-label={bi('ভাষা পরিবর্তন করুন', 'Switch language')}
+            className="inline-flex items-center p-0.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-indigo-200/80 dark:border-indigo-900/70 shrink-0"
+          >
+            <button
+              type="button"
+              onClick={() => setLang('bn')}
+              aria-pressed={lang === 'bn'}
+              aria-label="বাংলা ভাষা নির্বাচন করুন"
+              className={`min-h-[38px] px-2.5 rounded-[10px] text-xs font-semibold transition-all whitespace-nowrap shrink-0 ${
+                lang === 'bn'
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              বাংলা
+            </button>
+            <button
+              type="button"
+              onClick={() => setLang('en')}
+              aria-pressed={lang === 'en'}
+              aria-label="Switch language to English"
+              className={`min-h-[38px] px-2.5 rounded-[10px] text-xs font-semibold transition-all whitespace-nowrap shrink-0 ${
+                lang === 'en'
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              EN
+            </button>
+          </div>
+
           <button
             type="button"
             onClick={() => setIsMenuOpen((prev) => !prev)}
             aria-expanded={isMenuOpen}
             aria-haspopup="menu"
-            aria-label="সকল অপশন খুলুন (Open options menu)"
-            title="সকল অপশন (Options)"
-            className={`relative min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-xl border transition-colors ${
+            aria-label={bi('সকল অপশন খুলুন', 'Open options menu')}
+            title={bi('সকল অপশন', 'Options')}
+            className={`relative min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-xl border transition-colors shrink-0 ${
               isMenuOpen
                 ? 'bg-gradient-to-br from-indigo-600 to-blue-600 border-indigo-500 text-white shadow-md shadow-indigo-500/20'
                 : 'bg-indigo-50/80 dark:bg-slate-900 border-indigo-200/80 dark:border-indigo-900/70 text-indigo-700 dark:text-indigo-200 hover:bg-indigo-100 dark:hover:bg-slate-800'
@@ -278,7 +326,7 @@ const FilterBar: React.FC<FilterBarProps> = ({
           {isMenuOpen && (
             <div
               role="menu"
-              aria-label="অ্যাপ্লিকেশন অপশন মেনু"
+              aria-label={bi('অ্যাপ্লিকেশন অপশন মেনু', 'Application options menu')}
               className="absolute right-0 top-[calc(100%+10px)] w-[min(92vw,360px)] max-h-[calc(100vh-5.5rem)] overflow-y-auto rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-2xl divide-y divide-zinc-100 dark:divide-zinc-800 animate-fade-in z-[90]"
             >
               {/* User Account Summary */}
@@ -287,7 +335,7 @@ const FilterBar: React.FC<FilterBarProps> = ({
                   {user.photoURL ? (
                     <img
                       src={user.photoURL}
-                      alt={user.displayName || user.email || 'User'}
+                      alt={user.displayName || user.email || bi('ব্যবহারকারী', 'User')}
                       referrerPolicy="no-referrer"
                       className="w-10 h-10 rounded-full border border-zinc-200 dark:border-zinc-700 object-cover shrink-0"
                     />
@@ -300,17 +348,20 @@ const FilterBar: React.FC<FilterBarProps> = ({
                   )}
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-semibold text-zinc-900 dark:text-white truncate">
-                      {user.displayName || 'Srabon Go User'}
+                      {user.displayName || bi('শ্রাবণ গো ব্যবহারকারী', 'Srabon Go User')}
                     </p>
                     <p className="text-xs text-zinc-500 dark:text-zinc-400 truncate">
                       {user.email}
                     </p>
                     <p className="text-[11px] font-medium text-indigo-600 dark:text-indigo-400 mt-0.5 tabular-nums">
                       {isAdmin
-                        ? 'Admin Access'
+                        ? bi('অ্যাডমিন অ্যাক্সেস', 'Admin Access')
                         : userPlan === 'pro'
-                        ? 'Pro Plan Active'
-                        : `${Math.max(0, freeDailyLimit - usedToday)}/${freeDailyLimit} Free Left · ${bonusCredits} Cr`}
+                        ? bi('প্রো প্ল্যান সক্রিয়', 'Pro Plan Active')
+                        : bi(
+                            `আজ ফ্রি বাকি: ${Math.max(0, freeDailyLimit - usedToday)}/${freeDailyLimit} · ${bonusCredits} ক্রেডিট`,
+                            `${Math.max(0, freeDailyLimit - usedToday)}/${freeDailyLimit} Free Left · ${bonusCredits} Cr`
+                          )}
                     </p>
                   </div>
                 </div>
@@ -319,7 +370,7 @@ const FilterBar: React.FC<FilterBarProps> = ({
               {/* Search & Voice Filters */}
               <div className="p-4 space-y-2.5">
                 <p className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400">
-                  ভয়েস খুঁজুন ও ফিল্টার
+                  {bi('ভয়েস খুঁজুন ও ফিল্টার', 'Search & Filter Voices')}
                 </p>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-zinc-400">
@@ -327,7 +378,7 @@ const FilterBar: React.FC<FilterBarProps> = ({
                   </div>
                   <input
                     type="text"
-                    placeholder="Search voices..."
+                    placeholder={bi('ভয়েসের নাম বা ধরন লিখুন...', 'Search voices...')}
                     value={filters.search}
                     onChange={handleSearchChange}
                     className="w-full pl-9 pr-3 py-2 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
@@ -337,26 +388,26 @@ const FilterBar: React.FC<FilterBarProps> = ({
                   <select
                     value={filters.gender}
                     onChange={handleGenderChange}
-                    aria-label="Filter by gender"
+                    aria-label={bi('লিঙ্গ অনুযায়ী ফিল্টার', 'Filter by gender')}
                     className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-200 py-2 px-2.5 rounded-xl text-xs font-medium focus:outline-none"
                   >
-                    <option value="All">All Genders</option>
+                    <option value="All">{bi('সব লিঙ্গ', 'All Genders')}</option>
                     {uniqueGenders.map((g) => (
                       <option key={g} value={g}>
-                        {g}
+                        {localizeGender(g, lang)}
                       </option>
                     ))}
                   </select>
                   <select
                     value={filters.pitch}
                     onChange={handlePitchChange}
-                    aria-label="Filter by pitch"
+                    aria-label={bi('পিচ অনুযায়ী ফিল্টার', 'Filter by pitch')}
                     className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-200 py-2 px-2.5 rounded-xl text-xs font-medium focus:outline-none"
                   >
-                    <option value="All">All Pitches</option>
+                    <option value="All">{bi('সব পিচ', 'All Pitches')}</option>
                     {uniquePitches.map((p) => (
                       <option key={p} value={p}>
-                        {p}
+                        {localizePitch(p, lang)}
                       </option>
                     ))}
                   </select>
@@ -366,7 +417,7 @@ const FilterBar: React.FC<FilterBarProps> = ({
               {/* Pages & Views Navigation */}
               <div className="p-4 space-y-2">
                 <p className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400">
-                  পেজ ও ভিউ
+                  {bi('পেজ ও ভিউ', 'Pages & Views')}
                 </p>
                 <div className="grid grid-cols-2 gap-1.5">
                   {allMenuViews.map((item) => {
@@ -403,7 +454,7 @@ const FilterBar: React.FC<FilterBarProps> = ({
                 </div>
               </div>
 
-              {/* Tools, Chat, Pro, Admin & Theme */}
+              {/* Tools, Chat, Pro, Admin, Language & Theme */}
               <div className="p-2.5 space-y-1">
                 {onOpenVoiceCompare && (
                   <button
@@ -416,7 +467,7 @@ const FilterBar: React.FC<FilterBarProps> = ({
                   >
                     <span className="flex items-center gap-3">
                       <ArrowLeftRight size={16} className="text-amber-500 shrink-0" />
-                      <span>Compare Voices (A vs B)</span>
+                      <span>{bi('ভয়েস তুলনা করুন (A বনাম B)', 'Compare Voices (A vs B)')}</span>
                     </span>
                     {compareCount > 0 && (
                       <span className="text-xs font-semibold text-amber-600 dark:text-amber-400 tabular-nums">
@@ -436,7 +487,7 @@ const FilterBar: React.FC<FilterBarProps> = ({
                 >
                   <span className="flex items-center gap-3">
                     <Sparkles size={16} className="text-indigo-500 shrink-0" />
-                    <span>AI Casting Director</span>
+                    <span>{bi('এআই কাস্টিং ডিরেক্টর', 'AI Casting Director')}</span>
                   </span>
                 </button>
 
@@ -454,7 +505,7 @@ const FilterBar: React.FC<FilterBarProps> = ({
                         size={16}
                         className="text-emerald-600 dark:text-emerald-400 shrink-0"
                       />
-                      <span>চ্যাট লিস্ট ও মতামত</span>
+                      <span>{bi('চ্যাট লিস্ট ও মতামত', 'Chat List & Feedback')}</span>
                     </span>
                     {unreadChatCount > 0 && (
                       <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-rose-600 text-white tabular-nums">
@@ -476,11 +527,11 @@ const FilterBar: React.FC<FilterBarProps> = ({
                     >
                       <span className="flex items-center gap-3">
                         <Gift size={16} className="text-indigo-500 shrink-0" />
-                        <span>Refer Friends (+10 Credits)</span>
+                        <span>{bi('বন্ধুদের রেফার (+১০ ক্রেডিট)', 'Refer Friends (+10 Credits)')}</span>
                       </span>
                       {bonusCredits > 0 && (
                         <span className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 tabular-nums">
-                          {bonusCredits} Cr
+                          {bonusCredits} {bi('ক্রেডিট', 'Cr')}
                         </span>
                       )}
                     </button>
@@ -497,13 +548,13 @@ const FilterBar: React.FC<FilterBarProps> = ({
                         <Crown size={16} className="text-amber-500 shrink-0" />
                         <span>
                           {userPlan === 'pro'
-                            ? 'Pro Plan Active'
-                            : 'Upgrade to Pro'}
+                            ? bi('প্রো প্ল্যান সক্রিয়', 'Pro Plan Active')
+                            : bi('প্রো প্ল্যানে আপগ্রেড করুন', 'Upgrade to Pro')}
                         </span>
                       </span>
                       {userPlan !== 'pro' && (
                         <span className="text-xs text-zinc-500 dark:text-zinc-400 tabular-nums">
-                          {Math.max(0, freeDailyLimit - usedToday)} left
+                          {Math.max(0, freeDailyLimit - usedToday)} {bi('বাকি', 'left')}
                         </span>
                       )}
                     </button>
@@ -521,7 +572,7 @@ const FilterBar: React.FC<FilterBarProps> = ({
                   >
                     <span className="flex items-center gap-3">
                       <Bell size={16} className="text-rose-500 shrink-0" />
-                      <span>Admin Notifications</span>
+                      <span>{bi('অ্যাডমিন নোটিফিকেশন', 'Admin Notifications')}</span>
                     </span>
                     {unreadIssuesCount > 0 && (
                       <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-rose-600 text-white tabular-nums">
@@ -542,10 +593,21 @@ const FilterBar: React.FC<FilterBarProps> = ({
                   >
                     <span className="flex items-center gap-3">
                       <Shield size={16} className="text-indigo-500 shrink-0" />
-                      <span>Admin Panel</span>
+                      <span>{bi('অ্যাডমিন প্যানেল', 'Admin Panel')}</span>
                     </span>
                   </button>
                 )}
+
+                <button
+                  type="button"
+                  onClick={() => setLang(lang === 'bn' ? 'en' : 'bn')}
+                  className="w-full min-h-[44px] px-3 py-2 rounded-xl flex items-center justify-between gap-3 text-sm font-medium text-zinc-800 dark:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                >
+                  <span className="flex items-center gap-3">
+                    <Languages size={16} className="text-indigo-500 shrink-0" />
+                    <span>{bi('ভাষা: বাংলা (English এ যান)', 'Language: English (Switch to বাংলা)')}</span>
+                  </span>
+                </button>
 
                 <button
                   type="button"
@@ -559,7 +621,9 @@ const FilterBar: React.FC<FilterBarProps> = ({
                       <Moon size={16} className="text-zinc-600 shrink-0" />
                     )}
                     <span>
-                      {isDarkMode ? 'Light Mode চালু করুন' : 'Dark Mode চালু করুন'}
+                      {isDarkMode
+                        ? bi('লাইট মোড চালু করুন', 'Switch to Light Mode')
+                        : bi('ডার্ক মোড চালু করুন', 'Switch to Dark Mode')}
                     </span>
                   </span>
                 </button>
@@ -574,7 +638,7 @@ const FilterBar: React.FC<FilterBarProps> = ({
                     className="w-full min-h-[44px] px-3 py-2 rounded-xl flex items-center gap-3 text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors"
                   >
                     <LogOut size={16} className="shrink-0" />
-                    <span>Sign Out</span>
+                    <span>{bi('সাইন আউট করুন', 'Sign Out')}</span>
                   </button>
                 )}
               </div>

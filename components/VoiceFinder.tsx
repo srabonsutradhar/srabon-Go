@@ -9,6 +9,7 @@ import { Sparkles, Loader2, X, ArrowRight, Wand2 } from 'lucide-react';
 import { Voice, AiRecommendation } from '../types';
 import { checkBackendHealth } from '../utils/audio';
 import { reportAppIssue } from '../utils/appIssues';
+import { useLanguage } from '../utils/i18n';
 
 interface VoiceFinderProps {
   voices: Voice[];
@@ -28,8 +29,10 @@ const VoiceFinder: React.FC<VoiceFinderProps> = ({
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [userNotice, setUserNotice] = useState<string | null>(null);
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
   const modalRef = useRef<HTMLDivElement>(null);
+  const { bi } = useLanguage();
 
   // Focus trap implementation
   useEffect(() => {
@@ -48,8 +51,9 @@ const VoiceFinder: React.FC<VoiceFinderProps> = ({
       const focusableElements = modalRef.current.querySelectorAll(
         'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
       );
-      const firstElement = focusableElements[0] as HTMLElement;
-      const lastElement = focusableElements[focusableElements.length - 1] as HTMLElement;
+      const firstElement = focusableElements[0] as HTMLElement | undefined;
+      const lastElement = focusableElements[focusableElements.length - 1] as HTMLElement | undefined;
+      if (!firstElement || !lastElement) return;
 
       if (e.shiftKey) {
         if (document.activeElement === firstElement) {
@@ -69,9 +73,18 @@ const VoiceFinder: React.FC<VoiceFinderProps> = ({
   }, [onClose]);
 
   const examples = [
-    { label: "Bengali Morning Study", text: "সকাল হয়ে গেছে, আর ঘুম নয়! দ্রুত ঘুম থেকে উঠুন, আজকের পড়ার সময় শুরু হয়ে গেছে।" },
-    { label: "Irish male", text: "A high pitch male with a strong Irish accent." },
-    { label: "Singaporean female", text: "An energetic Singaporean female with a strong Singlish accent." }
+    {
+      label: bi('সকালের পড়াশোনা', 'Bengali Morning Study'),
+      text: 'সকাল হয়ে গেছে, আর ঘুম নয়! দ্রুত ঘুম থেকে উঠুন, আজকের পড়ার সময় শুরু হয়ে গেছে।',
+    },
+    {
+      label: bi('আইরিশ পুরুষ ভয়েস', 'Irish male'),
+      text: 'A high pitch male with a strong Irish accent.',
+    },
+    {
+      label: bi('সিঙ্গাপুরী নারী ভয়েস', 'Singaporean female'),
+      text: 'An energetic Singaporean female with a strong Singlish accent.',
+    },
   ];
 
   const handleAnalyze = async () => {
@@ -79,6 +92,7 @@ const VoiceFinder: React.FC<VoiceFinderProps> = ({
     
     setLoading(true);
     setError(null);
+    setUserNotice(null);
 
     try {
       const hasBackend = await checkBackendHealth();
@@ -86,7 +100,16 @@ const VoiceFinder: React.FC<VoiceFinderProps> = ({
         const msg =
           'AI Casting সার্ভার সক্রিয় নেই (Static Host)। এটি ব্যবহার করতে Node সার্ভার বা VITE_API_BASE_URL যুক্ত করুন।';
         reportAppIssue({ source: 'VoiceFinder', severity: 'warning', message: msg });
-        if (isAdmin) setError(msg);
+        if (isAdmin) {
+          setError(msg);
+        } else {
+          setUserNotice(
+            bi(
+              'এই মুহূর্তে AI কাস্টিং সার্ভার সংযুক্ত নয়। অনুগ্রহ করে কিছুক্ষণ পর আবার চেষ্টা করুন।',
+              'AI Casting service is currently unavailable. Please try again in a moment.'
+            )
+          );
+        }
         setLoading(false);
         return;
       }
@@ -189,13 +212,31 @@ const VoiceFinder: React.FC<VoiceFinderProps> = ({
       } else {
         const msg = 'No matching voices found for AI Casting query.';
         reportAppIssue({ source: 'VoiceFinder', severity: 'warning', message: msg, details: query.slice(0, 120) });
-        if (isAdmin) setError(msg);
+        if (isAdmin) {
+          setError(msg);
+        } else {
+          setUserNotice(
+            bi(
+              'এই বর্ণনার সাথে উপযুক্ত ভয়েস পাওয়া যায়নি। আরেকটু স্পষ্ট করে লিখে চেষ্টা করুন।',
+              'No matching voice found for that description. Try adding tone or style details.'
+            )
+          );
+        }
       }
 
     } catch (err: any) {
       const msg = err?.message || 'AI Casting analysis failed.';
       reportAppIssue({ source: 'VoiceFinder', severity: 'error', message: msg });
-      if (isAdmin) setError(msg);
+      if (isAdmin) {
+        setError(msg);
+      } else {
+        setUserNotice(
+          bi(
+            'ভয়েস বিশ্লেষণ সম্পন্ন করা যায়নি। অনুগ্রহ করে আবার চেষ্টা করুন।',
+            'Could not complete voice analysis. Please try again.'
+          )
+        );
+      }
     } finally {
       setLoading(false);
     }
@@ -225,15 +266,15 @@ const VoiceFinder: React.FC<VoiceFinderProps> = ({
              <div className="space-y-3">
                 <div className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400 mb-2">
                     <Wand2 size={20} />
-                    <span className="text-sm font-bold tracking-wider uppercase">AI Casting Director</span>
+                    <span className="text-sm font-bold tracking-wider uppercase">{bi('এআই কাস্টিং ডিরেক্টর', 'AI Casting Director')}</span>
                 </div>
-                <h2 id="casting-title" className="text-4xl font-serif font-medium tracking-tight text-zinc-900 dark:text-white">Describe your character.</h2>
-                <p className="text-lg text-zinc-500 dark:text-zinc-400 font-light">Gemini will analyze the library and find the perfect match.</p>
+                <h2 id="casting-title" className="text-3xl sm:text-4xl font-serif font-medium tracking-tight text-zinc-900 dark:text-white">{bi('আপনার চরিত্রের বর্ণনা দিন।', 'Describe your character.')}</h2>
+                <p className="text-base sm:text-lg text-zinc-500 dark:text-zinc-400 font-light">{bi('এআই লাইব্রেরি বিশ্লেষণ করে সবচেয়ে মানানসই ভয়েস খুঁজে দেবে।', 'Gemini will analyze the library and find the perfect match.')}</p>
              </div>
              <button 
                onClick={onClose}
                className="p-2 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
-               aria-label="Close"
+               aria-label={bi('বন্ধ করুন', 'Close')}
              >
                <X size={20} />
              </button>
@@ -244,18 +285,19 @@ const VoiceFinder: React.FC<VoiceFinderProps> = ({
               ref={textAreaRef}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="e.g. A friendly, energetic narrator for a children's book about space exploration..."
-              className="w-full h-32 bg-zinc-50 dark:bg-zinc-800 rounded-xl p-4 text-xl font-sans text-zinc-900 dark:text-white placeholder-zinc-300 dark:placeholder-zinc-600 border border-zinc-200 dark:border-zinc-700 focus:ring-2 focus:ring-indigo-100 dark:focus:ring-indigo-900 focus:border-indigo-300 dark:focus:border-indigo-600 focus:bg-white dark:focus:bg-zinc-900 resize-none transition-all leading-relaxed"
+              placeholder={bi('যেমন: শিশুদের গল্পের জন্য বন্ধুত্বপূর্ণ ও প্রাণবন্ত ভয়েস, অথবা গম্ভীর ডকুমেন্টারি বক্তা...', "e.g. A friendly, energetic narrator for a children's book about space exploration...")}
+              className="w-full h-32 bg-zinc-50 dark:bg-zinc-800 rounded-xl p-4 text-lg sm:text-xl font-sans text-zinc-900 dark:text-white placeholder-zinc-400 dark:placeholder-zinc-500 border border-zinc-200 dark:border-zinc-700 focus:ring-2 focus:ring-indigo-100 dark:focus:ring-indigo-900 focus:border-indigo-300 dark:focus:border-indigo-600 focus:bg-white dark:focus:bg-zinc-900 resize-none transition-all leading-relaxed"
               disabled={loading}
               autoFocus
             />
 
             {/* Examples */}
             <div className="flex flex-wrap items-center gap-2 mt-3 px-1">
-                <span className="text-xs font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-wide">Try:</span>
+                <span className="text-xs font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-wide">{bi('উদাহরণ:', 'Try:')}</span>
                 {examples.map((ex) => (
                     <button
                         key={ex.label}
+                        type="button"
                         onClick={() => {
                             setQuery(ex.text);
                             textAreaRef.current?.focus();
@@ -267,22 +309,25 @@ const VoiceFinder: React.FC<VoiceFinderProps> = ({
                 ))}
             </div>
             
-            <div className="flex justify-between items-center mt-6">
+            <div className="flex flex-wrap justify-between items-center gap-3 mt-6">
               <span className="text-zinc-400 dark:text-zinc-500 text-sm font-medium flex items-center gap-2">
                   {isAdmin && error ? (
                     <span className="text-red-500 dark:text-red-400 flex items-center gap-1"><X size={14}/> {error}</span>
+                  ) : userNotice ? (
+                    <span className="text-amber-600 dark:text-amber-400 flex items-center gap-1"><X size={14}/> {userNotice}</span>
                   ) : (
-                    <>Powered by <span className="text-indigo-500 dark:text-indigo-400">Gemini 3.1 Flash Lite</span></>
+                    <>{bi('পরিচালিত:', 'Powered by')} <span className="text-indigo-500 dark:text-indigo-400">Gemini 3.1 Flash Lite</span></>
                   )}
               </span>
               
               <button
+                type="button"
                 onClick={handleAnalyze}
                 disabled={loading || !query.trim()}
-                className="flex items-center gap-2 pl-6 pr-6 py-3 bg-zinc-900 dark:bg-indigo-600 hover:bg-indigo-600 dark:hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded-full transition-all duration-300 transform active:scale-95 shadow-lg hover:shadow-indigo-500/25 dark:shadow-indigo-900/25"
+                className="flex items-center gap-2 pl-6 pr-6 py-3 bg-zinc-900 dark:bg-indigo-600 hover:bg-indigo-600 dark:hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded-full transition-all duration-300 transform active:scale-95 shadow-lg hover:shadow-indigo-500/25 dark:shadow-indigo-900/25 whitespace-nowrap"
               >
                 {loading ? <Loader2 size={18} className="animate-spin" /> : <Sparkles size={18} />}
-                <span>Find Voices</span>
+                <span>{bi('ভয়েস খুঁজুন', 'Find Voices')}</span>
                 {!loading && <ArrowRight size={16} />}
               </button>
             </div>

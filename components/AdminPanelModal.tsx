@@ -41,6 +41,14 @@ import {
   UserPlan,
 } from '../types';
 import { SALON_SERVICES, formatSalonPrice } from '../utils/salon';
+import {
+  localizeBookingStatus,
+  localizeDate,
+  localizePlanLabel,
+  localizeSalonService,
+  localizeUpgradeStatus,
+  useLanguage,
+} from '../utils/i18n';
 
 export type AdminPanelTab = 'requests' | 'users' | 'settings' | 'salon';
 
@@ -61,6 +69,7 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   initialTab = 'requests',
   onClose,
 }) => {
+  const { lang, bi } = useLanguage();
   const [activeTab, setActiveTab] = useState<AdminPanelTab>(initialTab);
   const [requests, setRequests] = useState<ProUpgradeRequest[]>([]);
   const [usersList, setUsersList] = useState<UserAccountRecord[]>([]);
@@ -248,7 +257,9 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
 
       await batch.commit();
     } catch (error: any) {
-      setActionError(error?.message || 'Pro request অনুমোদন করা যায়নি।');
+      setActionError(
+        error?.message || bi('Pro রিকোয়েস্ট অনুমোদন করা যায়নি।', 'Failed to approve Pro request.')
+      );
       reportFirestoreError(error, OperationType.UPDATE, `proRequests/${req.id}`);
     } finally {
       setBusyId(null);
@@ -264,7 +275,9 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
         updatedAt: serverTimestamp(),
       });
     } catch (error: any) {
-      setActionError(error?.message || 'Pro request বাতিল করা যায়নি।');
+      setActionError(
+        error?.message || bi('Pro রিকোয়েস্ট বাতিল করা যায়নি।', 'Failed to reject Pro request.')
+      );
       reportFirestoreError(error, OperationType.UPDATE, `proRequests/${req.id}`);
     } finally {
       setBusyId(null);
@@ -300,7 +313,9 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
         await updateDoc(userRef, payload);
       }
     } catch (error: any) {
-      setActionError(error?.message || 'ইউজারের প্যাকেজ আপডেট করা যায়নি।');
+      setActionError(
+        error?.message || bi('ইউজারের প্যাকেজ আপডেট করা যায়নি।', 'Failed to update user package.')
+      );
       reportFirestoreError(error, OperationType.UPDATE, `users/${target.uid}`);
     } finally {
       setBusyId(null);
@@ -328,7 +343,9 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
         await updateDoc(userRef, payload);
       }
     } catch (error: any) {
-      setActionError(error?.message || 'বোনাস ক্রেডিট যোগ করা যায়নি।');
+      setActionError(
+        error?.message || bi('বোনাস ক্রেডিট যোগ করা যায়নি।', 'Failed to grant bonus credits.')
+      );
       reportFirestoreError(error, OperationType.UPDATE, `users/${target.uid}`);
     } finally {
       setBusyId(null);
@@ -341,7 +358,12 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
     setApiTestResult(null);
     const cleaned = normalizeApiBaseUrl(apiBaseUrl);
     if (apiBaseUrl.trim() && !cleaned) {
-      setActionError('সঠিক https:// বা http:// ব্যাকএন্ড সার্ভার URL দিন (যেমন https://srabon-go-api.onrender.com)।');
+      setActionError(
+        bi(
+          'সঠিক https:// বা http:// ব্যাকএন্ড সার্ভার URL দিন (যেমন https://srabon-go-api.onrender.com)।',
+          'Enter a valid https:// or http:// backend server URL (e.g., https://srabon-go-api.onrender.com).'
+        )
+      );
       return;
     }
     setTestingApi(true);
@@ -361,7 +383,12 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
     const rawApiUrl = apiBaseUrl.trim().replace(/\/+$/, '');
     const cleanApiUrl = normalizeApiBaseUrl(rawApiUrl);
     if (rawApiUrl && !cleanApiUrl) {
-      setActionError('সঠিক https:// বা http:// সার্ভার URL দিন (স্পেস বা query ছাড়া, যেমন https://srabon-go-api.onrender.com)।');
+      setActionError(
+        bi(
+          'সঠিক https:// বা http:// সার্ভার URL দিন (স্পেস বা query ছাড়া, যেমন https://srabon-go-api.onrender.com)।',
+          'Enter a valid https:// or http:// server URL without spaces or query parameters.'
+        )
+      );
       return;
     }
 
@@ -389,7 +416,9 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
       setSavedBanner(true);
       setTimeout(() => setSavedBanner(false), 2500);
     } catch (error: any) {
-      setActionError(error?.message || 'সেটিংস সেভ করা যায়নি।');
+      setActionError(
+        error?.message || bi('সেটিংস সেভ করা যায়নি।', 'Failed to save settings.')
+      );
       reportFirestoreError(error, OperationType.WRITE, 'appConfig/proPlan');
     } finally {
       setSavingConfig(false);
@@ -431,7 +460,10 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
       setSavedSalonBanner(true);
       setTimeout(() => setSavedSalonBanner(false), 2500);
     } catch (error: any) {
-      setActionError(error?.message || 'সেলুনের প্রাইস ও সেটিংস সেভ করা যায়নি।');
+      setActionError(
+        error?.message ||
+          bi('সেলুনের প্রাইস ও সেটিংস সেভ করা যায়নি।', 'Failed to save salon prices and settings.')
+      );
       reportFirestoreError(error, OperationType.WRITE, 'salonConfig/default');
     } finally {
       setSavingSalon(false);
@@ -451,7 +483,9 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
         updatedAt: serverTimestamp(),
       });
     } catch (error: any) {
-      setActionError(error?.message || 'বুকিং স্ট্যাটাস আপডেট করা যায়নি।');
+      setActionError(
+        error?.message || bi('বুকিং স্ট্যাটাস আপডেট করা যায়নি।', 'Failed to update booking status.')
+      );
       reportFirestoreError(error, OperationType.UPDATE, `salonBookings/${bookingId}`);
     } finally {
       setBusyId(null);
@@ -485,10 +519,13 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                 id="admin-panel-title"
                 className="text-lg font-serif font-medium text-zinc-900 dark:text-white"
               >
-                Srabon Go Admin Control
+                {bi('শ্রাবণ গো অ্যাডমিন কন্ট্রোল', 'Srabon Go Admin Control')}
               </h2>
               <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                Manage Pro requests, users, and payment fee settings
+                {bi(
+                  'Pro রিকোয়েস্ট, ইউজার, পেমেন্ট ফি ও সেলুন সেটিংস পরিচালনা করুন',
+                  'Manage Pro requests, users, payment fees, and salon settings'
+                )}
               </p>
             </div>
           </div>
@@ -496,7 +533,7 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
             type="button"
             onClick={onClose}
             className="p-2 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors"
-            aria-label="Close"
+            aria-label={bi('বন্ধ করুন', 'Close')}
           >
             <X size={18} />
           </button>
@@ -514,7 +551,7 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
             }`}
           >
             <Receipt size={14} />
-            <span>Pro Requests</span>
+            <span>{bi('Pro রিকোয়েস্ট', 'Pro Requests')}</span>
             {pendingCount > 0 && (
               <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300">
                 {pendingCount}
@@ -532,7 +569,7 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
             }`}
           >
             <Users size={14} />
-            <span>Users ({usersList.length})</span>
+            <span>{bi(`ইউজার (${usersList.length})`, `Users (${usersList.length})`)}</span>
           </button>
 
           <button
@@ -545,7 +582,7 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
             }`}
           >
             <Settings size={14} />
-            <span>Fee & Quota Settings</span>
+            <span>{bi('ফি ও কোটা সেটিংস', 'Fee & Quota Settings')}</span>
           </button>
 
           <button
@@ -558,7 +595,7 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
             }`}
           >
             <Scissors size={14} />
-            <span>Salon &amp; Prices</span>
+            <span>{bi('সেলুন ও প্রাইস', 'Salon & Prices')}</span>
             {pendingSalonCount > 0 && (
               <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300">
                 {pendingSalonCount}
@@ -577,7 +614,7 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                 onClick={() => setActionError(null)}
                 className="underline font-semibold shrink-0"
               >
-                Dismiss
+                {bi('সরিয়ে দিন', 'Dismiss')}
               </button>
             </div>
           )}
@@ -585,7 +622,7 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
             <div className="space-y-3">
               {requests.length === 0 ? (
                 <p className="text-sm text-zinc-500 dark:text-zinc-400 text-center py-10">
-                  এখনও কোনো Pro আপগ্রেড রিকোয়েস্ট আসেনি।
+                  {bi('এখনও কোনো Pro আপগ্রেড রিকোয়েস্ট আসেনি।', 'No Pro upgrade requests yet.')}
                 </p>
               ) : (
                 requests.map((req) => (
@@ -605,7 +642,9 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                               : 'bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300'
                           }`}
                         >
-                          {req.packageType === 'yearly' ? 'Yearly (365d)' : 'Monthly (30d)'}
+                          {req.packageType === 'yearly'
+                            ? bi('ইয়ারলি (৩৬৫ দিন)', 'Yearly (365d)')
+                            : bi('মান্থলি (৩০ দিন)', 'Monthly (30d)')}
                         </span>
                         <span
                           className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
@@ -616,7 +655,7 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                               : 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300'
                           }`}
                         >
-                          {req.status}
+                          {localizeUpgradeStatus(req.status, lang)}
                         </span>
                       </div>
                       {req.userEmail && (
@@ -625,13 +664,14 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                         </p>
                       )}
                       <p className="text-xs text-zinc-700 dark:text-zinc-300">
-                        <strong>{req.paymentMethod}</strong> • {req.amountText} • Sender:{' '}
+                        <strong>{req.paymentMethod}</strong> • {req.amountText} •{' '}
+                        {bi('প্রেরক:', 'Sender:')}{' '}
                         <span className="font-mono">{req.senderNumber}</span> • TrxID:{' '}
                         <span className="font-mono font-semibold">{req.transactionId}</span>
                       </p>
                       {req.note && (
                         <p className="text-xs text-zinc-500 dark:text-zinc-400 italic">
-                          "{req.note}"
+                          &ldquo;{req.note}&rdquo;
                         </p>
                       )}
                     </div>
@@ -649,7 +689,7 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                           ) : (
                             <CheckCircle2 size={14} />
                           )}
-                          <span>Approve Pro</span>
+                          <span>{bi('Pro অনুমোদন করুন', 'Approve Pro')}</span>
                         </button>
                         <button
                           type="button"
@@ -658,7 +698,7 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                           className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-zinc-200 dark:bg-zinc-700 hover:bg-red-100 dark:hover:bg-red-950/60 text-zinc-700 dark:text-zinc-200 hover:text-red-600 dark:hover:text-red-300 text-xs font-semibold transition-colors disabled:opacity-50"
                         >
                           <XCircle size={14} />
-                          <span>Reject</span>
+                          <span>{bi('বাতিল', 'Reject')}</span>
                         </button>
                       </div>
                     )}
@@ -672,7 +712,7 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
             <div className="space-y-2.5">
               {usersList.length === 0 ? (
                 <p className="text-sm text-zinc-500 dark:text-zinc-400 text-center py-10">
-                  এখনও কোনো ইউজার নেই।
+                  {bi('এখনও কোনো ইউজার নেই।', 'No users yet.')}
                 </p>
               ) : (
                 usersList.map((u) => {
@@ -700,20 +740,19 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                           }`}
                         >
                           {isExpired
-                            ? `Expired (${u.proPackageType || 'pro'})`
-                            : u.plan === 'pro' && u.proPackageType
-                            ? `${u.proPackageType} pro`
-                            : u.plan}
+                            ? bi(
+                                `মেয়াদোত্তীর্ণ (${u.proPackageType === 'yearly' ? 'ইয়ারলি' : 'মান্থলি'})`,
+                                `Expired (${u.proPackageType || 'pro'})`
+                              )
+                            : localizePlanLabel(u.plan, u.proPackageType, false, lang)}
                         </span>
                       </div>
                       <p className="text-xs text-zinc-500 dark:text-zinc-400 truncate">
-                        {u.email || u.uid} • Usage ({u.lastUsageDate}): {u.dailyCount} • Credits: {u.bonusCredits ?? 0} • Refs: {u.referralCount ?? 0}
+                        {u.email || u.uid} • {bi('ব্যবহার', 'Usage')} ({u.lastUsageDate}): {u.dailyCount} •{' '}
+                        {bi('ক্রেডিট', 'Credits')}: {u.bonusCredits ?? 0} • {bi('রেফার', 'Refs')}:{' '}
+                        {u.referralCount ?? 0}
                         {u.plan === 'pro' && expMs !== null
-                          ? ` • Exp: ${new Date(expMs).toLocaleDateString('en-US', {
-                              month: 'short',
-                              day: 'numeric',
-                              year: 'numeric',
-                            })}`
+                          ? ` • ${bi('মেয়াদ:', 'Exp:')} ${localizeDate(expMs, lang)}`
                           : ''}
                       </p>
                     </div>
@@ -724,12 +763,12 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                         onClick={() => handleGrantTenCredits(u)}
                         disabled={Boolean(busyId)}
                         className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 text-xs font-semibold transition-colors disabled:opacity-50"
-                        title="Add +10 Bonus Credits"
+                        title={bi('+১০ বোনাস ক্রেডিট যোগ করুন', 'Add +10 Bonus Credits')}
                       >
                         {busyId === `cr_${u.uid}` ? (
                           <Loader2 size={12} className="animate-spin" />
                         ) : (
-                          <span>+10 Cr</span>
+                          <span>{bi('+১০ ক্রেডিট', '+10 Cr')}</span>
                         )}
                       </button>
                       <button
@@ -743,7 +782,11 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                         ) : (
                           <Crown size={12} />
                         )}
-                        <span>{u.plan === 'pro' && u.proPackageType === 'monthly' && !isExpired ? 'Renew 30d' : 'Monthly'}</span>
+                        <span>
+                          {u.plan === 'pro' && u.proPackageType === 'monthly' && !isExpired
+                            ? bi('রিনিউ ৩০ দিন', 'Renew 30d')
+                            : bi('মান্থলি', 'Monthly')}
+                        </span>
                       </button>
                       <button
                         type="button"
@@ -756,7 +799,11 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                         ) : (
                           <Crown size={12} />
                         )}
-                        <span>{u.plan === 'pro' && u.proPackageType === 'yearly' && !isExpired ? 'Renew 365d' : 'Yearly'}</span>
+                        <span>
+                          {u.plan === 'pro' && u.proPackageType === 'yearly' && !isExpired
+                            ? bi('রিনিউ ৩৬৫ দিন', 'Renew 365d')
+                            : bi('ইয়ারলি', 'Yearly')}
+                        </span>
                       </button>
                       {u.plan === 'pro' && (
                         <button
@@ -770,7 +817,7 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                           ) : (
                             <Crown size={13} />
                           )}
-                          <span>Set Free</span>
+                          <span>{bi('ফ্রি করুন', 'Set Free')}</span>
                         </button>
                       )}
                     </div>
@@ -786,35 +833,35 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-[11px] font-semibold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 mb-1">
-                    Monthly প্যাকেজ ফি (৩০ দিন)
+                    {bi('Monthly প্যাকেজ ফি (৩০ দিন)', 'Monthly Package Fee (30 Days)')}
                   </label>
                   <input
                     type="text"
                     value={monthlyFee}
                     onChange={(e) => setMonthlyFee(e.target.value)}
                     maxLength={40}
-                    placeholder="e.g. 50 BDT"
+                    placeholder={bi('যেমন: 50 BDT', 'e.g. 50 BDT')}
                     className="w-full rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-3 py-2 text-sm text-zinc-900 dark:text-white"
                   />
                 </div>
 
                 <div>
                   <label className="block text-[11px] font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400 mb-1">
-                    Yearly প্যাকেজ ফি (৩৬৫ দিন)
+                    {bi('Yearly প্যাকেজ ফি (৩৬৫ দিন)', 'Yearly Package Fee (365 Days)')}
                   </label>
                   <input
                     type="text"
                     value={yearlyFee}
                     onChange={(e) => setYearlyFee(e.target.value)}
                     maxLength={40}
-                    placeholder="e.g. 480 BDT"
+                    placeholder={bi('যেমন: 480 BDT', 'e.g. 480 BDT')}
                     className="w-full rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-3 py-2 text-sm text-zinc-900 dark:text-white"
                   />
                 </div>
 
                 <div>
                   <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1">
-                    ফ্রি দৈনিক লিমিট (১ - ১০০)
+                    {bi('ফ্রি দৈনিক লিমিট (১ - ১০০)', 'Free Daily Limit (1 - 100)')}
                   </label>
                   <input
                     type="number"
@@ -828,24 +875,23 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-
                 <div>
                   <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1">
-                    পেমেন্ট মাধ্যম (Payment Method)
+                    {bi('পেমেন্ট মাধ্যম', 'Payment Method')}
                   </label>
                   <input
                     type="text"
                     value={paymentMethod}
                     onChange={(e) => setPaymentMethod(e.target.value)}
                     maxLength={60}
-                    placeholder="e.g. bKash / Nagad Personal"
+                    placeholder={bi('যেমন: bKash / Nagad Personal', 'e.g. bKash / Nagad Personal')}
                     className="w-full rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-3 py-2 text-sm text-zinc-900 dark:text-white"
                   />
                 </div>
 
                 <div>
                   <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1">
-                    আপনার পেমেন্ট নম্বর / অ্যাকাউন্ট
+                    {bi('আপনার পেমেন্ট নম্বর / অ্যাকাউন্ট', 'Payment Number / Account')}
                   </label>
                   <input
                     type="text"
@@ -860,7 +906,7 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
 
               <div>
                 <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1">
-                  ইউজারদের জন্য নির্দেশনা (Instructions)
+                  {bi('ইউজারদের জন্য নির্দেশনা', 'Instructions for Users')}
                 </label>
                 <textarea
                   rows={3}
@@ -874,10 +920,13 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
               <div className="p-4 rounded-2xl bg-indigo-50/60 dark:bg-indigo-950/25 border border-indigo-200/80 dark:border-indigo-900/60 space-y-2.5">
                 <div className="flex items-center gap-2 text-xs font-semibold text-indigo-700 dark:text-indigo-300">
                   <Globe size={14} />
-                  <span>Dynamic Backend API URL (GitHub Pages Bridge)</span>
+                  <span>{bi('ডায়নামিক ব্যাকএন্ড API URL (GitHub Pages ব্রিজ)', 'Dynamic Backend API URL (GitHub Pages Bridge)')}</span>
                 </div>
                 <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed">
-                  GitHub Pages স্ট্যাটিক হোস্ট হলেও, এখানে আপনার লাইভ Node/Render সার্ভার URL সেভ করলে সব ইউজারের জন্য সাথে সাথে রিয়েল-টাইম Gemini ভয়েস ও AI ট্রেন্ডিং আইডিয়া ডায়নামিকভাবে চালু হয়ে যাবে (কোড রিবিল্ড ছাড়াই)।
+                  {bi(
+                    'GitHub Pages স্ট্যাটিক হোস্ট হলেও, এখানে আপনার লাইভ Node/Render সার্ভার URL সেভ করলে সব ইউজারের জন্য সাথে সাথে রিয়েল-টাইম Gemini ভয়েস ও AI ট্রেন্ডিং আইডিয়া ডায়নামিকভাবে চালু হয়ে যাবে (কোড রিবিল্ড ছাড়াই)।',
+                    'Even on static hosting like GitHub Pages, saving your live Node/Render server URL here dynamically enables real-time Gemini voices and AI trending ideas for all users without rebuilding.'
+                  )}
                 </p>
                 <div className="flex flex-col sm:flex-row gap-2">
                   <input
@@ -897,17 +946,23 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                     disabled={testingApi}
                     className="px-4 py-2 rounded-xl bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-xs font-semibold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors whitespace-nowrap shrink-0"
                   >
-                    {testingApi ? 'Testing...' : 'Test Connection'}
+                    {testingApi ? bi('পরীক্ষা হচ্ছে...', 'Testing...') : bi('সংযোগ পরীক্ষা করুন', 'Test Connection')}
                   </button>
                 </div>
                 {apiTestResult === 'ok' && (
                   <p className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
-                    ✓ সার্ভার সফলভাবে সংযুক্ত আছে (/api/health OK)! এখন Save বাটনে চাপুন।
+                    {bi(
+                      '✓ সার্ভার সফলভাবে সংযুক্ত আছে (/api/health OK)! এখন Save বাটনে চাপুন।',
+                      '✓ Server connected successfully (/api/health OK)! Click Save Settings to apply.'
+                    )}
                   </p>
                 )}
                 {apiTestResult === 'fail' && (
                   <p className="text-xs font-medium text-red-600 dark:text-red-400">
-                    ✕ এই URL-এ /api/health পাওয়া যায়নি। Render/Node সার্ভার চালু আছে কি না ও সঠিক URL দিয়েছেন কি না যাচাই করুন।
+                    {bi(
+                      '✕ এই URL-এ /api/health পাওয়া যায়নি। Render/Node সার্ভার চালু আছে কি না ও সঠিক URL দিয়েছেন কি না যাচাই করুন।',
+                      '✕ /api/health could not be reached at this URL. Verify that your server is running and the URL is correct.'
+                    )}
                   </p>
                 )}
               </div>
@@ -915,7 +970,7 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
               {savedBanner && (
                 <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 text-xs text-emerald-700 dark:text-emerald-300 flex items-center gap-2">
                   <CheckCircle2 size={15} />
-                  <span>সেটিংস সফলভাবে সেভ হয়েছে!</span>
+                  <span>{bi('সেটিংস সফলভাবে সেভ হয়েছে!', 'Settings saved successfully!')}</span>
                 </div>
               )}
 
@@ -925,7 +980,7 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                 className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-zinc-900 dark:bg-indigo-600 hover:bg-zinc-800 dark:hover:bg-indigo-500 text-white text-sm font-semibold transition-colors disabled:opacity-50"
               >
                 {savingConfig ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
-                <span>সেটিংস সেভ করুন</span>
+                <span>{bi('সেটিংস সেভ করুন', 'Save Settings')}</span>
               </button>
             </form>
           )}
@@ -936,10 +991,13 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                 <div className="flex flex-wrap items-center justify-between gap-3 pb-2 border-b border-zinc-100 dark:border-zinc-800">
                   <div>
                     <h3 className="text-sm font-semibold text-zinc-900 dark:text-white">
-                      সেলুন সার্ভিস ও বুকিং প্রাইস সেটিংস
+                      {bi('সেলুন সার্ভিস ও বুকিং প্রাইস সেটিংস', 'Salon Service & Booking Price Settings')}
                     </h3>
                     <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                      এখান থেকে বুকিং ফি ও প্রতিটি হেয়ারকাট/গ্রুমিং সার্ভিসের দাম পরিবর্তন করলে সাথে সাথে সব ইউজারের পেজে আপডেট হবে।
+                      {bi(
+                        'এখান থেকে বুকিং ফি ও প্রতিটি হেয়ারকাট/গ্রুমিং সার্ভিসের দাম পরিবর্তন করলে সাথে সাথে সব ইউজারের পেজে আপডেট হবে।',
+                        'Updating the booking fee or service prices here updates every user page in real time.'
+                      )}
                     </p>
                   </div>
                   <label className="inline-flex items-center gap-2 text-xs font-semibold text-zinc-700 dark:text-zinc-200 cursor-pointer select-none">
@@ -949,14 +1007,14 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                       onChange={(e) => setIsBookingOpen(e.target.checked)}
                       className="rounded border-zinc-300 dark:border-zinc-700 text-amber-600 focus:ring-amber-500"
                     />
-                    <span>অনলাইন বুকিং চালু রাখুন</span>
+                    <span>{bi('অনলাইন বুকিং চালু রাখুন', 'Keep Online Booking Open')}</span>
                   </label>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1">
-                      সেলুনের নাম (Salon Name)
+                      {bi('সেলুনের নাম', 'Salon Name')}
                     </label>
                     <input
                       type="text"
@@ -970,7 +1028,7 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1">
-                        কারেন্সি (৳ / BDT)
+                        {bi('কারেন্সি (৳ / BDT)', 'Currency (৳ / BDT)')}
                       </label>
                       <input
                         type="text"
@@ -983,7 +1041,7 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                     </div>
                     <div>
                       <label className="block text-[11px] font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400 mb-1">
-                        বুকিং ফি (Booking Fee)
+                        {bi('বুকিং ফি', 'Booking Fee')}
                       </label>
                       <input
                         type="number"
@@ -1001,7 +1059,7 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
                     <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1">
-                      01. {SALON_SERVICES[0].title}
+                      01. {localizeSalonService(SALON_SERVICES[0].key, lang).primaryTitle}
                     </label>
                     <input
                       type="number"
@@ -1014,7 +1072,7 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                   </div>
                   <div>
                     <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1">
-                      02. {SALON_SERVICES[1].title}
+                      02. {localizeSalonService(SALON_SERVICES[1].key, lang).primaryTitle}
                     </label>
                     <input
                       type="number"
@@ -1027,7 +1085,7 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                   </div>
                   <div>
                     <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1">
-                      03. {SALON_SERVICES[2].title}
+                      03. {localizeSalonService(SALON_SERVICES[2].key, lang).primaryTitle}
                     </label>
                     <input
                       type="number"
@@ -1040,7 +1098,7 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                   </div>
                   <div>
                     <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1">
-                      04. {SALON_SERVICES[3].title}
+                      04. {localizeSalonService(SALON_SERVICES[3].key, lang).primaryTitle}
                     </label>
                     <input
                       type="number"
@@ -1053,7 +1111,7 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                   </div>
                   <div>
                     <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1">
-                      05. {SALON_SERVICES[4].title}
+                      05. {localizeSalonService(SALON_SERVICES[4].key, lang).primaryTitle}
                     </label>
                     <input
                       type="number"
@@ -1066,7 +1124,7 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                   </div>
                   <div>
                     <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1">
-                      06. {SALON_SERVICES[5].title}
+                      06. {localizeSalonService(SALON_SERVICES[5].key, lang).primaryTitle}
                     </label>
                     <input
                       type="number"
@@ -1083,7 +1141,7 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
                     <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1">
-                      ঠিকানা (Address)
+                      {bi('ঠিকানা', 'Address')}
                     </label>
                     <input
                       type="text"
@@ -1095,7 +1153,7 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                   </div>
                   <div>
                     <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1">
-                      ফোন / WhatsApp নম্বর
+                      {bi('ফোন / WhatsApp নম্বর', 'Phone / WhatsApp Number')}
                     </label>
                     <input
                       type="text"
@@ -1108,7 +1166,7 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                   </div>
                   <div>
                     <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1">
-                      খোলা থাকার সময় (Hours)
+                      {bi('খোলা থাকার সময়', 'Opening Hours')}
                     </label>
                     <input
                       type="text"
@@ -1123,7 +1181,7 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                 {savedSalonBanner && (
                   <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 text-xs text-emerald-700 dark:text-emerald-300 flex items-center gap-2">
                     <CheckCircle2 size={15} />
-                    <span>সেলুনের নতুন প্রাইস ও তথ্য সফলভাবে সেভ হয়েছে!</span>
+                    <span>{bi('সেলুনের নতুন প্রাইস ও তথ্য সফলভাবে সেভ হয়েছে!', 'Salon prices and details saved successfully!')}</span>
                   </div>
                 )}
 
@@ -1133,7 +1191,7 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                   className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-sm font-semibold transition-colors disabled:opacity-50"
                 >
                   {savingSalon ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
-                  <span>সেলুন প্রাইস সেভ করুন</span>
+                  <span>{bi('সেলুন প্রাইস সেভ করুন', 'Save Salon Prices')}</span>
                 </button>
               </form>
 
@@ -1141,13 +1199,13 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
               <div className="pt-4 border-t border-zinc-200 dark:border-zinc-800 space-y-3">
                 <div className="flex items-center justify-between">
                   <h4 className="text-sm font-semibold text-zinc-900 dark:text-white">
-                    কাস্টমার বুকিং তালিকা ({salonBookings.length})
+                    {bi(`কাস্টমার বুকিং তালিকা (${salonBookings.length})`, `Customer Bookings (${salonBookings.length})`)}
                   </h4>
                 </div>
 
                 {salonBookings.length === 0 ? (
                   <p className="text-xs text-zinc-500 dark:text-zinc-400 py-6 text-center">
-                    এখনও কোনো সেলুন বুকিং আসেনি।
+                    {bi('এখনও কোনো সেলুন বুকিং আসেনি।', 'No salon bookings received yet.')}
                   </p>
                 ) : (
                   <div className="space-y-2.5">
@@ -1175,27 +1233,27 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                                   : 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300'
                               }`}
                             >
-                              {b.status}
+                              {localizeBookingStatus(b.status, lang)}
                             </span>
                             {b.couponCode && (
                               <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-semibold bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300">
-                                AI Coupon: {b.couponCode}
+                                {bi('AI কুপন:', 'AI Coupon:')} {b.couponCode}
                                 {typeof b.discountPercent === 'number' ? ` (-${b.discountPercent}%)` : ''}
                               </span>
                             )}
                           </div>
                           <p className="text-xs text-zinc-700 dark:text-zinc-300 tabular-nums">
-                            <strong>{b.serviceTitle}</strong> · {b.bookingDate} ({b.timeSlot}) · বিল:{' '}
+                            <strong>{b.serviceKey ? localizeSalonService(b.serviceKey, lang).primaryTitle : b.serviceTitle}</strong> · {b.bookingDate} ({b.timeSlot}) · {bi('বিল:', 'Bill:')}{' '}
                             {formatSalonPrice(b.totalPrice, currencySymbol || salonConfig.currencySymbol)}
                             {typeof b.discountAmount === 'number' && b.discountAmount > 0 && (
                               <span className="text-emerald-600 dark:text-emerald-400">
-                                {' '}(ছাড়: -{formatSalonPrice(b.discountAmount, currencySymbol || salonConfig.currencySymbol)})
+                                {' '}({bi('ছাড়:', 'Discount:')} -{formatSalonPrice(b.discountAmount, currencySymbol || salonConfig.currencySymbol)})
                               </span>
                             )}
                           </p>
                           {b.notes && (
                             <p className="text-xs text-zinc-500 dark:text-zinc-400 italic">
-                              নোট: {b.notes}
+                              {bi('নোট:', 'Note:')} {b.notes}
                             </p>
                           )}
                         </div>
@@ -1208,7 +1266,7 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                               onClick={() => handleUpdateBookingStatus(b.id, 'confirmed')}
                               className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition-colors disabled:opacity-50"
                             >
-                              Confirm
+                              {bi('নিশ্চিত করুন', 'Confirm')}
                             </button>
                           )}
                           {(b.status === 'pending' || b.status === 'confirmed') && (
@@ -1218,7 +1276,7 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                               onClick={() => handleUpdateBookingStatus(b.id, 'completed')}
                               className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold transition-colors disabled:opacity-50"
                             >
-                              Complete
+                              {bi('সম্পন্ন করুন', 'Complete')}
                             </button>
                           )}
                           {(b.status === 'pending' || b.status === 'confirmed') && (
@@ -1228,7 +1286,7 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                               onClick={() => handleUpdateBookingStatus(b.id, 'cancelled')}
                               className="px-3 py-1.5 rounded-xl bg-zinc-200 dark:bg-zinc-700 hover:bg-red-100 dark:hover:bg-red-950/60 text-zinc-700 dark:text-zinc-200 hover:text-red-600 dark:hover:text-red-300 text-xs font-semibold transition-colors disabled:opacity-50"
                             >
-                              Cancel
+                              {bi('বাতিল', 'Cancel')}
                             </button>
                           )}
                         </div>

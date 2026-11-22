@@ -8,6 +8,7 @@ import { AiRecommendation, Voice } from '../types';
 import { Sparkles, Copy, Check, Quote, X } from 'lucide-react';
 import AiTtsPreview from './AiTtsPreview';
 import ReactMarkdown from 'react-markdown';
+import { useLanguage, copyTextSafely } from '../utils/i18n';
 
 interface AiResultCardProps {
   result: AiRecommendation;
@@ -20,6 +21,7 @@ interface AiResultCardProps {
 const AiResultCard: React.FC<AiResultCardProps> = ({ result, voices, onClose, onBeforeGenerate, isAdmin = false }) => {
   const [copiedSection, setCopiedSection] = useState<string | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
+  const { bi } = useLanguage();
 
   // Focus trap implementation
   useEffect(() => {
@@ -38,8 +40,9 @@ const AiResultCard: React.FC<AiResultCardProps> = ({ result, voices, onClose, on
       const focusableElements = cardRef.current.querySelectorAll(
         'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
       );
-      const firstElement = focusableElements[0] as HTMLElement;
-      const lastElement = focusableElements[focusableElements.length - 1] as HTMLElement;
+      const firstElement = focusableElements[0] as HTMLElement | undefined;
+      const lastElement = focusableElements[focusableElements.length - 1] as HTMLElement | undefined;
+      if (!firstElement || !lastElement) return;
 
       if (e.shiftKey) {
         if (document.activeElement === firstElement) {
@@ -58,10 +61,12 @@ const AiResultCard: React.FC<AiResultCardProps> = ({ result, voices, onClose, on
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onClose]);
 
-  const handleCopy = (text: string, section: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedSection(section);
-    setTimeout(() => setCopiedSection(null), 2000);
+  const handleCopy = async (text: string, section: string) => {
+    const ok = await copyTextSafely(text);
+    if (ok) {
+      setCopiedSection(section);
+      setTimeout(() => setCopiedSection(null), 2000);
+    }
   };
 
   // Ensure markdown is properly formatted even if the model returns compact text
@@ -83,7 +88,7 @@ const AiResultCard: React.FC<AiResultCardProps> = ({ result, voices, onClose, on
         <button 
             onClick={onClose}
             className="absolute top-3 right-3 p-2 text-zinc-400 hover:text-zinc-900 dark:hover:text-white rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors z-50"
-            aria-label="Close dialog"
+            aria-label={bi('ডায়ালগ বন্ধ করুন', 'Close dialog')}
         >
             <X size={18} />
         </button>
@@ -100,20 +105,22 @@ const AiResultCard: React.FC<AiResultCardProps> = ({ result, voices, onClose, on
                          <Sparkles size={18} />
                     </div>
                     <div>
-                        <h2 id="ai-result-title" className="text-lg font-bold text-zinc-900 dark:text-white tracking-tight leading-tight">AI Suggested Persona</h2>
-                        <p className="text-xs text-zinc-500 dark:text-zinc-400 font-medium">Based on your description</p>
+                        <h2 id="ai-result-title" className="text-lg font-bold text-zinc-900 dark:text-white tracking-tight leading-tight">{bi('এআই প্রস্তাবিত চরিত্র', 'AI Suggested Persona')}</h2>
+                        <p className="text-xs text-zinc-500 dark:text-zinc-400 font-medium">{bi('আপনার বর্ণনার ওপর ভিত্তি করে', 'Based on your description')}</p>
                     </div>
                 </div>
 
                 <div className="bg-white/60 dark:bg-zinc-800/50 rounded-xl border border-zinc-200/50 dark:border-zinc-700/50 shadow-sm relative group/code flex-1 flex flex-col min-h-[300px] md:min-h-0 overflow-hidden">
                     <div className="flex justify-between items-center p-4 pb-2 border-b border-zinc-100/50 dark:border-zinc-700/50 flex-shrink-0">
                         <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest flex items-center gap-1">
-                            System Prompt
+                            {bi('সিস্টেম প্রম্পট', 'System Prompt')}
                         </span>
                         <button 
+                            type="button"
                             onClick={() => handleCopy(result.systemInstruction, 'sys')} 
                             className="p-1.5 rounded-md bg-white dark:bg-zinc-800 border border-zinc-100 dark:border-zinc-700 text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:border-zinc-300 dark:hover:border-zinc-600 transition-all opacity-0 group-hover/code:opacity-100 focus:opacity-100"
-                            title="Copy System Prompt"
+                            title={bi('সিস্টেম প্রম্পট কপি করুন', 'Copy System Prompt')}
+                            aria-label={bi('সিস্টেম প্রম্পট কপি করুন', 'Copy System Prompt')}
                         >
                             {copiedSection === 'sys' ? <Check size={14} className="text-green-600 dark:text-green-400"/> : <Copy size={14} />}
                         </button>

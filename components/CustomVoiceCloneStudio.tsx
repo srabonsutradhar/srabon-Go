@@ -12,10 +12,12 @@ import {
   Crown,
   Download,
   Edit3,
+  ExternalLink,
   FileAudio,
   Lock,
   Loader2,
   Mic,
+  MicOff,
   Pause,
   Play,
   Repeat,
@@ -28,6 +30,7 @@ import {
   UserCheck,
   Volume2,
   Waves,
+  X,
 } from 'lucide-react';
 import {
   BillingConfig,
@@ -57,6 +60,7 @@ import {
   renderCalibratedAudioBytes,
   saveVoiceSampleBlobToDb,
 } from '../utils/voiceClone';
+import { localizeGender, localizePitch, useLanguage } from '../utils/i18n';
 
 interface CustomVoiceCloneStudioProps {
   profiles: CustomVoiceProfile[];
@@ -83,28 +87,34 @@ const MAX_RECORD_SECONDS = 25;
 const MIN_RECORD_SECONDS = 3;
 const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
 
-const SAMPLE_READING_SCRIPT =
+const SAMPLE_READING_SCRIPT_BN =
   'হ্যালো! আমি আমার নিজের ভয়েস স্যাম্পল রেকর্ড করছি, যাতে এআই আমার কণ্ঠের সুর, গতি ও উচ্চারণ বিশ্লেষণ করে যেকোনো লেখা সুন্দরভাবে বলতে পারে।';
+const SAMPLE_READING_SCRIPT_EN =
+  'Hello! I am recording my own voice sample so AI can analyze my tone, pace, and articulation and read any script naturally in my voice.';
 
 const CLONE_TEXT_PRESETS = [
   {
     id: 'intro-bn',
-    label: 'নিজের কণ্ঠে পরিচিতি',
+    labelBn: 'নিজের কণ্ঠে পরিচিতি',
+    labelEn: 'Personal Intro',
     text: 'নমস্কার ও শুভ দিন! আমি আমার নিজস্ব এআই ভয়েস প্রোফাইল থেকে কথা বলছি। এখন যেকোনো স্ক্রিপ্ট আমার কণ্ঠের ছন্দেই শুনতে পারবেন।',
   },
   {
     id: 'vlog-bn',
-    label: 'ভিডিও / রিলস ন্যারেটর',
+    labelBn: 'ভিডিও / রিলস ন্যারেটর',
+    labelEn: 'Video / Reels Narrator',
     text: 'বন্ধুরা, আজকের ভিডিওতে আমরা দেখব কীভাবে প্রযুক্তির সাহায্যে নিজের কণ্ঠস্বরকে ডিজিটালভাবে সংরক্ষণ করে কনটেন্ট তৈরি করা যায়।',
   },
   {
     id: 'alarm-bn',
-    label: 'ব্যক্তিগত অ্যালার্ম',
+    labelBn: 'ব্যক্তিগত অ্যালার্ম',
+    labelEn: 'Personal Alarm',
     text: 'সময় হয়ে গেছে! এখনই উঠে পড়ুন এবং আজকের গুরুত্বপূর্ণ কাজটি পূর্ণ মনোযোগ দিয়ে শুরু করুন।',
   },
   {
     id: 'en-pro',
-    label: 'English Presentation',
+    labelBn: 'ইংরেজি প্রেজেন্টেশন',
+    labelEn: 'English Presentation',
     text: 'Hello everyone! Welcome back. Today I am speaking through my personalized AI voice profile, calibrated directly from my own recording.',
   },
 ];
@@ -136,6 +146,7 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
   bonusCredits = 0,
   onOpenUpgradePackage,
 }) => {
+  const { lang, bi } = useLanguage();
   const studioTier = resolveStudioTier({ isAdmin, userPlan, proPackageType });
   const studioCaps = getStudioCapabilities(studioTier);
   const { maxProfiles, allowFineTuning } = getVoiceProfileLimit({
@@ -150,6 +161,14 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
 
   // Step 1: Recording / Upload State
   const [isRecording, setIsRecording] = useState(false);
+  const [isRequestingMic, setIsRequestingMic] = useState(false);
+  const [micPermissionState, setMicPermissionState] = useState<
+    'granted' | 'prompt' | 'denied' | 'unsupported' | 'unknown'
+  >('unknown');
+  const [showMicModal, setShowMicModal] = useState(false);
+  const [micIssueReason, setMicIssueReason] = useState<
+    'denied' | 'no-device' | 'busy' | 'unsupported' | 'prompt-guide'
+  >('prompt-guide');
   const [recordSeconds, setRecordSeconds] = useState(0);
   const [micLevels, setMicLevels] = useState<number[]>(() => Array(16).fill(12));
   const [capturedBlob, setCapturedBlob] = useState<Blob | null>(null);
@@ -229,9 +248,6 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
       cleanupRecorderTracks();
       stopPlayback();
       stopSavedSamplePreview();
-      if (capturedPreviewUrl) {
-        URL.revokeObjectURL(capturedPreviewUrl);
-      }
       if (playbackCtxRef.current && playbackCtxRef.current.state !== 'closed') {
         playbackCtxRef.current.close().catch(() => {});
       }
@@ -245,6 +261,57 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
       }
     };
   }, [capturedPreviewUrl]);
+
+  useEffect(() => {
+    if (
+      typeof navigator === 'undefined' ||
+      !navigator.mediaDevices?.getUserMedia
+    ) {
+      setMicPermissionState('unsupported');
+      return;
+    }
+
+    let cancelled = false;
+    let statusObj: PermissionStatus | null = null;
+    const syncState = (state: PermissionState) => {
+      if (cancelled) return;
+      if (state === 'granted' || state === 'prompt' || state === 'denied') {
+        setMicPermissionState(state);
+      }
+    };
+
+    if (navigator.permissions?.query) {
+      navigator.permissions
+        .query({ name: 'microphone' as PermissionName })
+        .then((perm) => {
+          if (cancelled) return;
+          statusObj = perm;
+          syncState(perm.state);
+          perm.onchange = () => syncState(perm.state);
+        })
+        .catch(() => {
+          if (!cancelled) setMicPermissionState('unknown');
+        });
+    }
+
+    return () => {
+      cancelled = true;
+      if (statusObj) {
+        statusObj.onchange = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!showMicModal) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setShowMicModal(false);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [showMicModal]);
 
   const cleanupRecorderTracks = () => {
     if (recordTimerRef.current !== null) {
@@ -316,8 +383,49 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
     }
   };
 
+  const isEmbeddedIframe =
+    typeof window !== 'undefined' &&
+    (() => {
+      try {
+        return window.self !== window.top;
+      } catch {
+        return true;
+      }
+    })();
+
+  const requestMicrophoneStream = async (): Promise<MediaStream> => {
+    if (
+      typeof navigator === 'undefined' ||
+      !navigator.mediaDevices?.getUserMedia
+    ) {
+      const unsupportedErr = new Error('UNSUPPORTED_MIC');
+      (unsupportedErr as any).name = 'NotSupportedError';
+      throw unsupportedErr;
+    }
+
+    try {
+      return await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
+    } catch (firstErr: any) {
+      const firstName = String(firstErr?.name || '');
+      if (
+        firstName === 'OverconstrainedError' ||
+        firstName === 'ConstraintNotSatisfiedError' ||
+        firstName === 'TypeError'
+      ) {
+        return await navigator.mediaDevices.getUserMedia({ audio: true });
+      }
+      throw firstErr;
+    }
+  };
+
   const startRecording = async () => {
-    if (isRecording || isAnalyzing) return;
+    if (isRecording || isAnalyzing || isRequestingMic) return;
     setCaptureError(null);
     setCaptureSuccessNotice(null);
     stopCapturedPreview();
@@ -327,20 +435,32 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
       typeof navigator === 'undefined' ||
       !navigator.mediaDevices?.getUserMedia
     ) {
+      setMicPermissionState('unsupported');
+      setMicIssueReason('unsupported');
+      setShowMicModal(true);
       setCaptureError(
-        'এই ব্রাউজারে মাইক্রোফোন রেকর্ডিং সাপোর্ট করে না। নিচের অডিও ফাইল আপলোড অপশন ব্যবহার করুন।'
+        bi(
+          'এই ব্রাউজার বা ওয়েবভিউতে মাইক্রোফোন রেকর্ডিং সাপোর্ট করে না। নতুন ট্যাবে খুলুন অথবা নিচের অডিও ফাইল আপলোড ব্যবহার করুন।',
+          'Microphone recording is not supported in this browser view. Open in a new tab or upload an audio file below.'
+        )
       );
       return;
     }
 
+    setIsRequestingMic(true);
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
-      });
+      const stream = await requestMicrophoneStream();
+      if (!isMountedRef.current) {
+        stream.getTracks().forEach((t) => {
+          try {
+            t.stop();
+          } catch {}
+        });
+        return;
+      }
+      setIsRequestingMic(false);
+      setMicPermissionState('granted');
+      setShowMicModal(false);
       mediaStreamRef.current = stream;
 
       const mimeType = getSupportedRecorderMimeType();
@@ -370,7 +490,10 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
 
         if (blob.size < 1024 || elapsed < 1.2) {
           setCaptureError(
-            'রেকর্ডিং খুব ছোট হয়ে গেছে। স্পষ্ট ফলাফলের জন্য অন্তত ৩–১০ সেকেন্ড কথা বলুন।'
+            bi(
+              'রেকর্ডিং খুব ছোট হয়ে গেছে। স্পষ্ট ফলাফলের জন্য অন্তত ৩–১০ সেকেন্ড কথা বলুন।',
+              'Recording is too short. Please speak for at least 3–10 seconds for accurate analysis.'
+            )
           );
           return;
         }
@@ -386,6 +509,9 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
         const AudioCtx =
           window.AudioContext || (window as any).webkitAudioContext;
         const analyserCtx = new AudioCtx();
+        if (analyserCtx.state === 'suspended') {
+          analyserCtx.resume().catch(() => {});
+        }
         analyserCtxRef.current = analyserCtx;
         const source = analyserCtx.createMediaStreamSource(stream);
         const analyser = analyserCtx.createAnalyser();
@@ -413,7 +539,11 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
       recordStartTimeRef.current = Date.now();
       setRecordSeconds(0);
       setIsRecording(true);
-      recorder.start(250);
+      try {
+        recorder.start(250);
+      } catch {
+        recorder.start();
+      }
 
       recordTimerRef.current = window.setInterval(() => {
         const elapsedSec = Math.floor(
@@ -432,18 +562,58 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
     } catch (err: any) {
       cleanupRecorderTracks();
       setIsRecording(false);
-      const rawMsg = String(err?.message || err?.name || '');
+      setIsRequestingMic(false);
+      const errName = String(err?.name || '').toLowerCase();
+      const rawMsg = String(err?.message || err?.name || '').toLowerCase();
+
       if (
-        rawMsg.toLowerCase().includes('denied') ||
-        rawMsg.toLowerCase().includes('permission') ||
-        rawMsg.toLowerCase().includes('notallowed')
+        errName.includes('notfound') ||
+        errName.includes('devicesnotfound') ||
+        rawMsg.includes('requested device not found')
       ) {
+        setMicIssueReason('no-device');
+        setShowMicModal(true);
         setCaptureError(
-          'মাইক্রোফোন ব্যবহারের অনুমতি দেওয়া হয়নি। ব্রাউজার অ্যাড্রেস বার থেকে Microphone Allow করুন অথবা নিচ থেকে রেকর্ডেড অডিও ফাইল আপলোড করুন।'
+          bi(
+            'ডিভাইসে কোনো মাইক্রোফোন পাওয়া যায়নি। হেডসেট/মাইক সংযুক্ত করুন অথবা অডিও ফাইল আপলোড করুন।',
+            'No microphone device was found. Connect a microphone or upload an audio file below.'
+          )
+        );
+      } else if (
+        errName.includes('notreadable') ||
+        errName.includes('trackstart') ||
+        errName.includes('abort')
+      ) {
+        setMicIssueReason('busy');
+        setShowMicModal(true);
+        setCaptureError(
+          bi(
+            'মাইক্রোফোনটি অন্য কোনো অ্যাপ ব্যবহার করছে বা পড়া যাচ্ছে না। অন্য অ্যাপ বন্ধ করে আবার চেষ্টা করুন।',
+            'Microphone is currently busy in another app or hardware-locked. Close other audio apps and retry.'
+          )
+        );
+      } else if (
+        errName.includes('notsupported') ||
+        rawMsg.includes('unsupported_mic')
+      ) {
+        setMicPermissionState('unsupported');
+        setMicIssueReason('unsupported');
+        setShowMicModal(true);
+        setCaptureError(
+          bi(
+            'এই ব্রাউজার ভিউতে মাইক্রোফোন রেকর্ডিং সাপোর্ট করে না। নতুন ট্যাবে খুলুন অথবা অডিও ফাইল আপলোড করুন।',
+            'Microphone recording is not supported in this view. Open in a new tab or upload an audio file.'
+          )
         );
       } else {
+        setMicPermissionState('denied');
+        setMicIssueReason('denied');
+        setShowMicModal(true);
         setCaptureError(
-          'মাইক্রোফোন চালু করা যায়নি। ডিভাইসের মাইক চেক করুন অথবা অডিও ফাইল আপলোড করুন।'
+          bi(
+            'মাইক্রোফোন অনুমতির পপআপ ব্লক বা ডিনাই করা হয়েছে। পপআপ গাইড দেখে অনুমতি দিন অথবা অডিও ফাইল আপলোড করুন।',
+            'Microphone permission popup was blocked or denied. Allow access using the popup guide or upload an audio file below.'
+          )
         );
       }
     }
@@ -473,7 +643,12 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
     stopCapturedPreview();
 
     if (file.size > MAX_UPLOAD_BYTES) {
-      setCaptureError('অডিও ফাইলের সাইজ সর্বোচ্চ ৮ MB-এর মধ্যে হতে হবে।');
+      setCaptureError(
+        bi(
+          'অডিও ফাইলের সাইজ সর্বোচ্চ ৮ MB-এর মধ্যে হতে হবে।',
+          'Audio file size must be 8 MB or smaller.'
+        )
+      );
       return;
     }
 
@@ -522,24 +697,38 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
     if (profiles.length >= maxProfiles) {
       if (studioTier === 'free') {
         setCaptureError(
-          `ফ্রি ট্রায়ালে সর্বোচ্চ ${maxProfiles}টি ভয়েস প্রোফাইল সেভ করা যায়। আরও ভয়েস প্রোফাইল সংরক্ষণ ও প্রো ক্যালিব্রেশনের জন্য Monthly (৩টি) বা Yearly (১০টি) প্রো নিন।`
+          bi(
+            `ফ্রি ট্রায়ালে সর্বোচ্চ ${maxProfiles}টি ভয়েস প্রোফাইল সেভ করা যায়। আরও ভয়েস প্রোফাইল সংরক্ষণ ও প্রো ক্যালিব্রেশনের জন্য Monthly (৩টি) বা Yearly (১০টি) প্রো নিন।`,
+            `Free trial allows up to ${maxProfiles} voice profile. Upgrade to Monthly (3) or Yearly (10) Pro for more profiles and fine calibration.`
+          )
         );
         onOpenUpgradePackage?.('monthly');
       } else if (studioTier === 'monthly') {
         setCaptureError(
-          `Monthly প্রো-তে সর্বোচ্চ ${maxProfiles}টি প্রোফাইল রাখা যায়। ১০টি প্রোফাইল ও ফাইন টিউনিংয়ের জন্য Yearly প্যাকে আপগ্রেড করুন বা পুরোনো ১টি মুছুন।`
+          bi(
+            `Monthly প্রো-তে সর্বোচ্চ ${maxProfiles}টি প্রোফাইল রাখা যায়। ১০টি প্রোফাইল ও ফাইন টিউনিংয়ের জন্য Yearly প্যাকে আপগ্রেড করুন বা পুরোনো ১টি মুছুন।`,
+            `Monthly Pro supports up to ${maxProfiles} profiles. Upgrade to Yearly for 10 profiles and fine-tuning, or delete an existing profile.`
+          )
         );
         onOpenUpgradePackage?.('yearly');
       } else {
         setCaptureError(
-          `সর্বোচ্চ ${maxProfiles}টি প্রোফাইল সেভ করা আছে। নতুন সেভ করতে পুরোনো একটি ডিলিট করুন।`
+          bi(
+            `সর্বোচ্চ ${maxProfiles}টি প্রোফাইল সেভ করা আছে। নতুন সেভ করতে পুরোনো একটি ডিলিট করুন।`,
+            `Maximum ${maxProfiles} profiles saved. Delete one to save a new profile.`
+          )
         );
       }
       return;
     }
 
     if (capturedDurationSec < MIN_RECORD_SECONDS && capturedBlob.size < 4000) {
-      setCaptureError('ভয়েস এনালাইসিসের জন্য অন্তত ৩ সেকেন্ডের স্পষ্ট অডিও প্রয়োজন।');
+      setCaptureError(
+        bi(
+          'ভয়েস এনালাইসিসের জন্য অন্তত ৩ সেকেন্ডের স্পষ্ট অডিও প্রয়োজন।',
+          'At least 3 seconds of clear audio is needed for voice analysis.'
+        )
+      );
       return;
     }
 
@@ -548,7 +737,10 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
       const hasBackend = await checkBackendHealth();
       if (!hasBackend) {
         throw new Error(
-          'ভয়েস এনালাইসিসের জন্য AI ব্যাকএন্ড সার্ভার সংযুক্ত থাকতে হবে।'
+          bi(
+            'ভয়েস এনালাইসিসের জন্য AI ব্যাকএন্ড সার্ভার সংযুক্ত থাকতে হবে।',
+            'AI backend server must be connected for voice analysis.'
+          )
         );
       }
 
@@ -600,18 +792,31 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
       onSelectProfile(newProfile.id);
       setCustomProfileLabel('');
       setCaptureSuccessNotice(
-        `"${newProfile.name}" বিশ্লেষণ ও সেভ সম্পন্ন হয়েছে! এখন ডানপাশের বক্সে যেকোনো টেক্সট লিখে আপনার ভয়েসে বলান।`
+        bi(
+          `"${newProfile.name}" বিশ্লেষণ ও সেভ সম্পন্ন হয়েছে! এখন ডানপাশের বক্সে যেকোনো টেক্সট লিখে আপনার ভয়েসে বলান।`,
+          `"${newProfile.name}" analyzed & saved! Type any script on the right to speak with your voice profile.`
+        )
       );
     } catch (err: any) {
       const msg =
         err?.message ||
-        'ভয়েস রেকর্ডিং বিশ্লেষণ করা যায়নি। পরিষ্কারভাবে কথা বলে আবার চেষ্টা করুন।';
+        bi(
+          'ভয়েস রেকর্ডিং বিশ্লেষণ করা যায়নি। পরিষ্কারভাবে কথা বলে আবার চেষ্টা করুন।',
+          'Could not analyze voice recording. Please speak clearly and try again.'
+        );
       reportAppIssue({
         source: 'VoiceClone:Analyze',
         severity: 'error',
         message: msg,
       });
-      setCaptureError(msg);
+      setCaptureError(
+        isAdmin
+          ? msg
+          : bi(
+              'ভয়েস রেকর্ডিং বিশ্লেষণ করা যায়নি। পরিষ্কারভাবে কথা বলে আবার চেষ্টা করুন।',
+              'Could not analyze voice recording. Please speak clearly and try again.'
+            )
+      );
     } finally {
       if (isMountedRef.current) {
         setIsAnalyzing(false);
@@ -638,7 +843,12 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
     } catch {}
 
     if (!url) {
-      setTtsNotice('এই প্রোফাইলের মূল রেকর্ডিং ক্লিপটি এই ডিভাইসে সংরক্ষিত নেই, তবে এনালাইজড ভয়েস প্রোফাইল দিয়ে কথা বলানো যাবে।');
+      setTtsNotice(
+        bi(
+          'এই প্রোফাইলের মূল রেকর্ডিং ক্লিপটি এই ডিভাইসে সংরক্ষিত নেই, তবে এনালাইজড ভয়েস প্রোফাইল দিয়ে কথা বলানো যাবে।',
+          'The raw recording clip is not stored on this device, but you can still synthesize speech using the analyzed voice profile.'
+        )
+      );
       return;
     }
 
@@ -730,7 +940,12 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
     }
 
     if (!activeProfile) {
-      setTtsNotice('প্রথমে বাম পাশ থেকে নিজের ভয়েস রেকর্ড ও এনালাইসিস করে সেভ করুন।');
+      setTtsNotice(
+        bi(
+          'প্রথমে বাম পাশ থেকে নিজের ভয়েস রেকর্ড ও এনালাইসিস করে সেভ করুন।',
+          'First record or upload your voice sample on the left and analyze it.'
+        )
+      );
       return;
     }
 
@@ -739,7 +954,10 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
 
     if (trimmed.length > studioCaps.maxScriptChars) {
       setTtsNotice(
-        `আপনার বর্তমান প্ল্যানে সর্বোচ্চ ${studioCaps.maxScriptChars.toLocaleString('en-US')} অক্ষরের স্ক্রিপ্ট ব্যবহার করা যায়।`
+        bi(
+          `আপনার বর্তমান প্ল্যানে সর্বোচ্চ ${studioCaps.maxScriptChars.toLocaleString('en-US')} অক্ষরের স্ক্রিপ্ট ব্যবহার করা যায়।`,
+          `Your current plan allows up to ${studioCaps.maxScriptChars.toLocaleString('en-US')} characters per script.`
+        )
       );
       return;
     }
@@ -755,7 +973,9 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
       try {
         await playCalibratedBytes(cachedRawBytes, runId);
       } catch (err: any) {
-        setTtsError(err?.message || 'অডিও চালাতে সমস্যা হয়েছে।');
+        const errMsg = err?.message || bi('অডিও চালাতে সমস্যা হয়েছে।', 'Failed to play audio.');
+        if (isAdmin) setTtsError(errMsg);
+        else setTtsNotice(bi('অডিও চালাতে সমস্যা হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।', 'Audio playback failed. Please try again.'));
         setIsSpeaking(false);
       }
       return;
@@ -766,7 +986,10 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
       const hasBackend = await checkBackendHealth();
       if (!hasBackend) {
         throw new Error(
-          'কাস্টম এনালাইজড ভয়েস স্পিচ তৈরির জন্য AI ব্যাকএন্ড সার্ভার সক্রিয় থাকতে হবে।'
+          bi(
+            'কাস্টম এনালাইজড ভয়েস স্পিচ তৈরির জন্য AI ব্যাকএন্ড সার্ভার সক্রিয় থাকতে হবে।',
+            'AI backend server must be active to synthesize speech with custom analyzed voices.'
+          )
         );
       }
 
@@ -794,7 +1017,10 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
     } catch (err: any) {
       const msg =
         err?.message ||
-        'ভয়েস প্রোফাইল দিয়ে স্পিচ তৈরি করা যায়নি। অনুগ্রহ করে আবার চেষ্টা করুন।';
+        bi(
+          'ভয়েস প্রোফাইল দিয়ে স্পিচ তৈরি করা যায়নি। অনুগ্রহ করে আবার চেষ্টা করুন।',
+          'Could not synthesize speech with this voice profile. Please try again.'
+        );
       reportAppIssue({
         source: 'VoiceClone:Synthesize',
         severity: 'error',
@@ -802,7 +1028,13 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
       });
       if (isMountedRef.current && activeRunIdRef.current === runId) {
         if (isAdmin) setTtsError(msg);
-        else setTtsNotice(msg);
+        else
+          setTtsNotice(
+            bi(
+              'ভয়েস প্রোফাইল দিয়ে স্পিচ তৈরি করা যায়নি। অনুগ্রহ করে আবার চেষ্টা করুন।',
+              'Could not synthesize speech right now. Please try again.'
+            )
+          );
       }
     } finally {
       if (isMountedRef.current) {
@@ -818,7 +1050,10 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
 
     if (trimmed.length > studioCaps.maxScriptChars) {
       setTtsNotice(
-        `আপনার বর্তমান প্ল্যানে সর্বোচ্চ ${studioCaps.maxScriptChars.toLocaleString('en-US')} অক্ষরের স্ক্রিপ্ট ব্যবহার করা যায়।`
+        bi(
+          `আপনার বর্তমান প্ল্যানে সর্বোচ্চ ${studioCaps.maxScriptChars.toLocaleString('en-US')} অক্ষরের স্ক্রিপ্ট ব্যবহার করা যায়।`,
+          `Your current plan allows up to ${studioCaps.maxScriptChars.toLocaleString('en-US')} characters per script.`
+        )
       );
       return;
     }
@@ -835,7 +1070,12 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
       try {
         const hasBackend = await checkBackendHealth();
         if (!hasBackend) {
-          throw new Error('WAV ডাউনলোডের জন্য AI ব্যাকএন্ড সার্ভার সক্রিয় থাকতে হবে।');
+          throw new Error(
+            bi(
+              'WAV ডাউনলোডের জন্য AI ব্যাকএন্ড সার্ভার সক্রিয় থাকতে হবে।',
+              'AI backend server must be active to download WAV audio.'
+            )
+          );
         }
         if (onBeforeGenerate) {
           const allowed = await onBeforeGenerate();
@@ -852,14 +1092,17 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
           setCachedRawKey(cacheKey);
         }
       } catch (err: any) {
-        const msg = err?.message || 'WAV ফাইল তৈরি করা যায়নি।';
+        const msg = err?.message || bi('WAV ফাইল তৈরি করা যায়নি।', 'Failed to generate WAV file.');
         reportAppIssue({
           source: 'VoiceClone:Download',
           severity: 'error',
           message: msg,
         });
         if (isAdmin) setTtsError(msg);
-        else setTtsNotice(msg);
+        else
+          setTtsNotice(
+            bi('WAV ফাইল তৈরি করা যায়নি। অনুগ্রহ করে পরে আবার চেষ্টা করুন।', 'Could not prepare WAV file. Please try again later.')
+          );
         return;
       } finally {
         if (isMountedRef.current) setIsGenerating(false);
@@ -886,7 +1129,7 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    window.setTimeout(() => URL.revokeObjectURL(url), 1500);
 
     setDownloaded(true);
     window.setTimeout(() => {
@@ -906,7 +1149,9 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
       rateMultiplier,
       warmthBoost,
     });
-    setTtsNotice('ক্যালিব্রেশন সেটিংস প্রোফাইলে সেভ হয়েছে।');
+    setTtsNotice(
+      bi('ক্যালিব্রেশন সেটিংস প্রোফাইলে সেভ হয়েছে।', 'Calibration settings saved to profile.')
+    );
   };
 
   return (
@@ -918,13 +1163,24 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
             <div className="space-y-2 max-w-2xl">
               <div className="flex flex-wrap items-center gap-2.5 text-xs font-bold uppercase tracking-widest text-amber-600 dark:text-amber-400">
                 <Crown size={14} />
-                <span>Premium Tool · Personal Voice Recording &amp; AI Speech Clone</span>
+                <span>
+                  {bi(
+                    'প্রিমিয়াম টুল · পার্সোনাল ভয়েস রেকর্ডিং ও এআই স্পিচ ক্লোন',
+                    'Premium Tool · Personal Voice Recording & AI Speech Clone'
+                  )}
+                </span>
               </div>
               <h2 className="text-2xl sm:text-3xl font-serif font-medium tracking-tight text-slate-900 dark:text-white">
-                নিজের ভয়েস রেকর্ডিং, এনালাইসিস ও এআই স্পিচ স্টুডিও
+                {bi(
+                  'নিজের ভয়েস রেকর্ডিং, এনালাইসিস ও এআই স্পিচ স্টুডিও',
+                  'Personal Voice Recording, Analysis & AI Speech Studio'
+                )}
               </h2>
               <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
-                আপনার নিজের কণ্ঠ ৩–২৫ সেকেন্ড রেকর্ড (বা অডিও আপলোড) করে সেভ রাখুন। Gemini এআই আপনার কণ্ঠের পিচ, কথা বলার গতি, উষ্ণতা ও ভঙ্গি বিশ্লেষণ করে একটি কাস্টম Voice DNA প্রোফাইল তৈরি করবে—যার মাধ্যমে যেকোনো বাংলা বা ইংরেজি লেখা বলানো যাবে।
+                {bi(
+                  'আপনার নিজের কণ্ঠ ৩–২৫ সেকেন্ড রেকর্ড (বা অডিও আপলোড) করে সেভ রাখুন। Gemini এআই আপনার কণ্ঠের পিচ, কথা বলার গতি, উষ্ণতা ও ভঙ্গি বিশ্লেষণ করে একটি কাস্টম Voice DNA প্রোফাইল তৈরি করবে—যার মাধ্যমে যেকোনো বাংলা বা ইংরেজি লেখা বলানো যাবে।',
+                  'Record 3–25 seconds of your own voice (or upload audio) and save it. Gemini AI analyzes your pitch, pace, warmth, and cadence to create a custom Voice DNA profile that speaks any Bengali or English script.'
+                )}
               </p>
             </div>
 
@@ -933,10 +1189,16 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
                 <UserCheck size={14} className="text-indigo-600 dark:text-amber-400" />
                 <span className="font-semibold text-slate-800 dark:text-slate-100 tabular-nums">
                   {isAdmin
-                    ? `Admin (${profiles.length}/${maxProfiles} Profiles)`
+                    ? bi(
+                        `অ্যাডমিন (${profiles.length}/${maxProfiles} প্রোফাইল)`,
+                        `Admin (${profiles.length}/${maxProfiles} Profiles)`
+                      )
                     : userPlan === 'pro'
-                    ? `${proPackageType === 'yearly' ? 'Yearly' : 'Monthly'} Pro (${profiles.length}/${maxProfiles})`
-                    : `Free Trial (${profiles.length}/${maxProfiles} · ${Math.max(0, freeDailyLimit - usedToday)}/${freeDailyLimit} Left + ${bonusCredits} Cr)`}
+                    ? `${proPackageType === 'yearly' ? bi('ইয়ারলি প্রো', 'Yearly Pro') : bi('মান্থলি প্রো', 'Monthly Pro')} (${profiles.length}/${maxProfiles})`
+                    : bi(
+                        `ফ্রি ট্রায়াল (${profiles.length}/${maxProfiles} · ${Math.max(0, freeDailyLimit - usedToday)}/${freeDailyLimit} বাকি + ${bonusCredits} ক্রেডিট)`,
+                        `Free Trial (${profiles.length}/${maxProfiles} · ${Math.max(0, freeDailyLimit - usedToday)}/${freeDailyLimit} Left + ${bonusCredits} Cr)`
+                      )}
                 </span>
               </div>
 
@@ -946,7 +1208,7 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
                 className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-indigo-50 hover:bg-indigo-100 dark:bg-slate-800 dark:hover:bg-slate-700 border border-indigo-200 dark:border-slate-700 text-xs font-semibold text-indigo-700 dark:text-indigo-200 transition-colors whitespace-nowrap"
               >
                 <AudioLines size={14} />
-                <span>Voice Studio-তে ফিরুন</span>
+                <span>{bi('Voice Studio-তে ফিরুন', 'Back to Voice Studio')}</span>
               </button>
             </div>
           </div>
@@ -957,31 +1219,85 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
             <div className="lg:col-span-5 space-y-6">
               {/* Step 1 Card */}
               <div className="rounded-2xl bg-slate-50/90 dark:bg-slate-900/80 border border-indigo-100 dark:border-slate-800 p-5 space-y-4">
-                <div className="flex items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="text-xs font-bold uppercase tracking-wider text-indigo-600 dark:text-amber-400">
-                    ধাপ ১ · নিজের কণ্ঠ রেকর্ড করুন
+                    {bi('ধাপ ১ · নিজের কণ্ঠ রেকর্ড করুন', 'Step 1 · Record Your Voice')}
                   </span>
-                  <span className="text-xs font-mono font-semibold text-slate-500 dark:text-slate-400 tabular-nums">
-                    {isRecording
-                      ? `${formatSeconds(recordSeconds)} / ${formatSeconds(MAX_RECORD_SECONDS)}`
-                      : capturedBlob
-                      ? `${capturedDurationSec}s প্রস্তুত`
-                      : '৩–২৫ সেকেন্ড'}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMicIssueReason(
+                          micPermissionState === 'denied'
+                            ? 'denied'
+                            : micPermissionState === 'unsupported'
+                            ? 'unsupported'
+                            : 'prompt-guide'
+                        );
+                        setShowMicModal(true);
+                      }}
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-colors ${
+                        micPermissionState === 'granted'
+                          ? 'bg-emerald-50 dark:bg-emerald-950/50 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300'
+                          : micPermissionState === 'denied' || micPermissionState === 'unsupported'
+                          ? 'bg-rose-50 dark:bg-rose-950/50 border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-950'
+                          : 'bg-amber-50 dark:bg-amber-950/50 border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-950'
+                      }`}
+                      title={bi('মাইক্রোফোন পপআপ ও অনুমতি সেটিংস দেখুন', 'Open microphone popup & permission settings')}
+                    >
+                      {micPermissionState === 'denied' || micPermissionState === 'unsupported' ? (
+                        <MicOff size={12} />
+                      ) : (
+                        <Mic size={12} />
+                      )}
+                      <span>
+                        {micPermissionState === 'granted'
+                          ? bi('মাইক চালু', 'Mic Ready')
+                          : micPermissionState === 'denied'
+                          ? bi('মাইক ব্লকড · পপআপ গাইড', 'Mic Blocked · Fix')
+                          : micPermissionState === 'unsupported'
+                          ? bi('মাইক অনুপলব্ধ · সাহায্য', 'No Mic · Help')
+                          : bi('মাইক পপআপ / অনুমতি', 'Mic Popup / Access')}
+                      </span>
+                    </button>
+
+                    <span className="text-xs font-mono font-semibold text-slate-500 dark:text-slate-400 tabular-nums">
+                      {isRecording
+                        ? `${formatSeconds(recordSeconds)} / ${formatSeconds(MAX_RECORD_SECONDS)}`
+                        : capturedBlob
+                        ? bi(`${capturedDurationSec}s প্রস্তুত`, `${capturedDurationSec}s ready`)
+                        : bi('৩–২৫ সেকেন্ড', '3–25 seconds')}
+                    </span>
+                  </div>
                 </div>
 
                 {/* Guided Sample Script */}
                 <div className="p-3.5 rounded-xl bg-white dark:bg-slate-950/70 border border-indigo-100/80 dark:border-slate-800 space-y-1">
                   <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
-                    রেকর্ডিংয়ের সময় চাইলে এই লাইনটি দেখে স্বাভাবিকভাবে পড়তে পারেন:
+                    {bi(
+                      'রেকর্ডিংয়ের সময় চাইলে এই লাইনটি দেখে স্বাভাবিকভাবে পড়তে পারেন:',
+                      'Read this prompt naturally while recording for best calibration:'
+                    )}
                   </p>
                   <p className="text-xs text-slate-800 dark:text-slate-200 leading-relaxed italic">
-                    &ldquo;{SAMPLE_READING_SCRIPT}&rdquo;
+                    &ldquo;{lang === 'bn' ? SAMPLE_READING_SCRIPT_BN : SAMPLE_READING_SCRIPT_EN}&rdquo;
                   </p>
                 </div>
 
                 {/* Live Mic Meter & Record Controls */}
                 <div className="rounded-2xl bg-gradient-to-br from-indigo-950 via-slate-900 to-slate-950 text-white p-5 flex flex-col items-center gap-4 border border-indigo-500/30">
+                  {isRequestingMic && (
+                    <div className="w-full p-2.5 rounded-xl bg-amber-500/15 border border-amber-400/40 text-amber-200 text-xs flex items-center justify-center gap-2 text-center">
+                      <Loader2 size={14} className="animate-spin shrink-0" />
+                      <span>
+                        {bi(
+                          'ব্রাউজারে মাইক্রোফোন অনুমতির পপআপ এলে "Allow" চাপুন...',
+                          'Look for the browser microphone popup and click "Allow"...'
+                        )}
+                      </span>
+                    </div>
+                  )}
+
                   {/* Live Meter Bars */}
                   <div className="h-12 w-full flex items-end justify-center gap-1.5 px-2">
                     {micLevels.map((lvl, idx) => (
@@ -1003,7 +1319,7 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
                     <button
                       type="button"
                       onClick={isRecording ? stopRecording : startRecording}
-                      disabled={isAnalyzing}
+                      disabled={isAnalyzing || isRequestingMic}
                       className={`inline-flex items-center justify-center gap-2.5 px-5 py-3 rounded-xl text-sm font-bold transition-all shadow-lg ${
                         isRecording
                           ? 'bg-rose-600 hover:bg-rose-500 text-white animate-pulse'
@@ -1013,12 +1329,26 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
                       {isRecording ? (
                         <>
                           <Square size={16} className="fill-current" />
-                          <span>রেকর্ডিং থামান ({formatSeconds(recordSeconds)})</span>
+                          <span>
+                            {bi(
+                              `রেকর্ডিং থামান (${formatSeconds(recordSeconds)})`,
+                              `Stop Recording (${formatSeconds(recordSeconds)})`
+                            )}
+                          </span>
+                        </>
+                      ) : isRequestingMic ? (
+                        <>
+                          <Loader2 size={17} className="animate-spin" />
+                          <span>{bi('পপআপ অপেক্ষা করছে...', 'Requesting Mic...')}</span>
                         </>
                       ) : (
                         <>
                           <Mic size={17} />
-                          <span>{capturedBlob ? 'নতুন করে রেকর্ড' : 'রেকর্ডিং শুরু করুন'}</span>
+                          <span>
+                            {capturedBlob
+                              ? bi('নতুন করে রেকর্ড', 'Record Again')
+                              : bi('রেকর্ডিং শুরু করুন', 'Start Recording')}
+                          </span>
                         </>
                       )}
                     </button>
@@ -1033,11 +1363,11 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
                     <button
                       type="button"
                       onClick={() => fileInputRef.current?.click()}
-                      disabled={isRecording || isAnalyzing}
+                      disabled={isRecording || isAnalyzing || isRequestingMic}
                       className="inline-flex items-center gap-1.5 px-3.5 py-3 rounded-xl bg-white/10 hover:bg-white/15 border border-white/15 text-xs font-semibold text-slate-100 transition-colors disabled:opacity-50"
                     >
                       <Upload size={14} />
-                      <span>অডিও আপলোড</span>
+                      <span>{bi('অডিও আপলোড', 'Upload Audio')}</span>
                     </button>
                   </div>
                 </div>
@@ -1058,7 +1388,9 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
                         className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-teal-50 dark:bg-teal-950/60 border border-teal-200 dark:border-teal-800 text-xs font-semibold text-teal-700 dark:text-teal-300"
                       >
                         {isPlayingCaptured ? <Pause size={13} /> : <Play size={13} />}
-                        <span>{isPlayingCaptured ? 'বিরতি' : 'রেকর্ডিং শুনুন'}</span>
+                        <span>
+                          {isPlayingCaptured ? bi('বিরতি', 'Pause') : bi('রেকর্ডিং শুনুন', 'Play Recording')}
+                        </span>
                       </button>
                       <button
                         type="button"
@@ -1071,7 +1403,7 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
                         className="inline-flex items-center gap-1 text-xs text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
                       >
                         <RotateCcw size={12} />
-                        <span>বাদ দিন</span>
+                        <span>{bi('বাদ দিন', 'Discard')}</span>
                       </button>
                     </div>
 
@@ -1080,7 +1412,7 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
                         htmlFor="voice-clone-name-input"
                         className="block text-[11px] font-semibold text-slate-500 dark:text-slate-400"
                       >
-                        ভয়েস প্রোফাইলের নাম (ঐচ্ছিক)
+                        {bi('ভয়েস প্রোফাইলের নাম (ঐচ্ছিক)', 'Voice Profile Name (Optional)')}
                       </label>
                       <input
                         id="voice-clone-name-input"
@@ -1088,7 +1420,10 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
                         value={customProfileLabel}
                         onChange={(e) => setCustomProfileLabel(e.target.value)}
                         maxLength={48}
-                        placeholder="যেমন: আমার উপস্থাপনা ভয়েস / আমার অ্যালার্ম"
+                        placeholder={bi(
+                          'যেমন: আমার উপস্থাপনা ভয়েস / আমার অ্যালার্ম',
+                          'e.g., My Presentation Voice / My Alarm'
+                        )}
                         className="w-full rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
                       />
                     </div>
@@ -1102,12 +1437,12 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
                       {isAnalyzing ? (
                         <>
                           <Loader2 size={16} className="animate-spin" />
-                          <span>ভয়েস রেকর্ডিং বিশ্লেষণ হচ্ছে...</span>
+                          <span>{bi('ভয়েস রেকর্ডিং বিশ্লেষণ হচ্ছে...', 'Analyzing voice sample...')}</span>
                         </>
                       ) : (
                         <>
                           <Sparkles size={16} />
-                          <span>রেকর্ডিং এনালাইসিস ও সেভ করুন</span>
+                          <span>{bi('রেকর্ডিং এনালাইসিস ও সেভ করুন', 'Analyze & Save Voice')}</span>
                         </>
                       )}
                     </button>
@@ -1115,9 +1450,19 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
                 )}
 
                 {captureError && (
-                  <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-xs text-rose-700 dark:text-rose-200 flex items-start gap-2">
-                    <AlertCircle size={15} className="shrink-0 mt-0.5" />
-                    <span>{captureError}</span>
+                  <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-xs text-rose-700 dark:text-rose-200 space-y-2">
+                    <div className="flex items-start gap-2">
+                      <AlertCircle size={15} className="shrink-0 mt-0.5" />
+                      <span>{captureError}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowMicModal(true)}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-rose-100 dark:bg-rose-900/60 hover:bg-rose-200 dark:hover:bg-rose-900 text-rose-800 dark:text-rose-100 font-semibold transition-colors"
+                    >
+                      <Mic size={12} />
+                      <span>{bi('মাইক্রোফোন পপআপ গাইড দেখুন', 'Open Mic Popup Guide')}</span>
+                    </button>
                   </div>
                 )}
 
@@ -1133,7 +1478,7 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
               <div className="rounded-2xl bg-slate-50/90 dark:bg-slate-900/80 border border-indigo-100 dark:border-slate-800 p-5 space-y-3.5">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-xs font-bold uppercase tracking-wider text-indigo-600 dark:text-amber-400">
-                    ধাপ ২ · সংরক্ষিত ভয়েস প্রোফাইল ({profiles.length}/{maxProfiles})
+                    {bi('ধাপ ২ · সংরক্ষিত ভয়েস প্রোফাইল', 'Step 2 · Saved Voice Profiles')} ({profiles.length}/{maxProfiles})
                   </span>
                   {profiles.length >= maxProfiles && !isAdmin && onOpenUpgradePackage && (
                     <button
@@ -1143,7 +1488,7 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
                       }
                       className="text-[11px] font-semibold text-amber-600 dark:text-amber-400 hover:underline"
                     >
-                      আরও প্রোফাইল আপগ্রেড
+                      {bi('আরও প্রোফাইল আপগ্রেড', 'Upgrade for more profiles')}
                     </button>
                   )}
                 </div>
@@ -1152,10 +1497,13 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
                   <div className="p-5 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 text-center space-y-1.5">
                     <FileAudio size={24} className="mx-auto text-slate-400" />
                     <p className="text-xs font-medium text-slate-600 dark:text-slate-300">
-                      এখনও কোনো নিজস্ব ভয়েস প্রোফাইল সেভ করা হয়নি
+                      {bi('এখনও কোনো নিজস্ব ভয়েস প্রোফাইল সেভ করা হয়নি', 'No personal voice profiles saved yet')}
                     </p>
                     <p className="text-[11px] text-slate-400 dark:text-slate-500">
-                      উপরের ধাপ ১ থেকে আপনার কণ্ঠ রেকর্ড করে এনালাইসিস করুন।
+                      {bi(
+                        'উপরের ধাপ ১ থেকে আপনার কণ্ঠ রেকর্ড করে এনালাইসিস করুন।',
+                        'Record and analyze your voice in Step 1 above.'
+                      )}
                     </p>
                   </div>
                 ) : (
@@ -1195,7 +1543,7 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
                                       setEditingProfileId(null);
                                     }}
                                     className="p-1.5 rounded-lg bg-indigo-600 text-white"
-                                    aria-label="Save name"
+                                    aria-label={bi('নাম সেভ করুন', 'Save name')}
                                   >
                                     <Check size={12} />
                                   </button>
@@ -1210,7 +1558,8 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
                                     {prof.name}
                                   </p>
                                   <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                                    {prof.gender} · {prof.pitchLabel} · বেস: {prof.matchedBaseVoice} ({prof.durationSec}s)
+                                    {localizeGender(prof.gender, lang)} · {localizePitch(prof.pitchLabel, lang)} ·{' '}
+                                    {bi('বেস:', 'Base:')} {prof.matchedBaseVoice} ({prof.durationSec}s)
                                   </p>
                                 </button>
                               )}
@@ -1225,8 +1574,8 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
                                     ? 'bg-teal-600 text-white border-teal-600'
                                     : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100'
                                 }`}
-                                title="নিজের রেকর্ডিং শুনুন"
-                                aria-label={`Play sample for ${prof.name}`}
+                                title={bi('নিজের রেকর্ডিং শুনুন', 'Play original sample')}
+                                aria-label={bi(`${prof.name} এর স্যাম্পল শুনুন`, `Play sample for ${prof.name}`)}
                               >
                                 {isPlayingThis ? <Pause size={12} /> : <Play size={12} />}
                               </button>
@@ -1237,8 +1586,8 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
                                   setEditingNameDraft(prof.name);
                                 }}
                                 className="p-1.5 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-indigo-600"
-                                title="নাম পরিবর্তন করুন"
-                                aria-label={`Rename ${prof.name}`}
+                                title={bi('নাম পরিবর্তন করুন', 'Rename profile')}
+                                aria-label={bi(`${prof.name} নাম পরিবর্তন`, `Rename ${prof.name}`)}
                               >
                                 <Edit3 size={12} />
                               </button>
@@ -1249,8 +1598,8 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
                                   onDeleteProfile(prof.id);
                                 }}
                                 className="p-1.5 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-rose-600"
-                                title="ডিলিট করুন"
-                                aria-label={`Delete ${prof.name}`}
+                                title={bi('ডিলিট করুন', 'Delete profile')}
+                                aria-label={bi(`${prof.name} মুছুন`, `Delete ${prof.name}`)}
                               >
                                 <Trash2 size={12} />
                               </button>
@@ -1267,14 +1616,16 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
                                   : 'text-slate-600 dark:text-slate-400 hover:text-indigo-600'
                               }`}
                             >
-                              {isSelected ? '✓ বর্তমানে নির্বাচিত' : 'এটি দিয়ে বলুন'}
+                              {isSelected
+                                ? bi('✓ বর্তমানে নির্বাচিত', '✓ Currently Selected')
+                                : bi('এটি দিয়ে বলুন', 'Use This Voice')}
                             </button>
                             <button
                               type="button"
                               onClick={() => onUseProfileInStudio(prof.id)}
                               className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
                             >
-                              <span>Voice Studio-তে খুলুন</span>
+                              <span>{bi('Voice Studio-তে খুলুন', 'Open in Voice Studio')}</span>
                               <ArrowRight size={11} />
                             </button>
                           </div>
@@ -1295,10 +1646,16 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
                   </div>
                   <div className="space-y-2 max-w-md">
                     <h3 className="text-xl font-serif font-medium text-slate-900 dark:text-white">
-                      বাম পাশ থেকে প্রথম ভয়েস স্যাম্পল রেকর্ড করুন
+                      {bi(
+                        'বাম পাশ থেকে প্রথম ভয়েস স্যাম্পল রেকর্ড করুন',
+                        'Record Your First Voice Sample on the Left'
+                      )}
                     </h3>
                     <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
-                      রেকর্ড করে &ldquo;রেকর্ডিং এনালাইসিস ও সেভ করুন&rdquo; বাটনে চাপ দিলেই আপনার Voice DNA বিশ্লেষণ হয়ে যাবে এবং এখানে যেকোনো লেখা আপনার কণ্ঠের প্রোফাইলে বাজানো যাবে।
+                      {bi(
+                        'রেকর্ড করে "রেকর্ডিং এনালাইসিস ও সেভ করুন" বাটনে চাপ দিলেই আপনার Voice DNA বিশ্লেষণ হয়ে যাবে এবং এখানে যেকোনো লেখা আপনার কণ্ঠের প্রোফাইলে বাজানো যাবে।',
+                        'Record and click "Analyze & Save Recording" to extract your Voice DNA and play any script in your calibrated voice profile.'
+                      )}
                     </p>
                   </div>
                 </div>
@@ -1309,10 +1666,10 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div>
                         <p className="text-[11px] font-bold uppercase tracking-wider text-indigo-600 dark:text-amber-400">
-                          Voice DNA Analysis · {activeProfile.name}
+                          {bi('Voice DNA বিশ্লেষণ', 'Voice DNA Analysis')} · {activeProfile.name}
                         </p>
                         <h3 className="text-lg font-serif font-medium text-slate-900 dark:text-white mt-0.5">
-                          শনাক্তকৃত কণ্ঠস্বর বৈশিষ্ট্য
+                          {bi('শনাক্তকৃত কণ্ঠস্বর বৈশিষ্ট্য', 'Detected Voice Characteristics')}
                         </h3>
                       </div>
                       <button
@@ -1320,31 +1677,41 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
                         onClick={() => setShowDnaPrompt((prev) => !prev)}
                         className="text-xs font-semibold text-indigo-600 dark:text-indigo-300 hover:underline"
                       >
-                        {showDnaPrompt ? 'AI প্রম্পট লুকান' : 'AI স্টাইল প্রম্পট দেখুন'}
+                        {showDnaPrompt
+                          ? bi('AI প্রম্পট লুকান', 'Hide AI Prompt')
+                          : bi('AI স্টাইল প্রম্পট দেখুন', 'View AI Style Prompt')}
                       </button>
                     </div>
 
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
                       <div className="p-2.5 rounded-xl bg-white/90 dark:bg-slate-950/70 border border-indigo-100 dark:border-slate-800">
-                        <p className="text-[10px] uppercase tracking-wider text-slate-400">কণ্ঠের ধরন</p>
+                        <p className="text-[10px] uppercase tracking-wider text-slate-400">
+                          {bi('কণ্ঠের ধরন', 'Voice Gender')}
+                        </p>
                         <p className="font-semibold text-slate-900 dark:text-white mt-0.5">
-                          {activeProfile.gender}
+                          {localizeGender(activeProfile.gender, lang)}
                         </p>
                       </div>
                       <div className="p-2.5 rounded-xl bg-white/90 dark:bg-slate-950/70 border border-indigo-100 dark:border-slate-800">
-                        <p className="text-[10px] uppercase tracking-wider text-slate-400">পিচ রেজিস্টার</p>
+                        <p className="text-[10px] uppercase tracking-wider text-slate-400">
+                          {bi('পিচ রেজিস্টার', 'Pitch Register')}
+                        </p>
                         <p className="font-semibold text-slate-900 dark:text-white mt-0.5">
-                          {activeProfile.pitchLabel}
+                          {localizePitch(activeProfile.pitchLabel, lang)}
                         </p>
                       </div>
                       <div className="p-2.5 rounded-xl bg-white/90 dark:bg-slate-950/70 border border-indigo-100 dark:border-slate-800">
-                        <p className="text-[10px] uppercase tracking-wider text-slate-400">কথা বলার গতি</p>
+                        <p className="text-[10px] uppercase tracking-wider text-slate-400">
+                          {bi('কথা বলার গতি', 'Speaking Pace')}
+                        </p>
                         <p className="font-semibold text-slate-900 dark:text-white mt-0.5 truncate">
                           {activeProfile.speakingRateLabel}
                         </p>
                       </div>
                       <div className="p-2.5 rounded-xl bg-white/90 dark:bg-slate-950/70 border border-indigo-100 dark:border-slate-800">
-                        <p className="text-[10px] uppercase tracking-wider text-slate-400">ম্যাচড বেস ভয়েস</p>
+                        <p className="text-[10px] uppercase tracking-wider text-slate-400">
+                          {bi('ম্যাচড বেস ভয়েস', 'Matched Base Voice')}
+                        </p>
                         <p className="font-semibold text-indigo-700 dark:text-amber-300 mt-0.5">
                           {activeProfile.matchedBaseVoice}
                         </p>
@@ -1353,16 +1720,21 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
 
                     <div className="text-xs text-slate-700 dark:text-slate-300 space-y-1 leading-relaxed">
                       <p>
-                        <strong className="text-slate-900 dark:text-white">টোন ও উষ্ণতা:</strong>{' '}
+                        <strong className="text-slate-900 dark:text-white">
+                          {bi('টোন ও উষ্ণতা:', 'Tone & Warmth:')}
+                        </strong>{' '}
                         {activeProfile.toneDescription}
                       </p>
                       <p>
-                        <strong className="text-slate-900 dark:text-white">উচ্চারণ ও ছন্দ:</strong>{' '}
+                        <strong className="text-slate-900 dark:text-white">
+                          {bi('উচ্চারণ ও ছন্দ:', 'Accent & Cadence:')}
+                        </strong>{' '}
                         {activeProfile.accentNotes}
                       </p>
                       {activeProfile.transcriptSample && (
                         <p className="text-slate-500 dark:text-slate-400">
-                          <strong>রেকর্ডিং থেকে শোনা বাক্য:</strong> &ldquo;{activeProfile.transcriptSample}&rdquo;
+                          <strong>{bi('রেকর্ডিং থেকে শোনা বাক্য:', 'Transcript Sample:')}</strong> &ldquo;
+                          {activeProfile.transcriptSample}&rdquo;
                         </p>
                       )}
                     </div>
@@ -1379,7 +1751,7 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400">
                         <Sliders size={14} />
-                        <span>অ্যাকুস্টিক ক্যালিব্রেশন (Pitch · Pace · Warmth)</span>
+                        <span>{bi('অ্যাকুস্টিক ক্যালিব্রেশন (Pitch · Pace · Warmth)', 'Acoustic Calibration (Pitch · Pace · Warmth)')}</span>
                       </div>
                       <div className="flex items-center gap-2">
                         {!allowFineTuning && onOpenUpgradePackage ? (
@@ -1389,7 +1761,7 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
                             className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-[11px] font-semibold transition-colors"
                           >
                             <Lock size={10} />
-                            <span>Yearly দিয়ে ফাইন-টিউন</span>
+                            <span>{bi('Yearly দিয়ে ফাইন-টিউন', 'Fine-tune with Yearly')}</span>
                           </button>
                         ) : (
                           <button
@@ -1397,7 +1769,7 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
                             onClick={handleSaveCalibrationToProfile}
                             className="text-[11px] font-semibold text-indigo-700 dark:text-amber-300 hover:underline"
                           >
-                            সেটিংস প্রোফাইলে সেভ করুন
+                            {bi('সেটিংস প্রোফাইলে সেভ করুন', 'Save Settings to Profile')}
                           </button>
                         )}
                       </div>
@@ -1406,9 +1778,9 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
                       <label className="space-y-1">
                         <div className="flex justify-between text-slate-600 dark:text-slate-300">
-                          <span>পিচ ম্যাচ</span>
+                          <span>{bi('পিচ ম্যাচ', 'Pitch Match')}</span>
                           <span className="font-mono font-semibold tabular-nums">
-                            {pitchCentsOffset > 0 ? `+${pitchCentsOffset}` : pitchCentsOffset} cents
+                            {pitchCentsOffset > 0 ? `+${pitchCentsOffset}` : pitchCentsOffset} {bi('সেন্টস', 'cents')}
                           </span>
                         </div>
                         <input
@@ -1425,7 +1797,7 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
 
                       <label className="space-y-1">
                         <div className="flex justify-between text-slate-600 dark:text-slate-300">
-                          <span>গতি (Pace)</span>
+                          <span>{bi('গতি (Pace)', 'Speaking Pace')}</span>
                           <span className="font-mono font-semibold tabular-nums">
                             {rateMultiplier.toFixed(2)}x
                           </span>
@@ -1444,7 +1816,7 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
 
                       <label className="space-y-1">
                         <div className="flex justify-between text-slate-600 dark:text-slate-300">
-                          <span>ভয়েস উষ্ণতা EQ</span>
+                          <span>{bi('ভয়েস উষ্ণতা EQ', 'Voice Warmth EQ')}</span>
                           <span className="font-mono font-semibold tabular-nums">
                             {warmthBoost > 0 ? `+${warmthBoost}` : warmthBoost} dB
                           </span>
@@ -1467,10 +1839,13 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
                   <div className="space-y-3">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                        ধাপ ৩ · যেকোনো লেখা লিখে এই ভয়েস প্রোফাইলে বলান
+                        {bi(
+                          'ধাপ ৩ · যেকোনো লেখা লিখে এই ভয়েস প্রোফাইলে বলান',
+                          'Step 3 · Write Any Script to Speak in This Voice Profile'
+                        )}
                       </span>
                       <span className="text-xs font-medium text-slate-400 tabular-nums">
-                        {scriptText.length.toLocaleString('en-US')} / {studioCaps.maxScriptChars.toLocaleString('en-US')} chars
+                        {scriptText.length.toLocaleString('en-US')} / {studioCaps.maxScriptChars.toLocaleString('en-US')} {bi('অক্ষর', 'chars')}
                       </span>
                     </div>
 
@@ -1490,7 +1865,7 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
                               : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-50'
                           }`}
                         >
-                          {preset.label}
+                          {lang === 'bn' ? preset.labelBn : preset.labelEn}
                         </button>
                       ))}
                     </div>
@@ -1504,7 +1879,10 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
                         setTtsNotice(null);
                       }}
                       rows={4}
-                      placeholder="বাংলা, ইংরেজি বা যেকোনো ভাষায় আপনার লেখা লিখুন..."
+                      placeholder={bi(
+                        'বাংলা, ইংরেজি বা যেকোনো ভাষায় আপনার লেখা লিখুন...',
+                        'Write your script in Bengali, English, or any language...'
+                      )}
                       className="w-full rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 p-4 text-base sm:text-lg leading-relaxed text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 resize-none"
                     />
 
@@ -1515,7 +1893,10 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
                         if (isSpeaking) stopPlayback();
                         setExtraStyleNote(e.target.value);
                       }}
-                      placeholder="ঐচ্ছিক অতিরিক্ত মুড (যেমন: আনন্দিত ও প্রাণবন্তভাবে / ধীর ও শান্তভাবে)..."
+                      placeholder={bi(
+                        'ঐচ্ছিক অতিরিক্ত মুড (যেমন: আনন্দিত ও প্রাণবন্তভাবে / ধীর ও শান্তভাবে)...',
+                        'Optional extra mood (e.g., joyful & energetic / slow & calm)...'
+                      )}
                       className="w-full rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3.5 py-2 text-xs text-slate-800 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
                     />
 
@@ -1536,7 +1917,10 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
                         <div className="flex flex-col items-center gap-1.5 text-indigo-600 dark:text-amber-400">
                           <Loader2 size={24} className="animate-spin" />
                           <span className="text-xs font-medium">
-                            &ldquo;{activeProfile.name}&rdquo; ভয়েসে অডিও তৈরি হচ্ছে...
+                            {bi(
+                              `“${activeProfile.name}” ভয়েসে অডিও তৈরি হচ্ছে...`,
+                              `Generating audio in “${activeProfile.name}” voice...`
+                            )}
                           </span>
                         </div>
                       ) : isSpeaking ? (
@@ -1552,7 +1936,10 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
                             <Volume2 size={18} className="text-indigo-600 dark:text-amber-400" />
                           </div>
                           <span className="text-xs font-medium">
-                            ক্লিক করে &ldquo;{activeProfile.name}&rdquo; কণ্ঠে শুনুন
+                            {bi(
+                              `ক্লিক করে “${activeProfile.name}” কণ্ঠে শুনুন`,
+                              `Click to listen in “${activeProfile.name}” voice`
+                            )}
                           </span>
                         </div>
                       )}
@@ -1593,10 +1980,10 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
                         )}
                         <span>
                           {isGenerating
-                            ? 'জেনারেট হচ্ছে...'
+                            ? bi('জেনারেট হচ্ছে...', 'Generating...')
                             : isSpeaking
-                            ? 'থামান'
-                            : 'আমার ভয়েস প্রোফাইলে বলুন'}
+                            ? bi('থামান', 'Stop')
+                            : bi('আমার ভয়েস প্রোফাইলে বলুন', 'Speak in My Voice Profile')}
                         </span>
                       </button>
 
@@ -1610,7 +1997,7 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
                         }`}
                       >
                         <Repeat size={14} />
-                        <span>{isLooping ? 'লুপ চালু' : 'লুপ'}</span>
+                        <span>{isLooping ? bi('লুপ চালু', 'Loop On') : bi('লুপ', 'Loop')}</span>
                       </button>
 
                       <button
@@ -1624,7 +2011,9 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
                         ) : (
                           <Download size={14} />
                         )}
-                        <span>{downloaded ? 'সেভ হয়েছে' : 'WAV ডাউনলোড'}</span>
+                        <span>
+                          {downloaded ? bi('সেভ হয়েছে', 'Saved') : bi('WAV ডাউনলোড', 'Download WAV')}
+                        </span>
                       </button>
                     </div>
                   </div>
@@ -1640,25 +2029,157 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
         />
 
         <footer className="pt-4 pb-6 border-t border-indigo-100 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500 dark:text-slate-400">
-          <span>© 2026 Srabon Go · Personal Voice Recording &amp; AI Speech Studio</span>
+          <span>
+            {bi(
+              '© ২০২৬ শ্রাবণ গো · ব্যক্তিগত ভয়েস রেকর্ডিং ও এআই স্পিচ স্টুডিও',
+              '© 2026 Srabon Go · Personal Voice Recording & AI Speech Studio'
+            )}
+          </span>
           {onOpenLegal && (
             <div className="flex items-center gap-4">
               <button type="button" onClick={() => onOpenLegal('about')} className="hover:text-indigo-700 dark:hover:text-white">
-                About
+                {bi('আমাদের সম্পর্কে', 'About')}
               </button>
               <button type="button" onClick={() => onOpenLegal('privacy')} className="hover:text-indigo-700 dark:hover:text-white">
-                Privacy Policy
+                {bi('গোপনীয়তা নীতি', 'Privacy Policy')}
               </button>
               <button type="button" onClick={() => onOpenLegal('terms')} className="hover:text-indigo-700 dark:hover:text-white">
-                Terms
+                {bi('শর্তাবলি', 'Terms')}
               </button>
               <button type="button" onClick={() => onOpenLegal('contact')} className="hover:text-indigo-700 dark:hover:text-white">
-                Contact
+                {bi('যোগাযোগ', 'Contact')}
               </button>
             </div>
           )}
         </footer>
       </div>
+
+      {/* Interactive Microphone Permission & Troubleshoot Popup */}
+      {showMicModal && (
+        <div
+          className="fixed inset-0 z-[110] flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="mic-permission-modal-title"
+        >
+          <div
+            className="absolute inset-0 bg-slate-950/70 backdrop-blur-sm animate-fade-in"
+            onClick={() => setShowMicModal(false)}
+          />
+          <div className="relative w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 border border-indigo-200 dark:border-slate-700 shadow-2xl p-6 space-y-4 animate-slide-up">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div
+                  className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 ${
+                    micPermissionState === 'granted'
+                      ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400'
+                      : micIssueReason === 'prompt-guide'
+                      ? 'bg-indigo-100 dark:bg-indigo-950/60 text-indigo-600 dark:text-amber-400'
+                      : 'bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400'
+                  }`}
+                >
+                  {micIssueReason === 'denied' || micIssueReason === 'unsupported' ? (
+                    <MicOff size={20} />
+                  ) : (
+                    <Mic size={20} />
+                  )}
+                </div>
+                <div>
+                  <h3
+                    id="mic-permission-modal-title"
+                    className="text-base sm:text-lg font-serif font-semibold text-slate-900 dark:text-white"
+                  >
+                    {micIssueReason === 'no-device'
+                      ? bi('মাইক্রোফোন পাওয়া যায়নি', 'No Microphone Detected')
+                      : micIssueReason === 'busy'
+                      ? bi('মাইক্রোফোন ব্যস্ত বা লকড', 'Microphone Is Busy')
+                      : micIssueReason === 'unsupported'
+                      ? bi('মাইক্রোফোন অ্যাক্সেস অনুপলব্ধ', 'Microphone Access Unavailable')
+                      : micIssueReason === 'denied'
+                      ? bi('মাইক্রোফোন পপআপ ব্লক বা ডিনাইড', 'Microphone Popup Blocked or Denied')
+                      : bi('মাইক্রোফোন অনুমতি ও রেকর্ডিং গাইড', 'Microphone Permission & Setup')}
+                  </h3>
+                  <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                    {bi('ভয়েস রেকর্ডিং চালু করতে নিচের অপশন দেখুন', 'Follow these options to enable live recording')}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowMicModal(false)}
+                className="p-2 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors"
+                aria-label={bi('বন্ধ করুন', 'Close')}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 text-xs text-slate-700 dark:text-slate-300 space-y-2 leading-relaxed">
+              {isEmbeddedIframe && (
+                <p className="font-medium text-indigo-700 dark:text-amber-300">
+                  {bi(
+                    '• আপনি এখন Embedded Preview ফ্রেমে আছেন—অনেক ব্রাউজার আইফ্রেমের ভেতর Mic Popup দেখায় না। নিচের "নতুন ট্যাবে খুলুন" বাটনে ক্লিক করলে ব্রাউজারের Mic Allow পপআপ সরাসরি দেখা যাবে।',
+                    '• You are currently inside an embedded preview iframe—browsers often suppress the mic permission popup inside iframes. Click "Open in New Tab" below to trigger the native browser Allow Mic popup directly.'
+                  )}
+                </p>
+              )}
+              <p>
+                {bi(
+                  '১. ব্রাউজার অ্যাড্রেস বারের বাম পাশে Lock / Tune আইকনে ক্লিক করে Microphone → Allow নির্বাচন করে পেজ রিলোড করুন।',
+                  '1. Click the Lock / Tune icon in your browser address bar, set Microphone → Allow, and reload.'
+                )}
+              </p>
+              <p>
+                {bi(
+                  '২. অথবা আপনার ফোনের ভয়েস রেকর্ডার দিয়ে রেকর্ড করে "অডিও আপলোড" বাটন থেকে সহজেই এনালাইসিস করুন।',
+                  '2. Or record with your device voice recorder app and click "Upload Audio" to analyze instantly.'
+                )}
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-2.5 pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowMicModal(false);
+                  void startRecording();
+                }}
+                disabled={isRequestingMic}
+                className="w-full inline-flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 text-xs sm:text-sm font-bold shadow-md transition-all disabled:opacity-50"
+              >
+                <Mic size={16} />
+                <span>
+                  {bi('মাইক্রোফোন অনুমতি চান ও রেকর্ড শুরু করুন', 'Request Mic Permission & Start Recording')}
+                </span>
+              </button>
+
+              {isEmbeddedIframe && typeof window !== 'undefined' && (
+                <a
+                  href={window.location.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full inline-flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs sm:text-sm font-semibold transition-colors"
+                >
+                  <ExternalLink size={15} />
+                  <span>{bi('নতুন ট্যাবে খুলুন (Mic Popup চালু করতে)', 'Open in New Tab (Show Mic Popup)')}</span>
+                </a>
+              )}
+
+              <button
+                type="button"
+                onClick={() => {
+                  setShowMicModal(false);
+                  fileInputRef.current?.click();
+                }}
+                className="w-full inline-flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs sm:text-sm font-semibold transition-colors"
+              >
+                <Upload size={15} />
+                <span>{bi('রেকর্ডেড অডিও ফাইল আপলোড করুন', 'Upload Recorded Audio File Instead')}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
