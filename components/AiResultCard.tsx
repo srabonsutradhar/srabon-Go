@@ -129,7 +129,41 @@ const AiResultCard: React.FC<AiResultCardProps> = ({ result, voices, onClose, on
                     {/* Markdown Scroll Container */}
                     <div className="flex-1 overflow-y-auto p-4 custom-scrollbar bg-zinc-50/30 dark:bg-zinc-900/30">
                          <div className="prose prose-sm prose-zinc dark:prose-invert max-w-none prose-headings:text-zinc-800 dark:prose-headings:text-zinc-100 prose-headings:font-bold prose-headings:mb-2 prose-headings:mt-4 prose-p:text-zinc-600 dark:prose-p:text-zinc-300 prose-p:leading-relaxed prose-strong:text-zinc-900 dark:prose-strong:text-white text-sm">
-                            <ReactMarkdown>{formattedInstruction}</ReactMarkdown>
+                            <ReactMarkdown
+                              urlTransform={(url) => {
+                                const trimmed = (url || '').trim();
+                                if (!trimmed) return '';
+                                if (trimmed.startsWith('#') || trimmed.startsWith('/')) return trimmed;
+                                try {
+                                  const parsed = new URL(trimmed);
+                                  return parsed.protocol === 'https:' ||
+                                    parsed.protocol === 'http:' ||
+                                    parsed.protocol === 'mailto:'
+                                    ? parsed.href
+                                    : '';
+                                } catch {
+                                  return '';
+                                }
+                              }}
+                              components={{
+                                a: ({ href, children, ...props }) => {
+                                  const safeHref = typeof href === 'string' && href.trim() ? href.trim() : '#';
+                                  const isExternal = /^https?:\/\//i.test(safeHref);
+                                  return (
+                                    <a
+                                      {...props}
+                                      href={safeHref}
+                                      target={isExternal ? '_blank' : undefined}
+                                      rel={isExternal ? 'noopener noreferrer' : undefined}
+                                    >
+                                      {children}
+                                    </a>
+                                  );
+                                },
+                              }}
+                            >
+                              {formattedInstruction}
+                            </ReactMarkdown>
                          </div>
                     </div>
                 </div>

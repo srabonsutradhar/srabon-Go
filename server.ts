@@ -383,21 +383,76 @@ async function callGeminiWithRetry<T>(fn: () => Promise<T>, maxRetries: number =
   }
 }
 
-function getClientKey(req: any): string {
+function getIpKey(req: any): string {
+  const rawIp = String(req?.ip || req?.socket?.remoteAddress || "unknown").trim();
+  return `ip:${rawIp.slice(0, 80)}`;
+}
+
+function getOwnerSessionKey(req: any): string {
+  const ipKey = getIpKey(req);
   const raw = req?.headers?.["x-client-id"];
   if (typeof raw === "string" && /^[a-zA-Z0-9_-]{8,128}$/.test(raw.trim())) {
-    return `cid:${raw.trim()}`;
+    return `${ipKey}:cid:${raw.trim()}`;
   }
-  const xffParts = String(req?.headers?.["x-forwarded-for"] || "")
+  return `${ipKey}:anon`;
+}
+
+const VALID_VOICE_NAME_RE = /^[a-zA-Z0-9_-]{2,40}$/;
+const VALID_SESSION_ID_RE = /^[a-zA-Z0-9_-]{4,80}$/;
+
+const STATIC_ALLOWED_ORIGINS = new Set<string>([
+  "http://localhost:3000",
+  "http://127.0.0.1:3000",
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+  "https://ais-dev-zvcdkj4ecmn5inpmhiiyl7-1006926458026.asia-east1.run.app",
+  "https://ais-pre-zvcdkj4ecmn5inpmhiiyl7-1006926458026.asia-east1.run.app",
+  ...(process.env.ALLOWED_ORIGINS || "")
     .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
-  const xff = xffParts.length >= 2 ? xffParts[xffParts.length - 2] : (xffParts[0] || "");
-  return `ip:${xff || req?.ip || req?.socket?.remoteAddress || "unknown"}`;
+    .map((s) => s.trim().replace(/\/+$/, ""))
+    .filter(Boolean),
+]);
+
+function isAllowedCorsOrigin(origin: string, req: any): boolean {
+  const normalized = origin.trim().replace(/\/+$/, "");
+  if (STATIC_ALLOWED_ORIGINS.has(normalized)) return true;
+  try {
+    const parsedOrigin = new URL(normalized);
+    if (parsedOrigin.protocol !== "https:" && parsedOrigin.protocol !== "http:") {
+      return false;
+    }
+    const forwardedHost = String(req.headers["x-forwarded-host"] || "").split(",")[0].trim();
+    const requestHost = String(forwardedHost || req.headers.host || "").trim();
+    if (requestHost && parsedOrigin.host.toLowerCase() === requestHost.toLowerCase()) {
+      return true;
+    }
+  } catch {
+    return false;
+  }
+  return false;
+}
+
+function buildContentSecurityPolicy(): string {
+  const directives = [
+    "default-src 'self'",
+    "base-uri 'self'",
+    "object-src 'none'",
+    "form-action 'self'",
+    "script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://apis.google.com https://www.googletagmanager.com https://pagead2.googlesyndication.com https://*.googlesyndication.com",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "font-src 'self' data: https://fonts.gstatic.com",
+    "img-src 'self' data: blob: https://www.gstatic.com https://gstatic.com https://*.googleusercontent.com https://images.unsplash.com https://*.googlesyndication.com https://googleads.g.doubleclick.net",
+    "media-src 'self' blob: data: https://gstatic.com https://*.gstatic.com https://storage.googleapis.com",
+    "connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://*.firebaseapp.com wss://*.firebaseio.com https://gstatic.com https://*.gstatic.com https://www.googletagmanager.com https://www.google-analytics.com https://pagead2.googlesyndication.com https://*.googlesyndication.com https://*.doubleclick.net",
+    "frame-src 'self' https://*.firebaseapp.com https://accounts.google.com https://apis.google.com https://googleads.g.doubleclick.net https://tpc.googlesyndication.com",
+    "worker-src 'self' blob:",
+    "manifest-src 'self'",
+  ];
+  return directives.join("; ");
 }
 
 function aiRateLimitMiddleware(req: any, res: any, next: any) {
-  const key = getClientKey(req);
+  const key = getIpKey(req);
   const now = Date.now();
   const entry = apiRateLimits.get(key);
   if (!entry || now >= entry.resetAt) {
@@ -417,11 +472,25 @@ function aiRateLimitMiddleware(req: any, res: any, next: any) {
 
 async function startServer() {
   const app = express();
+  app.disable("x-powered-by");
   app.set("trust proxy", 2);
   const PORT = Number(process.env.PORT) || 3000;
 
-  app.use(express.json({ limit: "50mb" }));
-  app.use(express.urlencoded({ limit: "50mb", extended: true }));
+  const cspHeaderValue = buildContentSecurityPolicy();
+  app.use((req, res, next) => {
+    res.setHeader("Content-Security-Policy", cspHeaderValue);
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+    res.setHeader("Permissions-Policy", "camera=(), geolocation=(), payment=(), usb=(), microphone=(self)");
+    res.setHeader("Cross-Origin-Opener-Policy", "same-origin-allow-popups");
+    if (req.secure || req.headers["x-forwarded-proto"] === "https") {
+      res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+    }
+    next();
+  });
+
+  app.use(express.json({ limit: "12mb" }));
+  app.use(express.urlencoded({ limit: "12mb", extended: true }));
   app.use((req, _res, next) => {
     if (req.body && typeof req.body === "object") {
       req.body = stripHttpOptions(req.body);
@@ -438,8 +507,12 @@ async function startServer() {
 
   app.use("/api", (req, res, next): any => {
     const origin = req.headers.origin;
-    if (origin) {
-      res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Vary", "Origin");
+    if (typeof origin === "string" && origin.trim()) {
+      if (!isAllowedCorsOrigin(origin, req)) {
+        return res.status(403).json({ error: "Origin not allowed." });
+      }
+      res.setHeader("Access-Control-Allow-Origin", origin.trim().replace(/\/+$/, ""));
       res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
       res.setHeader("Access-Control-Allow-Headers", "Content-Type,x-client-id");
       res.setHeader("Access-Control-Expose-Headers", "Retry-After,X-TTS-Cache");
@@ -481,9 +554,11 @@ async function startServer() {
   app.post("/api/tts", async (req, res): Promise<any> => {
     try {
       const text = typeof req.body?.text === "string" ? req.body.text.trim() : "";
-      const voiceName = typeof req.body?.voiceName === "string" && req.body.voiceName.trim()
-        ? req.body.voiceName.trim().slice(0, 50)
-        : "Kore";
+      const rawVoiceName = typeof req.body?.voiceName === "string" ? req.body.voiceName.trim() : "";
+      if (rawVoiceName && !VALID_VOICE_NAME_RE.test(rawVoiceName)) {
+        return res.status(400).json({ error: "Invalid voice name." });
+      }
+      const voiceName = rawVoiceName || "Kore";
       const style = typeof req.body?.style === "string" ? req.body.style.trim().slice(0, 450) : "";
 
       if (!text) {
@@ -609,7 +684,7 @@ async function startServer() {
       }
 
       console.error("[Backend] /api/tts error:", error);
-      return res.status(500).json({ error: error.message || "Failed to generate speech." });
+      return res.status(500).json({ error: "Failed to generate speech." });
     }
   });
 
@@ -621,11 +696,18 @@ async function startServer() {
           error: MISSING_API_KEY_ERROR,
         });
       }
+      const contents = req.body?.contents;
+      if (contents === undefined || contents === null || (typeof contents === "string" && !contents.trim())) {
+        return res.status(400).json({ error: "Valid contents payload is required." });
+      }
       const ai = createAiClient(apiKey);
       const params = { ...req.body, model: resolveModel(req.body?.model) };
       const response = await callGeminiWithRetry(() => ai.models.generateContent(params));
       return res.json(serializeGenerateContentResponse(response));
     } catch (error: any) {
+      if (String(error?.message || "").startsWith("Disallowed model:")) {
+        return res.status(400).json({ error: "Unsupported AI model requested." });
+      }
       if (isRateLimitError(error)) {
         const retrySec = parseRetryAfterSeconds(error);
         res.setHeader("Retry-After", String(retrySec));
@@ -635,7 +717,7 @@ async function startServer() {
         });
       }
       console.error("[Backend] /api/generate-content error:", error);
-      return res.status(500).json({ error: error.message || "Failed to generate content." });
+      return res.status(500).json({ error: "Failed to generate content." });
     }
   });
 
@@ -646,6 +728,10 @@ async function startServer() {
         return res.status(503).json({
           error: MISSING_API_KEY_ERROR,
         });
+      }
+      const contents = req.body?.contents;
+      if (contents === undefined || contents === null || (typeof contents === "string" && !contents.trim())) {
+        return res.status(400).json({ error: "Valid contents payload is required." });
       }
       const ai = createAiClient(apiKey);
       const params = { ...req.body, model: resolveModel(req.body?.model) };
@@ -660,7 +746,10 @@ async function startServer() {
     } catch (error: any) {
       console.error("[Backend] /api/generate-content-stream error:", error);
       if (!res.headersSent) {
-        return res.status(500).json({ error: error.message || "Failed to stream content." });
+        if (String(error?.message || "").startsWith("Disallowed model:")) {
+          return res.status(400).json({ error: "Unsupported AI model requested." });
+        }
+        return res.status(500).json({ error: "Failed to stream content." });
       }
       res.end();
     }
@@ -675,8 +764,14 @@ async function startServer() {
         });
       }
       const { sessionId, model, config, history, message, msgConfig } = req.body || {};
+      if (sessionId !== undefined && (typeof sessionId !== "string" || !VALID_SESSION_ID_RE.test(sessionId))) {
+        return res.status(400).json({ error: "Invalid chat session identifier." });
+      }
+      if (message === undefined || message === null || (typeof message === "string" && !message.trim())) {
+        return res.status(400).json({ error: "Chat message is required." });
+      }
       const ai = createAiClient(apiKey);
-      const chatKey = sessionId ? `${getClientKey(req)}:${String(sessionId).slice(0, 128)}` : "";
+      const chatKey = sessionId ? `${getOwnerSessionKey(req)}:${sessionId}` : "";
       let chat = chatKey ? chats.get(chatKey) : undefined;
       if (!chat) {
         chat = ai.chats.create({
@@ -690,7 +785,10 @@ async function startServer() {
       return res.json(serializeGenerateContentResponse(response));
     } catch (error: any) {
       console.error("[Backend] /api/chat-message error:", error);
-      return res.status(500).json({ error: error.message || "Failed to send chat message." });
+      if (String(error?.message || "").startsWith("Disallowed model:")) {
+        return res.status(400).json({ error: "Unsupported AI model requested." });
+      }
+      return res.status(500).json({ error: "Failed to send chat message." });
     }
   });
 
@@ -703,8 +801,14 @@ async function startServer() {
         });
       }
       const { sessionId, model, config, history, message, msgConfig } = req.body || {};
+      if (sessionId !== undefined && (typeof sessionId !== "string" || !VALID_SESSION_ID_RE.test(sessionId))) {
+        return res.status(400).json({ error: "Invalid chat session identifier." });
+      }
+      if (message === undefined || message === null || (typeof message === "string" && !message.trim())) {
+        return res.status(400).json({ error: "Chat message is required." });
+      }
       const ai = createAiClient(apiKey);
-      const chatKey = sessionId ? `${getClientKey(req)}:${String(sessionId).slice(0, 128)}` : "";
+      const chatKey = sessionId ? `${getOwnerSessionKey(req)}:${sessionId}` : "";
       let chat = chatKey ? chats.get(chatKey) : undefined;
       if (!chat) {
         chat = ai.chats.create({
@@ -725,7 +829,10 @@ async function startServer() {
     } catch (error: any) {
       console.error("[Backend] /api/chat-stream error:", error);
       if (!res.headersSent) {
-        return res.status(500).json({ error: error.message || "Failed to stream chat message." });
+        if (String(error?.message || "").startsWith("Disallowed model:")) {
+          return res.status(400).json({ error: "Unsupported AI model requested." });
+        }
+        return res.status(500).json({ error: "Failed to stream chat message." });
       }
       res.end();
     }
@@ -739,12 +846,19 @@ async function startServer() {
           error: MISSING_API_KEY_ERROR,
         });
       }
+      const prompt = typeof req.body?.prompt === "string" ? req.body.prompt.trim() : "";
+      if (!prompt || prompt.length > 4000) {
+        return res.status(400).json({ error: "Valid prompt is required for image generation." });
+      }
       const ai = createAiClient(apiKey);
-      const response = await ai.models.generateImages({ ...req.body, model: resolveModel(req.body?.model || "imagen-3.0-generate-002") });
+      const response = await ai.models.generateImages({ ...req.body, prompt, model: resolveModel(req.body?.model || "imagen-3.0-generate-002") });
       return res.json(response);
     } catch (error: any) {
       console.error("[Backend] /api/generate-images error:", error);
-      return res.status(500).json({ error: error.message || "Failed to generate images." });
+      if (String(error?.message || "").startsWith("Disallowed model:")) {
+        return res.status(400).json({ error: "Unsupported AI model requested." });
+      }
+      return res.status(500).json({ error: "Failed to generate images." });
     }
   });
 
@@ -762,9 +876,10 @@ async function startServer() {
       if (body.video && typeof body.video === 'object') { const c = { ...body.video }; delete c.uri; delete c.videoUri; body.video = Object.keys(c).length ? c : undefined; }
       delete body.source;
       body.model = resolveModel(body.model || "veo-3.1-fast-generate-preview");
+      const ownerKey = getOwnerSessionKey(req);
       const op = await ai.models.generateVideos(body);
       if (op.name) {
-        videoOps.set(op.name, { op, ownerKey: getClientKey(req) });
+        videoOps.set(op.name, { op, ownerKey });
       }
       return res.json({
         name: op.name,
@@ -775,7 +890,10 @@ async function startServer() {
       });
     } catch (error: any) {
       console.error("[Backend] /api/generate-videos error:", error);
-      return res.status(500).json({ error: error.message || "Failed to start video generation." });
+      if (String(error?.message || "").startsWith("Disallowed model:")) {
+        return res.status(400).json({ error: "Unsupported AI model requested." });
+      }
+      return res.status(500).json({ error: "Failed to start video generation." });
     }
   });
 
@@ -789,13 +907,20 @@ async function startServer() {
       }
       const ai = createAiClient(apiKey);
       const opName = req.body?.operation?.name;
-      const storedOp = opName ? videoOps.get(opName) : undefined;
+      if (typeof opName !== "string" || !opName.trim() || opName.length > 200) {
+        return res.status(400).json({ error: "Valid operation name is required." });
+      }
+      const storedOp = videoOps.get(opName);
       if (!storedOp) {
         return res.status(404).json({ error: "Video operation not found on server." });
       }
+      const callerOwnerKey = getOwnerSessionKey(req);
+      if (storedOp.ownerKey !== callerOwnerKey) {
+        return res.status(403).json({ error: "Access denied for this video operation." });
+      }
       const op = await ai.operations.getVideosOperation({ operation: storedOp.op });
       if (op.name) {
-        videoOps.set(op.name, { op, ownerKey: getClientKey(req) });
+        videoOps.set(op.name, { op, ownerKey: callerOwnerKey });
       }
       const responseCopy = op.response ? JSON.parse(JSON.stringify(op.response)) : undefined;
       if (op.done && responseCopy?.generatedVideos) {
@@ -815,7 +940,7 @@ async function startServer() {
       });
     } catch (error: any) {
       console.error("[Backend] /api/videos-operation error:", error);
-      return res.status(500).json({ error: error.message || "Failed to poll video operation." });
+      return res.status(500).json({ error: "Failed to poll video operation." });
     }
   });
 

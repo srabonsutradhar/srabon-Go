@@ -18,12 +18,14 @@ import {
   Mic,
   Crown,
   UserCheck,
+  Smartphone,
 } from 'lucide-react';
 import type { User } from 'firebase/auth';
 import { AppViewMode, SalonConfig, UserPlan } from '../types';
 import { SALON_SERVICES, formatSalonPrice } from '../utils/salon';
 import { FEATURED_VOICE_ALBUMS, STUDIO_MEDIA } from '../utils/studioAlbums';
 import { localizeSalonService, useLanguage } from '../utils/i18n';
+import PWAInstallButton from './PWAInstallButton';
 
 interface HomePageProps {
   user: User;
@@ -508,6 +510,30 @@ const HomePage: React.FC<HomePageProps> = ({
           </div>
         </section>
 
+        {/* Dedicated Android Mobile App Download Section */}
+        <section className="rounded-3xl bg-gradient-to-r from-emerald-950 via-teal-950 to-slate-950 text-white border border-emerald-500/35 p-6 sm:p-8 shadow-xl">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+            <div className="space-y-2 max-w-2xl">
+              <div className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-emerald-300">
+                <Smartphone size={14} />
+                <span>{bi('অ্যান্ড্রয়েড মোবাইল অ্যাপ · অফলাইন রেডি', 'Android Mobile App · Offline Ready')}</span>
+              </div>
+              <h3 className="text-2xl sm:text-3xl font-serif font-medium tracking-tight text-white">
+                {bi('আপনার অ্যান্ড্রয়েড ফোনে শ্রাবণ গো অ্যাপ ডাউনলোড করুন', 'Download Srabon Go App on Your Android Phone')}
+              </h3>
+              <p className="text-xs sm:text-sm text-emerald-100/85 leading-relaxed">
+                {bi(
+                  'এক ক্লিকেই ব্রাউজার থেকে অ্যান্ড্রয়েড মোবাইলে ইনস্টল করুন—হোম স্ক্রিন অ্যাপ আইকন, দ্রুত লোডিং, এবং অফলাইন সাপোর্টসহ পূর্ণাঙ্গ ভয়েস স্টুডিও ও সেলুন বুকিং ব্যবহার করুন।',
+                  'Install directly onto your Android phone in one tap—complete with a home screen app icon, fast launch, offline cache, Voice Studio, and Salon Booking.'
+                )}
+              </p>
+            </div>
+            <div className="shrink-0">
+              <PWAInstallButton variant="card" />
+            </div>
+          </div>
+        </section>
+
         {/* Quiet Footer */}
         <footer className="pt-4 pb-6 border-t border-indigo-100 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500 dark:text-slate-400">
           <div className="flex items-center gap-2">
@@ -515,7 +541,8 @@ const HomePage: React.FC<HomePageProps> = ({
             <span>{bi('শ্রাবণ গো', 'Srabon Go')} · {salonConfig.salonName}</span>
           </div>
           {onOpenLegal && (
-            <div className="flex items-center gap-4">
+            <div className="flex flex-wrap items-center gap-4">
+              <PWAInstallButton variant="footer" />
               <button type="button" onClick={() => onOpenLegal('about')} className="hover:text-indigo-700 dark:hover:text-white">
                 {bi('পরিচিতি', 'About')}
               </button>

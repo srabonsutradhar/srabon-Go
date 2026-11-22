@@ -32,6 +32,7 @@ import {
 } from 'lucide-react';
 import type { User } from 'firebase/auth';
 import { localizeGender, localizePitch, useLanguage } from '../utils/i18n';
+import PWAInstallButton from './PWAInstallButton';
 
 interface FilterBarProps {
   filters: FilterState;
@@ -514,6 +515,11 @@ const FilterBar: React.FC<FilterBarProps> = ({
                     )}
                   </button>
                 )}
+
+                <PWAInstallButton
+                  variant="menu"
+                  onActionTaken={() => setIsMenuOpen(false)}
+                />
 
                 {onOpenProModal && !isAdmin && (
                   <>

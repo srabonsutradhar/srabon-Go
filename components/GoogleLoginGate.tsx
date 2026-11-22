@@ -27,6 +27,7 @@ import AdBanner from './AdBanner';
 import SiteLegalModal, { LegalTab } from './SiteLegalModal';
 import { FEATURED_VOICE_ALBUMS, STUDIO_MEDIA, getVoiceAlbumVisual } from '../utils/studioAlbums';
 import { localizeGender, localizePitch, localizeTrait, useLanguage } from '../utils/i18n';
+import PWAInstallButton from './PWAInstallButton';
 
 interface GoogleLoginGateProps {
   isDarkMode: boolean;
@@ -472,6 +473,8 @@ const GoogleLoginGate: React.FC<GoogleLoginGateProps> = ({ isDarkMode, toggleThe
                   <AudioLines size={16} />
                   <span>{bi('ভয়েস স্যাম্পল শুনুন', 'Listen to Voice Samples')}</span>
                 </a>
+
+                <PWAInstallButton variant="hero" />
               </div>
 
               <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">

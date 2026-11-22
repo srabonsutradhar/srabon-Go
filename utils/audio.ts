@@ -113,9 +113,32 @@ let dynamicApiBaseUrl = '';
 
 export function normalizeApiBaseUrl(raw?: string): string {
   const cleaned = (raw || '').trim().replace(/\/+$/, '');
-  if (!cleaned) return '';
-  if (!/^https?:\/\/[a-zA-Z0-9._:/-]+$/.test(cleaned)) return '';
-  return cleaned.slice(0, 200);
+  if (!cleaned || cleaned.length > 200) return '';
+  try {
+    const parsed = new URL(cleaned);
+    if (parsed.username || parsed.password) return '';
+    if (parsed.search || parsed.hash) return '';
+    const host = parsed.hostname.toLowerCase();
+    const isLoopback = host === 'localhost' || host === '127.0.0.1';
+    if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && isLoopback)) {
+      return '';
+    }
+    if (
+      host === '0.0.0.0' ||
+      host === '[::1]' ||
+      host === '::1' ||
+      /^169\.254\./.test(host) ||
+      /^10\./.test(host) ||
+      /^192\.168\./.test(host) ||
+      /^172\.(1[6-9]|2\d|3[0-1])\./.test(host) ||
+      /^fc00:|^fe80:/i.test(host)
+    ) {
+      return '';
+    }
+    return parsed.origin + parsed.pathname.replace(/\/+$/, '');
+  } catch {
+    return '';
+  }
 }
 
 export function setDynamicApiBaseUrl(url?: string): void {

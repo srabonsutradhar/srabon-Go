@@ -22,6 +22,7 @@ import ChatHubModal from './components/ChatHubModal';
 import SiteLegalModal, { LegalTab } from './components/SiteLegalModal';
 import CustomVoiceCloneStudio from './components/CustomVoiceCloneStudio';
 import VoiceComparisonModal from './components/VoiceComparisonModal';
+import OfflineIndicator from './components/OfflineIndicator';
 import { AppIssueRecord, AppViewMode, CustomVoiceProfile, FilterState, AiRecommendation, BillingConfig, ProPackageType, SalonConfig, UserPlan } from './types';
 import { Info, Heart, Loader2, Bell, AlertTriangle, X, MessageSquare, ArrowLeftRight } from 'lucide-react';
 import { onAuthStateChanged, User } from 'firebase/auth';
@@ -1438,6 +1439,7 @@ const App: React.FC = () => {
         );
       })()}
 
+      <OfflineIndicator />
     </div>
   );
 };

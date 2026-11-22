@@ -642,6 +642,18 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
     setCaptureSuccessNotice(null);
     stopCapturedPreview();
 
+    const validAudioExt = /\.(mp3|wav|m4a|ogg|webm|aac|flac|opus|mp4)$/i.test(file.name);
+    const validAudioMime = file.type ? file.type.startsWith('audio/') || file.type === 'video/webm' : false;
+    if (!validAudioMime && !validAudioExt) {
+      setCaptureError(
+        bi(
+          'অনুগ্রহ করে শুধুমাত্র সঠিক অডিও ফাইল (MP3, WAV, M4A, OGG, WEBM) আপলোড করুন।',
+          'Please upload a valid audio file (MP3, WAV, M4A, OGG, WEBM).'
+        )
+      );
+      return;
+    }
+
     if (file.size > MAX_UPLOAD_BYTES) {
       setCaptureError(
         bi(
@@ -657,11 +669,22 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
     try {
       detectedDuration = await new Promise<number>((resolve) => {
         const probe = new Audio(previewUrl);
+        let settled = false;
+        const finish = (val: number) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timeoutId);
+          probe.onloadedmetadata = null;
+          probe.onerror = null;
+          probe.src = '';
+          resolve(val);
+        };
+        const timeoutId = window.setTimeout(() => finish(10), 3000);
         probe.onloadedmetadata = () => {
           const d = Number.isFinite(probe.duration) ? probe.duration : 10;
-          resolve(Math.max(1, Math.min(60, Math.round(d))));
+          finish(Math.max(1, Math.min(60, Math.round(d))));
         };
-        probe.onerror = () => resolve(10);
+        probe.onerror = () => finish(10);
       });
     } catch {}
 
@@ -2155,7 +2178,7 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
 
               {isEmbeddedIframe && typeof window !== 'undefined' && (
                 <a
-                  href={window.location.href}
+                  href={`${window.location.origin}${window.location.pathname}${window.location.search}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="w-full inline-flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs sm:text-sm font-semibold transition-colors"

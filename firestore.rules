@@ -150,7 +150,7 @@ service cloud.firestore {
         && data.freeDailyLimit is int
         && data.freeDailyLimit >= 1
         && data.freeDailyLimit <= 100
-        && (!('apiBaseUrl' in data) || (data.apiBaseUrl is string && data.apiBaseUrl.size() <= 200 && data.apiBaseUrl.matches('^(|https?://[a-zA-Z0-9._:/-]+)$')))
+        && (!('apiBaseUrl' in data) || (data.apiBaseUrl is string && data.apiBaseUrl.size() <= 200 && data.apiBaseUrl.matches('^(|https://([a-zA-Z0-9-]+\\.)+[a-zA-Z]{2,24}(:[0-9]{1,5})?(/[a-zA-Z0-9._/-]*)?|http://(localhost|127\\.0\\.0\\.1)(:[0-9]{1,5})?(/[a-zA-Z0-9._/-]*)?)$')))
         && data.updatedAt is timestamp;
     }
 
@@ -442,6 +442,12 @@ service cloud.firestore {
                 && 'bonusCredits' in incoming()
                 && (incoming().bonusCredits == existing().bonusCredits || incoming().bonusCredits == existing().bonusCredits - 1)
               )
+            )
+            && (
+              !('lastUsageDate' in existing())
+              || !('dailyCount' in existing())
+              || incoming().lastUsageDate > existing().lastUsageDate
+              || (incoming().lastUsageDate == existing().lastUsageDate && incoming().dailyCount >= existing().dailyCount)
             )
           )
           ||

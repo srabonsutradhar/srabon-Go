@@ -276,7 +276,7 @@
           "type": "string",
           "description": "Optional dynamic backend API base URL (e.g. Render/Node server URL) for static hosts like GitHub Pages.",
           "maxLength": 200,
-          "pattern": "^(|https?://[a-zA-Z0-9._:/-]+)$"
+          "pattern": "^(|https://([a-zA-Z0-9-]+\\.)+[a-zA-Z]{2,24}(:[0-9]{1,5})?(/[a-zA-Z0-9._/-]*)?|http://(localhost|127\\.0\\.0\\.1)(:[0-9]{1,5})?(/[a-zA-Z0-9._/-]*)?)$"
         },
         "updatedAt": {
           "type": "string",
