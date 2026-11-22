@@ -32,7 +32,7 @@ import {
   where,
   writeBatch,
 } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType } from '../firebase';
+import { db, reportFirestoreError, OperationType } from '../firebase';
 import { reportAppIssue } from '../utils/appIssues';
 import {
   SalonBooking,
@@ -48,6 +48,7 @@ import {
   formatSalonPrice,
 } from '../utils/salon';
 import { generateAiSalonCoupon } from '../utils/salonCoupon';
+import { STUDIO_MEDIA } from '../utils/studioAlbums';
 
 interface SalonBookingPageProps {
   user: User;
@@ -144,6 +145,11 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
   });
 
   useEffect(() => {
+    if (!user.emailVerified) {
+      setMyBookings([]);
+      setLoadingBookings(false);
+      return;
+    }
     const q = query(
       collection(db, 'salonBookings'),
       where('uid', '==', user.uid)
@@ -165,16 +171,11 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
       },
       (error) => {
         setLoadingBookings(false);
-        reportAppIssue({
-          source: 'SalonBooking:List',
-          severity: 'error',
-          message: error?.message || 'Failed to load salon bookings',
-        });
-        handleFirestoreError(error, OperationType.LIST, 'salonBookings');
+        reportFirestoreError(error, OperationType.LIST, 'salonBookings');
       }
     );
     return () => unsubscribe();
-  }, [user.uid]);
+  }, [user.uid, user.emailVerified]);
 
   useEffect(() => {
     const couponRef = doc(db, 'salonCoupons', user.uid);
@@ -195,12 +196,7 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
       },
       (error) => {
         setLoadingCoupon(false);
-        reportAppIssue({
-          source: 'SalonCoupon:Load',
-          severity: 'error',
-          message: error?.message || 'Failed to load salon coupon',
-        });
-        handleFirestoreError(error, OperationType.GET, `salonCoupons/${user.uid}`);
+        reportFirestoreError(error, OperationType.GET, `salonCoupons/${user.uid}`);
       }
     );
     return () => unsubscribe();
@@ -366,10 +362,9 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
       );
     } catch (error: any) {
       const msg = error?.message || 'বুকিং জমা দেওয়া যায়নি। আবার চেষ্টা করুন।';
-      reportAppIssue({ source: 'SalonBooking:Create', severity: 'error', message: msg });
       if (isAdmin) setFormError(msg);
       else setFormError('বুকিং জমা দিতে সমস্যা হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।');
-      handleFirestoreError(error, OperationType.CREATE, 'salonBookings');
+      reportFirestoreError(error, OperationType.CREATE, 'salonBookings');
     } finally {
       setSubmitting(false);
     }
@@ -385,9 +380,8 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
       });
     } catch (error: any) {
       const msg = error?.message || 'বুকিং বাতিল করা যায়নি।';
-      reportAppIssue({ source: 'SalonBooking:Cancel', severity: 'error', message: msg });
       if (isAdmin) setFormError(msg);
-      handleFirestoreError(error, OperationType.UPDATE, `salonBookings/${bookingId}`);
+      reportFirestoreError(error, OperationType.UPDATE, `salonBookings/${bookingId}`);
     } finally {
       setCancellingId(null);
     }
@@ -419,55 +413,74 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
           )}
         </div>
 
-        {/* Hero Header Banner */}
-        <section className="rounded-3xl bg-zinc-950 text-white border border-zinc-800 p-6 sm:p-9 shadow-lg">
-          <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-            <div className="space-y-3 max-w-2xl">
-              <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-amber-400">
-                <Scissors size={14} />
-                <span>Men&apos;s Hair Cutting &amp; Grooming Salon</span>
+        {/* Hero Header Banner with Luxury Salon Photography */}
+        <section className="rounded-3xl bg-gradient-to-br from-[#17110d] via-[#1f1712] to-[#0f172a] text-white border border-amber-500/25 overflow-hidden shadow-xl">
+          <div className="grid grid-cols-1 lg:grid-cols-12 items-stretch">
+            <div className="lg:col-span-7 p-6 sm:p-9 flex flex-col justify-between gap-6">
+              <div className="space-y-3 max-w-2xl">
+                <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-amber-400">
+                  <Scissors size={14} />
+                  <span>Men&apos;s Hair Cutting &amp; Grooming Salon</span>
+                </div>
+                <h1 className="text-3xl sm:text-4xl font-serif font-medium tracking-tight text-white">
+                  {salonConfig.salonName}
+                </h1>
+                <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs sm:text-sm text-amber-100/80">
+                  {salonConfig.address && (
+                    <span className="inline-flex items-center gap-1.5">
+                      <MapPin size={14} className="text-amber-400 shrink-0" />
+                      {salonConfig.address}
+                    </span>
+                  )}
+                  {salonConfig.phone && (
+                    <span className="inline-flex items-center gap-1.5 tabular-nums">
+                      <Phone size={14} className="text-amber-400 shrink-0" />
+                      {salonConfig.phone}
+                    </span>
+                  )}
+                  {salonConfig.openHours && (
+                    <span className="inline-flex items-center gap-1.5">
+                      <Clock size={14} className="text-amber-400 shrink-0" />
+                      {salonConfig.openHours}
+                    </span>
+                  )}
+                </div>
               </div>
-              <h1 className="text-3xl sm:text-4xl font-serif font-medium tracking-tight text-white">
-                {salonConfig.salonName}
-              </h1>
-              <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs sm:text-sm text-zinc-300">
-                {salonConfig.address && (
-                  <span className="inline-flex items-center gap-1.5">
-                    <MapPin size={14} className="text-amber-400 shrink-0" />
-                    {salonConfig.address}
-                  </span>
-                )}
-                {salonConfig.phone && (
-                  <span className="inline-flex items-center gap-1.5 tabular-nums">
-                    <Phone size={14} className="text-amber-400 shrink-0" />
-                    {salonConfig.phone}
-                  </span>
-                )}
-                {salonConfig.openHours && (
-                  <span className="inline-flex items-center gap-1.5">
-                    <Clock size={14} className="text-amber-400 shrink-0" />
-                    {salonConfig.openHours}
-                  </span>
-                )}
+
+              <div className="inline-flex flex-wrap items-center justify-between gap-4 bg-black/35 border border-amber-500/20 rounded-2xl px-5 py-3.5">
+                <div>
+                  <p className="text-[11px] uppercase tracking-wider text-amber-200/70">
+                    বুকিং অবস্থা
+                  </p>
+                  <p
+                    className={`text-sm font-semibold mt-0.5 ${
+                      salonConfig.isBookingOpen ? 'text-emerald-400' : 'text-rose-400'
+                    }`}
+                  >
+                    {salonConfig.isBookingOpen
+                      ? 'অনলাইন বুকিং চালু আছে'
+                      : 'বুকিং সাময়িকভাবে বন্ধ'}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-[11px] uppercase tracking-wider text-amber-200/70">
+                    অনলাইন বুকিং ফি
+                  </p>
+                  <p className="text-base font-bold text-amber-400 tabular-nums mt-0.5">
+                    {formatSalonPrice(salonConfig.bookingFee, salonConfig.currencySymbol)}
+                  </p>
+                </div>
               </div>
             </div>
 
-            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-4 shrink-0">
-              <p className="text-[11px] uppercase tracking-wider text-zinc-400">
-                বুকিং অবস্থা
-              </p>
-              <p
-                className={`text-sm font-semibold mt-0.5 ${
-                  salonConfig.isBookingOpen ? 'text-emerald-400' : 'text-red-400'
-                }`}
-              >
-                {salonConfig.isBookingOpen
-                  ? 'অনলাইন বুকিং চালু আছে'
-                  : 'বুকিং সাময়িকভাবে বন্ধ'}
-              </p>
-              <p className="text-xs text-zinc-400 mt-1 tabular-nums">
-                বুকিং ফি: {formatSalonPrice(salonConfig.bookingFee, salonConfig.currencySymbol)}
-              </p>
+            <div className="lg:col-span-5 relative min-h-[210px] lg:min-h-full bg-stone-900 overflow-hidden">
+              <img
+                src={STUDIO_MEDIA.salonInterior}
+                alt={`${salonConfig.salonName} Grooming Lounge`}
+                referrerPolicy="no-referrer"
+                className="w-full h-full object-cover"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-[#17110d]/80 via-transparent to-transparent" />
             </div>
           </div>
         </section>

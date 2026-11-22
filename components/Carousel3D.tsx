@@ -6,8 +6,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence, PanInfo } from 'framer-motion';
 import { Voice } from '../types';
-import { Play, Pause, Activity, ChevronLeft, ChevronRight, AudioLines, Heart } from 'lucide-react';
+import { Play, Pause, ChevronLeft, ChevronRight, AudioLines, Heart, ArrowLeftRight } from 'lucide-react';
 import AudioVisualizer from './AudioVisualizer';
+import { isBenignAudioInterrupt } from '../utils/appIssues';
+import { getVoiceAlbumVisual } from '../utils/studioAlbums';
 
 interface Carousel3DProps {
   voices: Voice[];
@@ -18,7 +20,10 @@ interface Carousel3DProps {
   favorites?: string[];
   onToggleFavorite?: (voiceName: string) => void;
   onUseInStudio?: (voiceName: string) => void;
+  compareVoices?: string[];
+  onToggleCompare?: (voiceName: string) => void;
   disabled?: boolean;
+  isDarkMode?: boolean;
 }
 
 const Carousel3D: React.FC<Carousel3DProps> = ({ 
@@ -30,11 +35,20 @@ const Carousel3D: React.FC<Carousel3DProps> = ({
   favorites = [],
   onToggleFavorite,
   onUseInStudio,
-  disabled = false
+  compareVoices = [],
+  onToggleCompare,
+  disabled = false,
+  isDarkMode = false
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const onPlayToggleRef = useRef(onPlayToggle);
+  onPlayToggleRef.current = onPlayToggle;
   const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1200);
+
+  const playingSampleUrl = playingVoice
+    ? voices.find((v) => v.name === playingVoice)?.audioSampleUrl || null
+    : null;
 
   useEffect(() => {
     const handleResize = () => setWindowWidth(window.innerWidth);
@@ -43,19 +57,33 @@ const Carousel3D: React.FC<Carousel3DProps> = ({
   }, []);
 
   useEffect(() => {
-    if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current.currentTime = 0;
-        
-        if (playingVoice) {
-            const voice = voices.find(v => v.name === playingVoice);
-            if (voice) {
-                audioRef.current.src = voice.audioSampleUrl;
-                audioRef.current.play().catch(e => console.error("Playback failed", e));
-            }
-        }
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    let cancelled = false;
+    audio.pause();
+    audio.currentTime = 0;
+
+    if (playingVoice && playingSampleUrl) {
+      audio.src = playingSampleUrl;
+      const playPromise = audio.play();
+      if (playPromise !== undefined) {
+        playPromise.catch((err) => {
+          if (cancelled || isBenignAudioInterrupt(err)) {
+            return;
+          }
+          console.warn('Carousel sample playback unavailable:', err);
+          onPlayToggleRef.current(playingVoice);
+        });
+      }
     }
-  }, [playingVoice, voices]);
+
+    return () => {
+      cancelled = true;
+      audio.pause();
+      audio.currentTime = 0;
+    };
+  }, [playingVoice, playingSampleUrl]);
 
   // Keyboard navigation
   useEffect(() => {
@@ -159,10 +187,18 @@ const Carousel3D: React.FC<Carousel3DProps> = ({
                   }
               }
 
+              const visual = getVoiceAlbumVisual(voice);
+
               return (
                 <motion.div
                   key={voice.name}
-                  className={`absolute w-[300px] sm:w-[360px] aspect-[3/4] bg-white dark:bg-zinc-800 rounded-3xl border border-zinc-100 dark:border-zinc-700 overflow-hidden cursor-pointer ${isActive ? 'shadow-2xl' : 'shadow-lg'}`}
+                  className={`absolute w-[300px] sm:w-[360px] aspect-[3/4] bg-white dark:bg-[#0f172a] rounded-3xl border overflow-hidden cursor-pointer ${
+                    isPlaying
+                      ? `${visual.cardBorderActiveClass} shadow-2xl`
+                      : isActive
+                      ? 'border-indigo-200/80 dark:border-indigo-800/80 shadow-2xl'
+                      : 'border-slate-200 dark:border-slate-800 shadow-lg'
+                  }`}
                   style={{ zIndex }}
                   initial={{ scale: 0.8, opacity: 0, x: offset * 200 }}
                   animate={{ 
@@ -194,45 +230,47 @@ const Carousel3D: React.FC<Carousel3DProps> = ({
                 >
                   {/* Fader Overlay for Inactive Cards */}
                   <motion.div 
-                    animate={{ opacity: isActive ? 0 : 0.6 }}
-                    className="absolute inset-0 bg-white dark:bg-zinc-900 z-40 pointer-events-none"
+                    animate={{ opacity: isActive ? 0 : 0.55 }}
+                    className="absolute inset-0 bg-slate-950/60 dark:bg-slate-950/75 z-40 pointer-events-none"
                   />
 
                   <div className="h-full flex flex-col relative">
-                      <div className="flex-1 relative bg-zinc-50 dark:bg-zinc-900 flex items-center justify-center overflow-hidden">
-                          <div className="absolute inset-0 opacity-[0.05] dark:opacity-[0.1]" style={{ backgroundImage: 'radial-gradient(currentColor 1px, transparent 1px)', backgroundSize: '12px 12px' }}></div>
+                      <div className={`flex-1 relative bg-gradient-to-br ${visual.fallbackGradientClass} flex items-center justify-center overflow-hidden`}>
+                          <img
+                            src={visual.coverImg}
+                            alt={`${voice.name} album art`}
+                            referrerPolicy="no-referrer"
+                            className={`absolute inset-0 w-full h-full object-cover transition-transform duration-700 ${
+                              isPlaying ? 'scale-110 brightness-75' : 'scale-100'
+                            }`}
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-t from-slate-950/75 via-slate-950/20 to-transparent" />
                           
-                          <div className={`absolute inset-0 z-10 transition-opacity duration-500 ${isPlaying ? 'opacity-100' : 'opacity-0'}`}>
-                              <AudioVisualizer isPlaying={isPlaying} color={document.documentElement.classList.contains('dark') ? '#a5b4fc' : '#18181b'} />
+                          <div className={`absolute inset-0 z-10 transition-opacity duration-500 ${isPlaying ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+                              <AudioVisualizer isPlaying={isPlaying} color={isDarkMode ? visual.visualizerColorDark : visual.visualizerColorLight} />
                           </div>
 
-                          <div className={`absolute inset-0 flex items-center justify-center transition-opacity duration-500 ${isPlaying ? 'opacity-0' : 'opacity-100'}`}>
-                              <div className="w-20 h-20 rounded-full bg-white dark:bg-zinc-800 shadow-sm border border-zinc-100 dark:border-zinc-700 flex items-center justify-center">
-                                  <Activity size={32} className="text-zinc-300 dark:text-zinc-600" />
-                              </div>
-                          </div>
-
-                          <div className="absolute inset-0 z-20 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity duration-200">
-                               <div className="w-20 h-20 rounded-full bg-zinc-900/90 dark:bg-white/90 backdrop-blur-sm flex items-center justify-center shadow-xl transform transition-transform active:scale-95">
+                          <div className={`relative z-20 flex items-center justify-center transition-all duration-200 ${isPlaying ? 'opacity-95' : 'opacity-85 hover:opacity-100'}`}>
+                               <div className="w-16 h-16 rounded-full bg-white/95 dark:bg-slate-950/90 backdrop-blur-md flex items-center justify-center shadow-xl border border-white/40 transform transition-transform hover:scale-105 active:scale-95">
                                   {isPlaying ? (
-                                      <Pause size={32} className="text-white dark:text-zinc-900 fill-current" />
+                                      <Pause size={26} className="text-indigo-700 dark:text-amber-400 fill-current" />
                                   ) : (
-                                      <Play size={32} className="text-white dark:text-zinc-900 fill-current ml-1" />
+                                      <Play size={26} className="text-indigo-700 dark:text-amber-400 fill-current ml-1" />
                                   )}
                                </div>
                           </div>
-                          
-                          {isPlaying && (
-                              <div className="absolute top-6 right-6 w-3 h-3 rounded-full animate-google-colors"></div>
-                          )}
+
+                          <div className="absolute bottom-3 left-5 z-20 text-[11px] font-medium text-white/90 tracking-wide">
+                            {visual.albumLabel}
+                          </div>
                       </div>
 
-                      <div className="h-[40%] p-8 flex flex-col justify-between bg-white dark:bg-zinc-800 relative z-30">
+                      <div className="h-[42%] p-6 sm:p-7 flex flex-col justify-between bg-white dark:bg-[#0f172a] relative z-30">
                           <div>
-                              <div className="flex items-center justify-between mb-2">
-                                  <h2 className="text-4xl font-serif text-zinc-900 dark:text-white tracking-tight">{voice.name}</h2>
+                              <div className="flex items-center justify-between mb-1.5">
+                                  <h2 className="text-3xl sm:text-4xl font-serif text-slate-900 dark:text-white tracking-tight">{voice.name}</h2>
                                   <div className="flex items-center gap-2">
-                                      <span className="px-2.5 py-1 rounded-full bg-zinc-100 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 text-xs font-medium border border-zinc-200 dark:border-zinc-600">
+                                      <span className="text-xs font-medium text-indigo-600 dark:text-amber-300">
                                           {voice.analysis.gender}
                                       </span>
                                       {onToggleFavorite && (
@@ -246,7 +284,7 @@ const Carousel3D: React.FC<Carousel3DProps> = ({
                                           className={`p-1.5 rounded-full border transition-all transform active:scale-90 ${
                                             favorites.includes(voice.name)
                                               ? 'bg-rose-50 dark:bg-rose-950/60 border-rose-200 dark:border-rose-800 text-rose-500 dark:text-rose-400'
-                                              : 'bg-zinc-50 dark:bg-zinc-700/60 border-zinc-200 dark:border-zinc-600 text-zinc-400 dark:text-zinc-400 hover:text-rose-500 dark:hover:text-rose-400'
+                                              : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-400 hover:text-rose-500 dark:hover:text-rose-400'
                                           }`}
                                           aria-label={favorites.includes(voice.name) ? `Remove ${voice.name} from favorites` : `Add ${voice.name} to favorites`}
                                           aria-pressed={favorites.includes(voice.name)}
@@ -257,31 +295,61 @@ const Carousel3D: React.FC<Carousel3DProps> = ({
                                       )}
                                   </div>
                               </div>
-                              <div className="flex flex-wrap gap-2 mb-4">
-                                  <span className="text-sm text-zinc-500 dark:text-zinc-400 font-light">{voice.pitch} Pitch</span>
-                                  <span className="text-zinc-300 dark:text-zinc-600">•</span>
-                                  <span className="text-sm text-zinc-500 dark:text-zinc-400 font-light">{voice.analysis.characteristics[0]}</span>
+                              <div className="flex flex-wrap gap-2 mb-3 text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-light">
+                                  <span>{voice.pitch} Pitch</span>
+                                  <span aria-hidden="true">·</span>
+                                  <span>{voice.analysis.characteristics[0]}</span>
                               </div>
                           </div>
                           
                           <div className="space-y-3">
-                              <div className="w-full h-px bg-zinc-100 dark:bg-zinc-700"></div>
+                              <div className="w-full h-px bg-slate-100 dark:bg-slate-800"></div>
                               <div className="flex items-center justify-between gap-2">
-                                <p className="text-sm text-zinc-400 dark:text-zinc-500 font-light leading-relaxed line-clamp-2">
+                                <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-light leading-relaxed line-clamp-2">
                                     {voice.analysis.characteristics.join(', ')}
                                 </p>
-                                {isActive && onUseInStudio && (
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      onUseInStudio(voice.name);
-                                    }}
-                                    className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-zinc-900 dark:bg-indigo-600 text-white hover:bg-zinc-800 dark:hover:bg-indigo-500 text-xs font-medium shadow-sm transition-colors"
-                                  >
-                                    <AudioLines size={12} />
-                                    <span>Speak</span>
-                                  </button>
+                                {isActive && (
+                                  <div className="flex items-center gap-1.5 shrink-0">
+                                    {onToggleCompare && (
+                                      <button
+                                        type="button"
+                                        onPointerDown={(e) => e.stopPropagation()}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          onToggleCompare(voice.name);
+                                        }}
+                                        className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-semibold border transition-all whitespace-nowrap ${
+                                          compareVoices.includes(voice.name)
+                                            ? 'bg-amber-500 text-slate-950 border-amber-500 shadow-sm'
+                                            : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:border-indigo-400'
+                                        }`}
+                                        title="Compare side-by-side"
+                                      >
+                                        <ArrowLeftRight size={12} />
+                                        <span>
+                                          {compareVoices[0] === voice.name
+                                            ? 'Slot A'
+                                            : compareVoices[1] === voice.name
+                                            ? 'Slot B'
+                                            : 'Compare'}
+                                        </span>
+                                      </button>
+                                    )}
+                                    {onUseInStudio && (
+                                      <button
+                                        type="button"
+                                        onPointerDown={(e) => e.stopPropagation()}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          onUseInStudio(voice.name);
+                                        }}
+                                        className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-gradient-to-r from-indigo-600 to-blue-600 text-white hover:from-indigo-500 hover:to-blue-500 text-xs font-semibold shadow-sm transition-all whitespace-nowrap"
+                                      >
+                                        <AudioLines size={12} />
+                                        <span>Speak</span>
+                                      </button>
+                                    )}
+                                  </div>
                                 )}
                               </div>
                           </div>

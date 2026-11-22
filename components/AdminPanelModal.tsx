@@ -29,7 +29,7 @@ import {
   updateDoc,
   writeBatch,
 } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType } from '../firebase';
+import { db, reportFirestoreError, OperationType } from '../firebase';
 import {
   BillingConfig,
   ProPackageType,
@@ -152,7 +152,7 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
         setRequests(list);
       },
       (error) => {
-        handleFirestoreError(error, OperationType.LIST, 'proRequests');
+        reportFirestoreError(error, OperationType.LIST, 'proRequests');
       }
     );
 
@@ -183,7 +183,7 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
         setUsersList(list);
       },
       (error) => {
-        handleFirestoreError(error, OperationType.LIST, 'users');
+        reportFirestoreError(error, OperationType.LIST, 'users');
       }
     );
 
@@ -204,7 +204,7 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
         setSalonBookings(list);
       },
       (error) => {
-        handleFirestoreError(error, OperationType.LIST, 'salonBookings');
+        reportFirestoreError(error, OperationType.LIST, 'salonBookings');
       }
     );
 
@@ -249,7 +249,7 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
       await batch.commit();
     } catch (error: any) {
       setActionError(error?.message || 'Pro request অনুমোদন করা যায়নি।');
-      handleFirestoreError(error, OperationType.UPDATE, `proRequests/${req.id}`);
+      reportFirestoreError(error, OperationType.UPDATE, `proRequests/${req.id}`);
     } finally {
       setBusyId(null);
     }
@@ -263,8 +263,9 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
         status: 'rejected',
         updatedAt: serverTimestamp(),
       });
-    } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `proRequests/${req.id}`);
+    } catch (error: any) {
+      setActionError(error?.message || 'Pro request বাতিল করা যায়নি।');
+      reportFirestoreError(error, OperationType.UPDATE, `proRequests/${req.id}`);
     } finally {
       setBusyId(null);
     }
@@ -298,8 +299,9 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
         }
         await updateDoc(userRef, payload);
       }
-    } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `users/${target.uid}`);
+    } catch (error: any) {
+      setActionError(error?.message || 'ইউজারের প্যাকেজ আপডেট করা যায়নি।');
+      reportFirestoreError(error, OperationType.UPDATE, `users/${target.uid}`);
     } finally {
       setBusyId(null);
     }
@@ -327,7 +329,7 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
       }
     } catch (error: any) {
       setActionError(error?.message || 'বোনাস ক্রেডিট যোগ করা যায়নি।');
-      handleFirestoreError(error, OperationType.UPDATE, `users/${target.uid}`);
+      reportFirestoreError(error, OperationType.UPDATE, `users/${target.uid}`);
     } finally {
       setBusyId(null);
     }
@@ -388,7 +390,7 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
       setTimeout(() => setSavedBanner(false), 2500);
     } catch (error: any) {
       setActionError(error?.message || 'সেটিংস সেভ করা যায়নি।');
-      handleFirestoreError(error, OperationType.WRITE, 'appConfig/proPlan');
+      reportFirestoreError(error, OperationType.WRITE, 'appConfig/proPlan');
     } finally {
       setSavingConfig(false);
     }
@@ -430,7 +432,7 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
       setTimeout(() => setSavedSalonBanner(false), 2500);
     } catch (error: any) {
       setActionError(error?.message || 'সেলুনের প্রাইস ও সেটিংস সেভ করা যায়নি।');
-      handleFirestoreError(error, OperationType.WRITE, 'salonConfig/default');
+      reportFirestoreError(error, OperationType.WRITE, 'salonConfig/default');
     } finally {
       setSavingSalon(false);
     }
@@ -450,7 +452,7 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
       });
     } catch (error: any) {
       setActionError(error?.message || 'বুকিং স্ট্যাটাস আপডেট করা যায়নি।');
-      handleFirestoreError(error, OperationType.UPDATE, `salonBookings/${bookingId}`);
+      reportFirestoreError(error, OperationType.UPDATE, `salonBookings/${bookingId}`);
     } finally {
       setBusyId(null);
     }
@@ -514,7 +516,7 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
             <Receipt size={14} />
             <span>Pro Requests</span>
             {pendingCount > 0 && (
-              <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300">
+              <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300">
                 {pendingCount}
               </span>
             )}
@@ -558,7 +560,7 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
             <Scissors size={14} />
             <span>Salon &amp; Prices</span>
             {pendingSalonCount > 0 && (
-              <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300">
+              <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300">
                 {pendingSalonCount}
               </span>
             )}
@@ -673,32 +675,41 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                   এখনও কোনো ইউজার নেই।
                 </p>
               ) : (
-                usersList.map((u) => (
+                usersList.map((u) => {
+                  const expMs = typeof u.proExpiresAt?.toMillis === 'function' ? u.proExpiresAt.toMillis() : null;
+                  const isExpired = u.plan === 'pro' && expMs !== null && expMs <= Date.now();
+                  return (
                   <div
                     key={u.uid}
-                    className="p-3.5 rounded-2xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200/80 dark:border-zinc-700/80 flex items-center justify-between gap-3"
+                    className="p-3.5 rounded-2xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200/80 dark:border-zinc-700/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
                   >
                     <div className="min-w-0">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-sm font-medium text-zinc-900 dark:text-white truncate">
                           {u.displayName || u.email || u.uid}
                         </span>
                         <span
                           className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
-                            u.plan === 'pro'
-                              ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300'
+                            u.plan === 'pro' && !isExpired
+                              ? u.proPackageType === 'yearly'
+                                ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300'
+                                : 'bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300'
+                              : isExpired
+                              ? 'bg-red-100 dark:bg-red-950/60 text-red-700 dark:text-red-300'
                               : 'bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300'
                           }`}
                         >
-                          {u.plan === 'pro' && u.proPackageType
+                          {isExpired
+                            ? `Expired (${u.proPackageType || 'pro'})`
+                            : u.plan === 'pro' && u.proPackageType
                             ? `${u.proPackageType} pro`
                             : u.plan}
                         </span>
                       </div>
                       <p className="text-xs text-zinc-500 dark:text-zinc-400 truncate">
                         {u.email || u.uid} • Usage ({u.lastUsageDate}): {u.dailyCount} • Credits: {u.bonusCredits ?? 0} • Refs: {u.referralCount ?? 0}
-                        {u.plan === 'pro' && typeof u.proExpiresAt?.toMillis === 'function'
-                          ? ` • Exp: ${new Date(u.proExpiresAt.toMillis()).toLocaleDateString('en-US', {
+                        {u.plan === 'pro' && expMs !== null
+                          ? ` • Exp: ${new Date(expMs).toLocaleDateString('en-US', {
                               month: 'short',
                               day: 'numeric',
                               year: 'numeric',
@@ -711,7 +722,7 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                       <button
                         type="button"
                         onClick={() => handleGrantTenCredits(u)}
-                        disabled={busyId === `cr_${u.uid}`}
+                        disabled={Boolean(busyId)}
                         className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 text-xs font-semibold transition-colors disabled:opacity-50"
                         title="Add +10 Bonus Credits"
                       >
@@ -721,11 +732,37 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                           <span>+10 Cr</span>
                         )}
                       </button>
-                      {u.plan === 'pro' ? (
+                      <button
+                        type="button"
+                        onClick={() => handleSetUserPackage(u, 'pro', 'monthly')}
+                        disabled={Boolean(busyId)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-colors disabled:opacity-50 bg-indigo-600 hover:bg-indigo-500 text-white"
+                      >
+                        {busyId === `${u.uid}_monthly` ? (
+                          <Loader2 size={12} className="animate-spin" />
+                        ) : (
+                          <Crown size={12} />
+                        )}
+                        <span>{u.plan === 'pro' && u.proPackageType === 'monthly' && !isExpired ? 'Renew 30d' : 'Monthly'}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleSetUserPackage(u, 'pro', 'yearly')}
+                        disabled={Boolean(busyId)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-colors disabled:opacity-50 bg-amber-600 hover:bg-amber-500 text-white"
+                      >
+                        {busyId === `${u.uid}_yearly` ? (
+                          <Loader2 size={12} className="animate-spin" />
+                        ) : (
+                          <Crown size={12} />
+                        )}
+                        <span>{u.plan === 'pro' && u.proPackageType === 'yearly' && !isExpired ? 'Renew 365d' : 'Yearly'}</span>
+                      </button>
+                      {u.plan === 'pro' && (
                         <button
                           type="button"
                           onClick={() => handleSetUserPackage(u, 'free')}
-                          disabled={busyId === u.uid}
+                          disabled={Boolean(busyId)}
                           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors disabled:opacity-50 bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-300 dark:hover:bg-zinc-600"
                         >
                           {busyId === u.uid ? (
@@ -735,39 +772,11 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                           )}
                           <span>Set Free</span>
                         </button>
-                      ) : (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => handleSetUserPackage(u, 'pro', 'monthly')}
-                            disabled={Boolean(busyId)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-colors disabled:opacity-50 bg-indigo-600 hover:bg-indigo-500 text-white"
-                          >
-                            {busyId === `${u.uid}_monthly` ? (
-                              <Loader2 size={12} className="animate-spin" />
-                            ) : (
-                              <Crown size={12} />
-                            )}
-                            <span>Monthly</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleSetUserPackage(u, 'pro', 'yearly')}
-                            disabled={Boolean(busyId)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-colors disabled:opacity-50 bg-amber-600 hover:bg-amber-500 text-white"
-                          >
-                            {busyId === `${u.uid}_yearly` ? (
-                              <Loader2 size={12} className="animate-spin" />
-                            ) : (
-                              <Crown size={12} />
-                            )}
-                            <span>Yearly</span>
-                          </button>
-                        </>
                       )}
                     </div>
                   </div>
-                ))
+                  );
+                })
               )}
             </div>
           )}

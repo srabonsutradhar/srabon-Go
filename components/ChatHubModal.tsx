@@ -89,7 +89,7 @@ function formatChatTime(ts: any): string {
 }
 
 function mapViewToOriginPage(view: AppViewMode): CommunityMessage['originPage'] {
-  if (view === 'studio') return 'studio';
+  if (view === 'studio' || view === 'voice-clone') return 'studio';
   if (view === 'salon') return 'salon';
   if (view === 'ideas') return 'ideas';
   if (view === 'home') return 'home';
@@ -167,7 +167,11 @@ const ChatHubModal: React.FC<ChatHubModalProps> = ({
 
   // Subscribe to Admin Feedback Threads
   useEffect(() => {
-    if (!safeUid) return;
+    if (!safeUid || !user.emailVerified) {
+      setAdminThreads([]);
+      setLoadingThreads(false);
+      return;
+    }
     const threadsQuery = isAdmin
       ? collection(db, 'adminFeedbackThreads')
       : query(
@@ -201,25 +205,23 @@ const ChatHubModal: React.FC<ChatHubModalProps> = ({
     );
 
     return () => unsubscribe();
-  }, [safeUid, isAdmin]);
+  }, [safeUid, isAdmin, user.emailVerified]);
+
+  const selectedAdminThreadId = selectedChat.kind === 'admin' ? selectedChat.threadId : '';
+  const selectedAdminThreadExists = Boolean(
+    selectedAdminThreadId && adminThreads.some((t) => t.threadId === selectedAdminThreadId)
+  );
 
   // Subscribe to selected Admin Thread messages
   useEffect(() => {
-    if (selectedChat.kind !== 'admin') {
-      setAdminMessages([]);
-      setLoadingAdminMessages(false);
-      return;
-    }
-
-    const threadExists = adminThreads.some((t) => t.threadId === selectedChat.threadId);
-    if (!threadExists) {
+    if (selectedChat.kind !== 'admin' || !selectedAdminThreadId || !selectedAdminThreadExists || !user.emailVerified) {
       setAdminMessages([]);
       setLoadingAdminMessages(false);
       return;
     }
 
     setLoadingAdminMessages(true);
-    const msgRef = collection(db, 'adminFeedbackThreads', selectedChat.threadId, 'messages');
+    const msgRef = collection(db, 'adminFeedbackThreads', selectedAdminThreadId, 'messages');
     const unsubscribe = onSnapshot(
       msgRef,
       (snapshot) => {
@@ -246,7 +248,7 @@ const ChatHubModal: React.FC<ChatHubModalProps> = ({
     );
 
     return () => unsubscribe();
-  }, [selectedChat, adminThreads]);
+  }, [selectedChat.kind, selectedAdminThreadId, selectedAdminThreadExists, user.emailVerified]);
 
   // Mark thread as read when opened
   useEffect(() => {
@@ -276,6 +278,11 @@ const ChatHubModal: React.FC<ChatHubModalProps> = ({
     selectedChat.kind === 'community' ? selectedChat.roomId : 'general';
 
   useEffect(() => {
+    if (!user.emailVerified) {
+      setCommunityMessages([]);
+      setLoadingCommunityMessages(false);
+      return;
+    }
     setLoadingCommunityMessages(true);
     const commQuery = query(
       collection(db, 'communityMessages'),
@@ -307,7 +314,7 @@ const ChatHubModal: React.FC<ChatHubModalProps> = ({
     );
 
     return () => unsubscribe();
-  }, [activeCommunityRoomId]);
+  }, [activeCommunityRoomId, user.emailVerified]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -903,12 +910,12 @@ const ChatHubModal: React.FC<ChatHubModalProps> = ({
                           {msg.senderName}
                         </span>
                         {msg.senderRole === 'admin' && (
-                          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300">
+                          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300">
                             <Crown size={9} />
                             Admin
                           </span>
                         )}
-                        <span className="px-1.5 py-0.2 rounded text-[9px] font-medium bg-zinc-200/70 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-medium bg-zinc-200/70 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
                           {getOriginBadgeLabel(msg.originPage)}
                         </span>
                         <span className="text-[10px] text-zinc-400">

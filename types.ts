@@ -87,6 +87,7 @@ export interface UserAccountRecord {
 export type AppViewMode =
   | 'home'
   | 'studio'
+  | 'voice-clone'
   | 'ideas'
   | 'salon'
   | 'carousel'
@@ -218,4 +219,24 @@ export interface CommunityMessage {
   originPage: 'home' | 'studio' | 'ideas' | 'salon' | 'library';
   text: string;
   createdAt?: any;
+}
+
+export interface CustomVoiceProfile {
+  id: string;
+  name: string;
+  durationSec: number;
+  createdAt: number;
+  sampleAudioDataUrl?: string;
+  sampleMimeType?: string;
+  gender: string;
+  pitchLabel: string;
+  speakingRateLabel: string;
+  toneDescription: string;
+  accentNotes: string;
+  transcriptSample: string;
+  matchedBaseVoice: string;
+  synthesizedStylePrompt: string;
+  pitchCentsOffset: number;
+  rateMultiplier: number;
+  warmthBoost: number;
 }

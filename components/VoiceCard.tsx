@@ -3,10 +3,12 @@
  * SPDX-License-Identifier: Apache-2.0
 */
 
-import React, { useRef, useEffect } from 'react';
-import { Play, Pause, Activity, AudioLines, Heart } from 'lucide-react';
+import React, { useRef, useEffect, useState } from 'react';
+import { Play, Pause, AudioLines, Heart, Disc3, ArrowLeftRight } from 'lucide-react';
 import { Voice } from '../types';
 import AudioVisualizer from './AudioVisualizer';
+import { isBenignAudioInterrupt } from '../utils/appIssues';
+import { getVoiceAlbumVisual } from '../utils/studioAlbums';
 
 interface VoiceCardProps {
   voice: Voice;
@@ -15,6 +17,8 @@ interface VoiceCardProps {
   isFavorite?: boolean;
   onToggleFavorite?: (voiceName: string) => void;
   onUseInStudio?: (voiceName: string) => void;
+  compareSlot?: 'A' | 'B' | null;
+  onToggleCompare?: (voiceName: string) => void;
 }
 
 const VoiceCard: React.FC<VoiceCardProps> = ({
@@ -24,19 +28,45 @@ const VoiceCard: React.FC<VoiceCardProps> = ({
   isFavorite = false,
   onToggleFavorite,
   onUseInStudio,
+  compareSlot = null,
+  onToggleCompare,
 }) => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const onPlayToggleRef = useRef(onPlayToggle);
+  onPlayToggleRef.current = onPlayToggle;
+  const [imgError, setImgError] = useState(false);
+
+  const visual = getVoiceAlbumVisual(voice);
 
   useEffect(() => {
-    if (audioRef.current) {
-      if (isPlaying) {
-        audioRef.current.play().catch(e => console.error("Playback failed", e));
-      } else {
-        audioRef.current.pause();
-        audioRef.current.currentTime = 0;
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    let cancelled = false;
+
+    if (isPlaying) {
+      audio.currentTime = 0;
+      const playPromise = audio.play();
+      if (playPromise !== undefined) {
+        playPromise.catch((err) => {
+          if (cancelled || isBenignAudioInterrupt(err)) {
+            return;
+          }
+          console.warn('Voice sample playback unavailable:', err);
+          onPlayToggleRef.current(voice.name);
+        });
       }
+    } else {
+      audio.pause();
+      audio.currentTime = 0;
     }
-  }, [isPlaying]);
+
+    return () => {
+      cancelled = true;
+      audio.pause();
+      audio.currentTime = 0;
+    };
+  }, [isPlaying, voice.audioSampleUrl, voice.name]);
 
   const handleAudioEnded = () => {
     if (isPlaying) {
@@ -45,116 +75,203 @@ const VoiceCard: React.FC<VoiceCardProps> = ({
   };
 
   const handleClick = () => {
-      onPlayToggle(voice.name);
+    onPlayToggle(voice.name);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-      if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          handleClick();
-      }
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      handleClick();
+    }
   };
 
   return (
-    <div 
-        className={`group relative bg-white dark:bg-zinc-800 border transition-all duration-200 flex flex-col sm:flex-row h-auto sm:h-28 cursor-pointer rounded-2xl overflow-hidden hover:border-zinc-300 dark:hover:border-zinc-600 ${isPlaying ? 'border-blue-200 dark:border-blue-800 ring-2 ring-blue-100 dark:ring-blue-900/30 shadow-md' : 'border-zinc-200 dark:border-zinc-700 shadow-sm hover:shadow-md'}`}
-        onClick={handleClick}
-        role="button"
-        tabIndex={0}
-        onKeyDown={handleKeyDown}
-        aria-label={`Play sample for ${voice.name}`}
+    <div
+      className={`group relative bg-white/95 dark:bg-[#0f172a]/95 border transition-all duration-200 flex flex-col sm:flex-row h-auto sm:h-32 cursor-pointer rounded-2xl overflow-hidden ${
+        isPlaying
+          ? `${visual.cardBorderActiveClass} shadow-lg`
+          : 'border-slate-200/90 dark:border-slate-800 hover:border-indigo-300 dark:hover:border-indigo-700 shadow-sm hover:shadow-md'
+      }`}
+      onClick={handleClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={handleKeyDown}
+      aria-label={`Play sample for ${voice.name}`}
     >
-      
-      {/* Visualizer / Action Area - Left Side */}
-      <div className="relative h-20 sm:h-full w-full sm:w-28 bg-zinc-50/50 dark:bg-zinc-900/50 shrink-0 border-b sm:border-b-0 sm:border-r border-zinc-100 dark:border-zinc-700 flex items-center justify-center overflow-hidden">
-        
-        {/* Technical Grid Background */}
-        <div className="absolute inset-0 opacity-[0.03] dark:opacity-[0.1]" style={{ backgroundImage: 'radial-gradient(currentColor 1px, transparent 1px)', backgroundSize: '8px 8px' }}></div>
+      {/* Album Artwork & Visualizer Area */}
+      <div
+        className={`relative h-28 sm:h-full w-full sm:w-32 shrink-0 border-b sm:border-b-0 sm:border-r border-slate-200/70 dark:border-slate-800 flex items-center justify-center overflow-hidden bg-gradient-to-br ${visual.fallbackGradientClass}`}
+      >
+        {!imgError ? (
+          <img
+            src={visual.coverImg}
+            alt={`${voice.name} — ${visual.albumLabel}`}
+            referrerPolicy="no-referrer"
+            onError={() => setImgError(true)}
+            className={`absolute inset-0 w-full h-full object-cover transition-transform duration-500 ${
+              isPlaying ? 'scale-110 brightness-75' : 'group-hover:scale-105'
+            }`}
+          />
+        ) : (
+          <div className="absolute inset-0 flex items-center justify-center text-white/70">
+            <Disc3 size={28} />
+          </div>
+        )}
 
-        {/* Resting State Visual */}
-        <div className={`absolute inset-0 flex items-center justify-center transition-opacity duration-200 ${isPlaying ? 'opacity-0' : 'opacity-100'}`}>
-             <Activity size={20} className="text-zinc-300 dark:text-zinc-600" strokeWidth={1.5} />
+        {/* Measured Scrim for Contrast */}
+        <div
+          className={`absolute inset-0 transition-opacity duration-300 ${
+            isPlaying
+              ? 'bg-slate-950/60'
+              : 'bg-gradient-to-t from-slate-950/65 via-slate-950/20 to-transparent'
+          }`}
+        />
+
+        {/* Active Visualizer Overlay */}
+        <div
+          className={`absolute inset-0 z-10 transition-opacity duration-200 ${
+            isPlaying ? 'opacity-100' : 'opacity-0 pointer-events-none'
+          }`}
+        >
+          <AudioVisualizer
+            isPlaying={isPlaying}
+            color={
+              typeof document !== 'undefined' &&
+              document.documentElement.classList.contains('dark')
+                ? visual.visualizerColorDark
+                : visual.visualizerColorLight
+            }
+          />
         </div>
 
-        {/* Active Visualizer */}
-        <div className={`absolute inset-0 z-10 transition-opacity duration-200 ${isPlaying ? 'opacity-100' : 'opacity-0'}`}>
-             <AudioVisualizer isPlaying={isPlaying} color={document.documentElement.classList.contains('dark') ? '#a5b4fc' : '#18181b'} />
+        {/* Play Button Overlay */}
+        <div
+          className={`relative z-20 flex items-center justify-center transition-all duration-200 ${
+            isPlaying
+              ? 'opacity-90 group-hover:opacity-100'
+              : 'opacity-85 sm:opacity-75 group-hover:opacity-100 group-focus:opacity-100'
+          }`}
+        >
+          <div className="h-10 w-10 bg-white/95 dark:bg-slate-950/90 backdrop-blur-md rounded-full flex items-center justify-center shadow-lg border border-white/40 transform transition-transform group-hover:scale-105 active:scale-95">
+            {isPlaying ? (
+              <Pause
+                size={15}
+                className="text-indigo-700 dark:text-amber-400"
+                fill="currentColor"
+              />
+            ) : (
+              <Play
+                size={15}
+                className="text-indigo-700 dark:text-amber-400 ml-0.5"
+                fill="currentColor"
+              />
+            )}
+          </div>
         </div>
-
-        {/* Play Button Overlay - Tactile Feel */}
-        <div className={`absolute inset-0 z-20 flex items-center justify-center transition-opacity duration-200 ${isPlaying ? 'opacity-0 hover:opacity-100 focus:opacity-100' : 'opacity-0 group-hover:opacity-100 group-focus:opacity-100'}`}>
-            <div className="h-9 w-9 bg-zinc-900 dark:bg-zinc-100 rounded-full flex items-center justify-center shadow-lg transform transition-transform active:scale-95">
-                {isPlaying ? <Pause size={14} className="text-white dark:text-zinc-900" fill="currentColor" /> : <Play size={14} className="text-white dark:text-zinc-900 ml-0.5" fill="currentColor" />}
-            </div>
-        </div>
-        
-        {/* Status Indicator */}
-        <div className={`absolute top-2 left-2 w-1.5 h-1.5 rounded-full ${isPlaying ? 'animate-google-colors' : 'bg-zinc-200 dark:bg-zinc-600'}`}></div>
       </div>
 
       {/* Content Area - Right Side */}
-      <div className="flex-1 p-4 flex flex-col justify-center min-w-0 bg-white dark:bg-zinc-800">
-        
-        {/* Header */}
-        <div className="flex items-center justify-between gap-2 mb-1">
-            <h3 className="text-lg font-medium text-zinc-900 dark:text-white tracking-tight truncate">{voice.name}</h3>
-            <div className="flex items-center gap-1 shrink-0">
-                <span className="inline-flex items-center px-2 py-0.5 border border-zinc-100 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900/50 text-[10px] font-medium text-zinc-500 dark:text-zinc-400 rounded-full">
-                    {voice.analysis.gender}
-                </span>
-                <span className="inline-flex items-center px-2 py-0.5 border border-zinc-100 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900/50 text-[10px] font-medium text-zinc-500 dark:text-zinc-400 rounded-full">
-                    {voice.pitch}
-                </span>
-                {onToggleFavorite && (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onToggleFavorite(voice.name);
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.stopPropagation();
-                      }
-                    }}
-                    className={`p-1 rounded-full transition-all transform active:scale-90 ${
-                      isFavorite
-                        ? 'text-rose-500 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/50'
-                        : 'text-zinc-300 dark:text-zinc-600 hover:text-rose-500 dark:hover:text-rose-400 hover:bg-zinc-100 dark:hover:bg-zinc-700'
-                    }`}
-                    aria-label={isFavorite ? `Remove ${voice.name} from favorites` : `Add ${voice.name} to favorites`}
-                    aria-pressed={isFavorite}
-                    title={isFavorite ? 'Remove from Favorites' : 'Add to Favorites'}
-                  >
-                    <Heart size={14} className={isFavorite ? 'fill-current' : ''} />
-                  </button>
-                )}
+      <div className="flex-1 p-4 flex flex-col justify-between min-w-0">
+        <div>
+          <div className="flex items-start justify-between gap-2 mb-1">
+            <div className="min-w-0">
+              <h3 className="text-lg font-serif font-medium text-slate-900 dark:text-white tracking-tight truncate">
+                {voice.name}
+              </h3>
+              <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 truncate">
+                {voice.analysis.gender} · {voice.pitch} · {visual.albumLabel}
+              </p>
             </div>
+
+            {onToggleFavorite && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleFavorite(voice.name);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.stopPropagation();
+                  }
+                }}
+                className={`p-1.5 rounded-full transition-all transform active:scale-90 shrink-0 ${
+                  isFavorite
+                    ? 'text-rose-500 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/50'
+                    : 'text-slate-300 dark:text-slate-600 hover:text-rose-500 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-slate-800'
+                }`}
+                aria-label={
+                  isFavorite
+                    ? `Remove ${voice.name} from favorites`
+                    : `Add ${voice.name} to favorites`
+                }
+                aria-pressed={isFavorite}
+                title={isFavorite ? 'Remove from Favorites' : 'Add to Favorites'}
+              >
+                <Heart size={15} className={isFavorite ? 'fill-current' : ''} />
+              </button>
+            )}
+          </div>
         </div>
-        
-        {/* Description + Studio quick action */}
-        <div className="flex items-end justify-between gap-2">
-          <p className="text-sm text-zinc-500 dark:text-zinc-400 leading-relaxed line-clamp-2 font-light">
-              {voice.analysis.characteristics.join(', ')}
+
+        {/* Description + Compare & Studio quick actions */}
+        <div className="flex items-end justify-between gap-2 pt-2">
+          <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 leading-snug line-clamp-2 font-light">
+            {voice.analysis.characteristics.join(', ')}
           </p>
-          {onUseInStudio && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onUseInStudio(voice.name);
-              }}
-              className="shrink-0 opacity-0 group-hover:opacity-100 focus:opacity-100 inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-zinc-100 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 hover:bg-indigo-50 dark:hover:bg-indigo-900/40 hover:text-indigo-600 dark:hover:text-indigo-300 text-[10px] font-semibold transition-all"
-              title={`Speak script with ${voice.name}`}
-            >
-              <AudioLines size={11} />
-              <span>Studio</span>
-            </button>
-          )}
+          <div className="flex items-center gap-1.5 shrink-0">
+            {onToggleCompare && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleCompare(voice.name);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.stopPropagation();
+                  }
+                }}
+                aria-pressed={Boolean(compareSlot)}
+                className={`inline-flex items-center gap-1 px-2 py-1.5 rounded-lg text-[11px] font-semibold border transition-all whitespace-nowrap ${
+                  compareSlot
+                    ? 'bg-amber-500 text-slate-950 border-amber-500 shadow-sm'
+                    : 'bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-indigo-400 hover:text-indigo-700 dark:hover:text-amber-300'
+                }`}
+                title={
+                  compareSlot
+                    ? `Selected as Option ${compareSlot} for comparison (click to remove)`
+                    : `Select ${voice.name} to compare side-by-side`
+                }
+              >
+                <ArrowLeftRight size={11} />
+                <span>{compareSlot ? `Slot ${compareSlot}` : 'Compare'}</span>
+              </button>
+            )}
+            {onUseInStudio && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onUseInStudio(voice.name);
+                }}
+                className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-all whitespace-nowrap ${visual.studioButtonClass}`}
+                title={`Speak script with ${voice.name}`}
+              >
+                <AudioLines size={12} />
+                <span>Studio</span>
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
-      <audio ref={audioRef} src={voice.audioSampleUrl} onEnded={handleAudioEnded} preload="none" />
+      <audio
+        ref={audioRef}
+        src={voice.audioSampleUrl}
+        onEnded={handleAudioEnded}
+        preload="none"
+      />
     </div>
   );
 };

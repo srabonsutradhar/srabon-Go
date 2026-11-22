@@ -20,11 +20,13 @@ import AdminPanelModal, { AdminPanelTab } from './components/AdminPanelModal';
 import AdminNotificationsBox from './components/AdminNotificationsBox';
 import ChatHubModal from './components/ChatHubModal';
 import SiteLegalModal, { LegalTab } from './components/SiteLegalModal';
-import { AppIssueRecord, AppViewMode, FilterState, AiRecommendation, BillingConfig, ProPackageType, SalonConfig, UserPlan } from './types';
-import { Info, Heart, Loader2, Bell, AlertTriangle, X, MessageSquare } from 'lucide-react';
+import CustomVoiceCloneStudio from './components/CustomVoiceCloneStudio';
+import VoiceComparisonModal from './components/VoiceComparisonModal';
+import { AppIssueRecord, AppViewMode, CustomVoiceProfile, FilterState, AiRecommendation, BillingConfig, ProPackageType, SalonConfig, UserPlan } from './types';
+import { Info, Heart, Loader2, Bell, AlertTriangle, X, MessageSquare, ArrowLeftRight } from 'lucide-react';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { collection, deleteDoc, doc, onSnapshot, query, setDoc, updateDoc, where, serverTimestamp } from 'firebase/firestore';
-import { auth, db, signOutUser, handleFirestoreError, OperationType } from './firebase';
+import { auth, db, signOutUser, reportFirestoreError, OperationType } from './firebase';
 import { initGoogleAdsTag } from './utils/googleAds';
 import { setDynamicApiBaseUrl } from './utils/audio';
 import { isBenignAppIssueNoise, reportAppIssue, subscribeSessionIssues } from './utils/appIssues';
@@ -37,6 +39,10 @@ import {
   ensureReferralCodeRegistered,
   hasUserClaimedReferral,
 } from './utils/referral';
+import {
+  loadCustomVoiceProfiles,
+  persistCustomVoiceProfiles,
+} from './utils/voiceClone';
 
 const ADMIN_EMAIL = 'srabon10010@gmail.com';
 
@@ -85,6 +91,10 @@ const App: React.FC = () => {
   const [viewMode, setViewMode] = useState<AppViewMode>('home');
   const [studioVoiceName, setStudioVoiceName] = useState<string>('Kore');
   const [studioDraft, setStudioDraft] = useState<{ text: string; style: string; revision: number } | null>(null);
+  const [customVoiceProfiles, setCustomVoiceProfiles] = useState<CustomVoiceProfile[]>([]);
+  const [selectedCustomVoiceId, setSelectedCustomVoiceId] = useState<string | null>(null);
+  const [compareVoices, setCompareVoices] = useState<string[]>([]);
+  const [showCompareModal, setShowCompareModal] = useState(false);
   const [favorites, setFavorites] = useState<string[]>([]);
   const [userPlan, setUserPlan] = useState<UserPlan>('free');
   const [proPackageType, setProPackageType] = useState<ProPackageType | null>(null);
@@ -261,7 +271,7 @@ const App: React.FC = () => {
 
   // Real-time unread count listener for Global Chat Hub (admin feedback threads)
   useEffect(() => {
-    if (!authReady || !user) {
+    if (!authReady || !user || !user.emailVerified) {
       setUnreadChatCount(0);
       return;
     }
@@ -286,11 +296,7 @@ const App: React.FC = () => {
         setUnreadChatCount(unread);
       },
       (error) => {
-        reportAppIssue({
-          source: 'ChatHub:UnreadSync',
-          severity: 'warning',
-          message: error?.message || 'Failed to sync unread chat count',
-        });
+        reportFirestoreError(error, OperationType.LIST, 'adminFeedbackThreads');
       }
     );
 
@@ -308,6 +314,14 @@ const App: React.FC = () => {
         setFavorites(sanitizeFavorites(JSON.parse(saved)));
       }
     } catch {}
+
+    const loadedCustomProfiles = loadCustomVoiceProfiles(user.uid);
+    setCustomVoiceProfiles(loadedCustomProfiles);
+    setSelectedCustomVoiceId((prev) =>
+      prev && loadedCustomProfiles.some((p) => p.id === prev)
+        ? prev
+        : loadedCustomProfiles[0]?.id || null
+    );
 
     const userPath = `users/${user.uid}`;
     const userRef = doc(db, 'users', user.uid);
@@ -416,22 +430,24 @@ const App: React.FC = () => {
               patch.bonusCredits = 0;
             }
             try {
-              await updateDoc(userRef, patch);
+              if (user.emailVerified) {
+                await updateDoc(userRef, patch);
+              }
             } catch (error) {
-              handleFirestoreError(error, OperationType.UPDATE, userPath);
+              reportFirestoreError(error, OperationType.UPDATE, userPath);
             } finally {
               isMigratingSchema = false;
             }
           }
 
-          if (!snapshot.metadata.hasPendingWrites) {
+          if (!snapshot.metadata.hasPendingWrites && user.emailVerified) {
             try {
               await handleReferralLifecycle(code);
             } catch (err) {
               console.error('Referral lifecycle error:', err);
             }
           }
-        } else if (!initializedDoc) {
+        } else if (!initializedDoc && user.emailVerified) {
           initializedDoc = true;
           let localFavs: string[] = [];
           try {
@@ -465,12 +481,12 @@ const App: React.FC = () => {
             await setDoc(userRef, payload);
             await handleReferralLifecycle(myCode);
           } catch (error) {
-            handleFirestoreError(error, OperationType.CREATE, userPath);
+            reportFirestoreError(error, OperationType.CREATE, userPath);
           }
         }
       },
       (error) => {
-        handleFirestoreError(error, OperationType.GET, userPath);
+        reportFirestoreError(error, OperationType.GET, userPath);
       }
     );
 
@@ -503,7 +519,7 @@ const App: React.FC = () => {
         }
       },
       (error) => {
-        handleFirestoreError(error, OperationType.GET, 'appConfig/proPlan');
+        reportFirestoreError(error, OperationType.GET, 'appConfig/proPlan');
       }
     );
 
@@ -518,7 +534,7 @@ const App: React.FC = () => {
         }
       },
       (error) => {
-        handleFirestoreError(error, OperationType.GET, 'salonConfig/default');
+        reportFirestoreError(error, OperationType.GET, 'salonConfig/default');
       }
     );
 
@@ -597,10 +613,10 @@ const App: React.FC = () => {
             await setDoc(userRef, payload);
             await ensureReferralCodeRegistered(user.uid, myCode);
           } catch (createErr) {
-            handleFirestoreError(createErr, OperationType.CREATE, userPath);
+            reportFirestoreError(createErr, OperationType.CREATE, userPath);
           }
         } else {
-          handleFirestoreError(error, OperationType.UPDATE, userPath);
+          reportFirestoreError(error, OperationType.UPDATE, userPath);
         }
       }
     }
@@ -609,6 +625,7 @@ const App: React.FC = () => {
   const consumeAiQuota = async (): Promise<boolean> => {
     if (!user) return false;
     if (isAdmin || effectiveUserPlan === 'pro') return true;
+    if (!user.emailVerified) return false;
 
     const today = getTodayUtcDate();
     const currentUsed = lastUsageDate === today ? dailyCount : 0;
@@ -649,10 +666,10 @@ const App: React.FC = () => {
             await setDoc(userRef, payload);
             await ensureReferralCodeRegistered(user.uid, myCode);
           } catch (createErr) {
-            handleFirestoreError(createErr, OperationType.CREATE, userPath);
+            reportFirestoreError(createErr, OperationType.CREATE, userPath);
           }
         } else {
-          handleFirestoreError(error, OperationType.UPDATE, userPath);
+          reportFirestoreError(error, OperationType.UPDATE, userPath);
         }
       }
       return true;
@@ -673,7 +690,7 @@ const App: React.FC = () => {
           updatedAt: serverTimestamp(),
         });
       } catch (error) {
-        handleFirestoreError(error, OperationType.UPDATE, userPath);
+        reportFirestoreError(error, OperationType.UPDATE, userPath);
       }
       return true;
     }
@@ -710,6 +727,10 @@ const App: React.FC = () => {
     setSalonConfig(DEFAULT_SALON_CONFIG);
     setLegalTab(null);
     setStudioDraft(null);
+    setCustomVoiceProfiles([]);
+    setSelectedCustomVoiceId(null);
+    setCompareVoices([]);
+    setShowCompareModal(false);
     setDynamicApiBaseUrl('');
     await signOutUser();
   };
@@ -791,12 +812,47 @@ const App: React.FC = () => {
 
   const handleUseInStudio = (voiceName: string) => {
     setPlayingVoice(null);
+    setSelectedCustomVoiceId(null);
     setStudioVoiceName(voiceName);
     setViewMode('studio');
   };
 
+  const handleAddCustomVoiceProfile = (profile: CustomVoiceProfile) => {
+    setCustomVoiceProfiles((prev) => {
+      const next = [profile, ...prev].slice(0, 12);
+      persistCustomVoiceProfiles(user?.uid, next);
+      return next;
+    });
+    setSelectedCustomVoiceId(profile.id);
+  };
+
+  const handleUpdateCustomVoiceProfile = (updated: CustomVoiceProfile) => {
+    setCustomVoiceProfiles((prev) => {
+      const next = prev.map((p) => (p.id === updated.id ? updated : p));
+      persistCustomVoiceProfiles(user?.uid, next);
+      return next;
+    });
+  };
+
+  const handleDeleteCustomVoiceProfile = (profileId: string) => {
+    setCustomVoiceProfiles((prev) => {
+      const next = prev.filter((p) => p.id !== profileId);
+      persistCustomVoiceProfiles(user?.uid, next);
+      if (selectedCustomVoiceId === profileId) {
+        setSelectedCustomVoiceId(next[0]?.id || null);
+      }
+      return next;
+    });
+  };
+
   const handleViewModeChange = (mode: AppViewMode) => {
-    if (mode === 'home' || mode === 'studio' || mode === 'ideas' || mode === 'salon') {
+    if (
+      mode === 'home' ||
+      mode === 'studio' ||
+      mode === 'voice-clone' ||
+      mode === 'ideas' ||
+      mode === 'salon'
+    ) {
       setPlayingVoice(null);
     }
     setViewMode(mode);
@@ -808,21 +864,65 @@ const App: React.FC = () => {
     setFilters({ ...filters, search: '' });
   };
 
+  const handleToggleCompareVoice = (voiceName: string) => {
+    if (compareVoices.includes(voiceName)) {
+      setCompareVoices(compareVoices.filter((v) => v !== voiceName));
+      return;
+    }
+    if (compareVoices.length === 0) {
+      setCompareVoices([voiceName]);
+      return;
+    }
+    setPlayingVoice(null);
+    setCompareVoices([compareVoices[0], voiceName]);
+    setShowCompareModal(true);
+  };
+
+  const getInitialComparePair = (): [string, string] => {
+    const first =
+      compareVoices[0] ||
+      studioVoiceName ||
+      VOICE_DATA[0]?.name ||
+      'Kore';
+    if (compareVoices[1] && compareVoices[1] !== first) {
+      return [first, compareVoices[1]];
+    }
+    const firstVoice = VOICE_DATA.find((v) => v.name === first);
+    const contrasting =
+      VOICE_DATA.find(
+        (v) =>
+          v.name !== first &&
+          firstVoice &&
+          v.analysis.gender !== firstVoice.analysis.gender
+      ) || VOICE_DATA.find((v) => v.name !== first);
+    return [first, contrasting?.name || first];
+  };
+
+  const handleOpenCompareModal = () => {
+    setPlayingVoice(null);
+    const [a, b] = getInitialComparePair();
+    if (compareVoices.length === 0 || compareVoices.length === 1) {
+      setCompareVoices(a === b ? [a] : [a, b]);
+    }
+    setShowCompareModal(true);
+  };
+
   const isModalOpen = Boolean(
     showVoiceFinder ||
       showProModal ||
       showAdminPanel ||
       showAdminNotifications ||
       showChatHub ||
+      showCompareModal ||
       legalTab ||
       (aiResult && isAiCardVisible)
   );
 
   if (!authReady) {
     return (
-      <div className="h-screen w-screen bg-[#FDFDFD] dark:bg-[#09090b] text-zinc-900 dark:text-zinc-100 flex items-center justify-center">
-        <div className="flex flex-col items-center gap-3 text-zinc-500 dark:text-zinc-400">
-          <Loader2 size={28} className="animate-spin text-indigo-600 dark:text-indigo-400" />
+      <div className="h-screen w-screen bg-[#f4f6fb] dark:bg-[#070b14] text-slate-900 dark:text-slate-100 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3 text-slate-600 dark:text-slate-300">
+          <Loader2 size={28} className="animate-spin text-indigo-600 dark:text-amber-400" />
           <p className="text-sm font-medium">Checking Google sign-in...</p>
         </div>
       </div>
@@ -834,12 +934,13 @@ const App: React.FC = () => {
   }
 
   return (
-    <div className="h-screen w-screen bg-[#FDFDFD] dark:bg-[#09090b] text-zinc-900 dark:text-zinc-100 font-sans overflow-hidden flex flex-col relative transition-colors duration-300">
+    <div className="h-screen w-screen bg-gradient-to-br from-[#f4f6fb] via-[#f8fafc] to-[#eef2ff] dark:from-[#070b14] dark:via-[#0b1120] dark:to-[#11152b] text-slate-900 dark:text-slate-100 font-sans overflow-hidden flex flex-col relative transition-colors duration-300">
       
       {/* Background Ambience */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
-          <div className="absolute top-[-20%] right-[-10%] w-[600px] h-[600px] rounded-full bg-blue-50 dark:bg-blue-900/20 blur-3xl opacity-60"></div>
-          <div className="absolute bottom-[-10%] left-[-10%] w-[500px] h-[500px] rounded-full bg-purple-50 dark:bg-purple-900/20 blur-3xl opacity-50"></div>
+          <div className="absolute top-[-18%] right-[-8%] w-[640px] h-[640px] rounded-full bg-indigo-200/45 dark:bg-indigo-700/20 blur-3xl opacity-75"></div>
+          <div className="absolute top-[25%] left-[-12%] w-[520px] h-[520px] rounded-full bg-amber-200/35 dark:bg-amber-600/15 blur-3xl opacity-65"></div>
+          <div className="absolute bottom-[-14%] right-[18%] w-[520px] h-[520px] rounded-full bg-teal-200/35 dark:bg-teal-700/15 blur-3xl opacity-60"></div>
       </div>
 
       {/* Main App Content - aria-hidden and inert when modal is open */}
@@ -853,7 +954,7 @@ const App: React.FC = () => {
           filters={filters}
           onFilterChange={(next) => {
             setFilters(next);
-            if ((viewMode === 'home' || viewMode === 'studio' || viewMode === 'ideas' || viewMode === 'salon') && (next.search || next.gender !== 'All' || next.pitch !== 'All')) {
+            if ((viewMode === 'home' || viewMode === 'studio' || viewMode === 'voice-clone' || viewMode === 'ideas' || viewMode === 'salon') && (next.search || next.gender !== 'All' || next.pitch !== 'All')) {
               setViewMode('grid');
             }
           }}
@@ -884,6 +985,8 @@ const App: React.FC = () => {
           onOpenNotifications={() => setShowAdminNotifications(true)}
           unreadChatCount={unreadChatCount}
           onOpenChat={() => setShowChatHub(true)}
+          onOpenVoiceCompare={handleOpenCompareModal}
+          compareCount={compareVoices.length}
         />
 
         <main className="flex-1 relative flex flex-col overflow-hidden">
@@ -896,6 +999,7 @@ const App: React.FC = () => {
                   voicesCount={VOICE_DATA.length}
                   favoritesCount={favorites.length}
                   onNavigate={handleViewModeChange}
+                  onUseInStudio={handleUseInStudio}
                   onOpenAdminPanel={() => {
                     setAdminInitialTab('salon');
                     setShowAdminPanel(true);
@@ -913,6 +1017,34 @@ const App: React.FC = () => {
                     setShowAdminPanel(true);
                   }}
                 />
+              ) : viewMode === 'voice-clone' ? (
+                <CustomVoiceCloneStudio
+                  profiles={customVoiceProfiles}
+                  activeProfileId={selectedCustomVoiceId}
+                  onSelectProfile={setSelectedCustomVoiceId}
+                  onAddProfile={handleAddCustomVoiceProfile}
+                  onUpdateProfile={handleUpdateCustomVoiceProfile}
+                  onDeleteProfile={handleDeleteCustomVoiceProfile}
+                  onUseProfileInStudio={(profileId) => {
+                    setSelectedCustomVoiceId(profileId);
+                    setViewMode('studio');
+                  }}
+                  onBackToStudio={() => handleViewModeChange('studio')}
+                  onBeforeGenerate={consumeAiQuota}
+                  onOpenLegal={setLegalTab}
+                  isAdmin={isAdmin}
+                  isDarkMode={isDarkMode}
+                  billingConfig={billingConfig}
+                  userPlan={effectiveUserPlan}
+                  proPackageType={proPackageType}
+                  usedToday={effectiveUsedToday}
+                  bonusCredits={bonusCredits}
+                  onOpenUpgradePackage={(pkg) => {
+                    setProSelectedPackage(pkg);
+                    setProModalTab('pro');
+                    setShowProModal(true);
+                  }}
+                />
               ) : viewMode === 'studio' ? (
                 <TtsStudio
                   voices={VOICE_DATA}
@@ -923,6 +1055,8 @@ const App: React.FC = () => {
                   incomingDraft={studioDraft}
                   onOpenIdeas={() => handleViewModeChange('ideas')}
                   isAdmin={isAdmin}
+                  userId={user.uid}
+                  isDarkMode={isDarkMode}
                   apiBaseUrl={billingConfig.apiBaseUrl || ''}
                   billingConfig={billingConfig}
                   userPlan={effectiveUserPlan}
@@ -939,6 +1073,11 @@ const App: React.FC = () => {
                     setAdminInitialTab('settings');
                     setShowAdminPanel(true);
                   }}
+                  customVoices={customVoiceProfiles}
+                  selectedCustomVoiceId={selectedCustomVoiceId}
+                  onSelectCustomVoice={setSelectedCustomVoiceId}
+                  onOpenVoiceCloneTool={() => handleViewModeChange('voice-clone')}
+                  onOpenVoiceCompare={handleOpenCompareModal}
                 />
               ) : viewMode === 'ideas' ? (
                 <TrendingIdeas
@@ -969,7 +1108,10 @@ const App: React.FC = () => {
                             favorites={favorites}
                             onToggleFavorite={toggleFavorite}
                             onUseInStudio={handleUseInStudio}
+                            compareVoices={compareVoices}
+                            onToggleCompare={handleToggleCompareVoice}
                             disabled={isModalOpen}
+                            isDarkMode={isDarkMode}
                          />
                     </div>
                   ) : (
@@ -982,6 +1124,10 @@ const App: React.FC = () => {
                           onToggleFavorite={toggleFavorite}
                           onUseInStudio={handleUseInStudio}
                           onOpenLegal={setLegalTab}
+                          compareVoices={compareVoices}
+                          onToggleCompare={handleToggleCompareVoice}
+                          onClearCompare={() => setCompareVoices([])}
+                          onOpenCompare={handleOpenCompareModal}
                       />
                     </div>
                   )
@@ -1002,14 +1148,14 @@ const App: React.FC = () => {
                           {favorites.length === 0 ? (
                             <button 
                                 onClick={() => setViewMode('grid')}
-                                className="px-5 py-2 bg-zinc-900 dark:bg-indigo-600 text-white rounded-full text-sm font-medium hover:bg-zinc-800 dark:hover:bg-indigo-500 transition-colors"
+                                className="px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-blue-600 text-white rounded-full text-sm font-semibold hover:from-indigo-500 hover:to-blue-500 shadow-md shadow-indigo-500/20 transition-all"
                             >
                                 Browse Voices
                             </button>
                           ) : (
                             <button 
                                 onClick={() => setFilters({ gender: 'All', pitch: 'All', search: '' })}
-                                className="px-5 py-2 bg-zinc-900 dark:bg-indigo-600 text-white rounded-full text-sm font-medium hover:bg-zinc-800 dark:hover:bg-indigo-500 transition-colors"
+                                className="px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-blue-600 text-white rounded-full text-sm font-semibold hover:from-indigo-500 hover:to-blue-500 shadow-md shadow-indigo-500/20 transition-all"
                             >
                                 Clear Filters
                             </button>
@@ -1019,14 +1165,14 @@ const App: React.FC = () => {
               ) : (
                   <div className="w-full h-full flex items-center justify-center pb-24">
                       <div className="text-center animate-fade-in">
-                          <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 mb-6 shadow-sm">
-                              <Info size={32} className="text-zinc-300 dark:text-zinc-500" />
+                          <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 mb-6 shadow-sm">
+                              <Info size={32} className="text-indigo-500 dark:text-indigo-400" />
                           </div>
-                          <h3 className="text-xl font-serif text-zinc-900 dark:text-white mb-2">No voices found</h3>
-                          <p className="text-zinc-500 dark:text-zinc-400 mb-6">Try adjusting your filters or use AI Match.</p>
+                          <h3 className="text-xl font-serif text-slate-900 dark:text-white mb-2">No voices found</h3>
+                          <p className="text-slate-500 dark:text-slate-400 mb-6">Try adjusting your filters or use AI Match.</p>
                           <button 
                               onClick={() => setShowVoiceFinder(true)}
-                              className="px-4 py-2 bg-zinc-900 dark:bg-indigo-600 text-white rounded-full text-sm font-medium hover:bg-zinc-800 dark:hover:bg-indigo-500 transition-colors"
+                              className="px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-blue-600 text-white rounded-full text-sm font-semibold hover:from-indigo-500 hover:to-blue-500 shadow-md shadow-indigo-500/20 transition-all"
                           >
                               Open AI Casting
                           </button>
@@ -1035,10 +1181,24 @@ const App: React.FC = () => {
               )}
               
               {!aiResult && filteredVoices.length > 0 && viewMode === 'carousel' && (
-                  <div className="absolute bottom-6 left-0 right-0 text-center pointer-events-none">
-                      <p className="text-xs text-zinc-400 dark:text-zinc-500 font-medium tracking-widest uppercase bg-white/50 dark:bg-zinc-900/50 backdrop-blur-sm inline-block px-3 py-1 rounded-full border border-white/50 dark:border-zinc-800">
+                  <div className="absolute bottom-6 left-0 right-0 flex flex-wrap items-center justify-center gap-3 pointer-events-none px-4">
+                      <p className="text-xs text-indigo-700 dark:text-indigo-200 font-semibold tracking-widest uppercase bg-white/80 dark:bg-indigo-950/70 backdrop-blur-md inline-block px-3.5 py-1.5 rounded-full border border-indigo-200/80 dark:border-indigo-800/80 shadow-sm tabular-nums">
                           {activeIndex + 1} / {filteredVoices.length}
                       </p>
+                      <button
+                        type="button"
+                        onClick={handleOpenCompareModal}
+                        className="pointer-events-auto inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/90 dark:bg-slate-900/90 hover:bg-indigo-50 dark:hover:bg-slate-800 text-xs font-semibold text-indigo-700 dark:text-amber-300 border border-indigo-200/80 dark:border-indigo-800/80 shadow-sm transition-colors"
+                      >
+                        <ArrowLeftRight size={12} />
+                        <span>
+                          {compareVoices.length === 2
+                            ? `Compare ${compareVoices[0]} vs ${compareVoices[1]}`
+                            : compareVoices.length === 1
+                            ? `Comparing ${compareVoices[0]} (+1)`
+                            : 'Compare Voices'}
+                        </span>
+                      </button>
                   </div>
               )}
         </main>
@@ -1122,7 +1282,7 @@ const App: React.FC = () => {
       {isAdmin && unreadIssuesCount > 0 && !showAdminNotifications && !floatingNoticeHidden && (
         <aside
           aria-label="Admin Issue Notification"
-          className="fixed bottom-4 right-4 z-[80] w-[calc(100%-2rem)] max-w-sm rounded-2xl bg-white dark:bg-zinc-900 border border-rose-200 dark:border-rose-900 shadow-2xl p-4 space-y-3 animate-slide-up"
+          className="fixed bottom-16 sm:bottom-4 right-4 z-[80] w-[calc(100%-2rem)] max-w-sm rounded-2xl bg-white dark:bg-zinc-900 border border-rose-200 dark:border-rose-900 shadow-2xl p-4 space-y-3 animate-slide-up"
         >
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-center gap-2.5">
@@ -1189,7 +1349,7 @@ const App: React.FC = () => {
         <button
           type="button"
           onClick={() => setShowChatHub(true)}
-          className="fixed bottom-4 left-4 z-[70] inline-flex items-center gap-2 px-4 py-2.5 rounded-full bg-zinc-900 dark:bg-indigo-600 hover:bg-zinc-800 dark:hover:bg-indigo-500 text-white shadow-xl border border-white/10 transition-all hover:scale-105 active:scale-95"
+          className="fixed bottom-4 left-4 z-[70] inline-flex items-center gap-2 px-4 py-2.5 rounded-full bg-gradient-to-r from-indigo-600 via-blue-600 to-violet-600 hover:from-indigo-500 hover:via-blue-500 hover:to-violet-500 text-white shadow-xl shadow-indigo-600/25 border border-white/20 transition-all hover:scale-105 active:scale-95"
           aria-label="Open Chat List"
           title="চ্যাট লিস্ট · মতামত ও আলোচনা"
         >
@@ -1212,6 +1372,30 @@ const App: React.FC = () => {
           onClose={() => setShowChatHub(false)}
         />
       )}
+
+      {showCompareModal && (() => {
+        const [initialA, initialB] = getInitialComparePair();
+        return (
+          <VoiceComparisonModal
+            voices={VOICE_DATA}
+            initialVoiceA={initialA}
+            initialVoiceB={initialB}
+            favorites={favorites}
+            onToggleFavorite={toggleFavorite}
+            onUseInStudio={(voiceName) => {
+              setShowCompareModal(false);
+              handleUseInStudio(voiceName);
+            }}
+            onSyncPair={(a, b) => {
+              setCompareVoices((prev) =>
+                prev[0] === a && prev[1] === b ? prev : [a, b]
+              );
+            }}
+            onClose={() => setShowCompareModal(false)}
+            isDarkMode={isDarkMode}
+          />
+        );
+      })()}
 
     </div>
   );

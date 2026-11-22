@@ -20,11 +20,12 @@ import {
   X,
 } from 'lucide-react';
 import { auth, signInWithGoogle } from '../firebase';
-import { reportAppIssue } from '../utils/appIssues';
+import { reportAppIssue, isBenignAudioInterrupt } from '../utils/appIssues';
 import { VOICE_DATA } from '../constants';
 import AudioVisualizer from './AudioVisualizer';
 import AdBanner from './AdBanner';
 import SiteLegalModal, { LegalTab } from './SiteLegalModal';
+import { FEATURED_VOICE_ALBUMS, STUDIO_MEDIA, getVoiceAlbumVisual } from '../utils/studioAlbums';
 
 interface GoogleLoginGateProps {
   isDarkMode: boolean;
@@ -88,6 +89,8 @@ const GoogleLoginGate: React.FC<GoogleLoginGateProps> = ({ isDarkMode, toggleThe
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
+
+    let cancelled = false;
     audio.pause();
     audio.currentTime = 0;
 
@@ -95,21 +98,24 @@ const GoogleLoginGate: React.FC<GoogleLoginGateProps> = ({ isDarkMode, toggleThe
       const target = VOICE_DATA.find((v) => v.name === playingVoice);
       if (target) {
         audio.src = target.audioSampleUrl;
-        audio.play().catch((err) => {
-          console.error('Sample playback failed:', err);
-          setPlayingVoice(null);
-        });
+        const playPromise = audio.play();
+        if (playPromise !== undefined) {
+          playPromise.catch((err) => {
+            if (cancelled || isBenignAudioInterrupt(err)) {
+              return;
+            }
+            console.warn('Sample playback unavailable:', err);
+            setPlayingVoice((curr) => (curr === playingVoice ? null : curr));
+          });
+        }
       }
     }
-  }, [playingVoice]);
 
-  useEffect(() => {
     return () => {
-      if (audioRef.current) {
-        audioRef.current.pause();
-      }
+      cancelled = true;
+      audio.pause();
     };
-  }, []);
+  }, [playingVoice]);
 
   const handleToggleSample = (voiceName: string) => {
     setPlayingVoice((curr) => (curr === voiceName ? null : voiceName));
@@ -167,7 +173,7 @@ const GoogleLoginGate: React.FC<GoogleLoginGateProps> = ({ isDarkMode, toggleThe
   };
 
   return (
-    <div className="min-h-screen w-full bg-[#fcfcfc] dark:bg-[#09090b] text-zinc-900 dark:text-zinc-100 font-sans relative transition-colors duration-300">
+    <div className="min-h-screen w-full bg-gradient-to-br from-[#f4f6fb] via-[#f8fafc] to-[#eef2ff] dark:from-[#070b14] dark:via-[#0b1120] dark:to-[#11152b] text-slate-900 dark:text-slate-100 font-sans relative transition-colors duration-300">
       <audio
         ref={audioRef}
         onEnded={() => setPlayingVoice(null)}
@@ -175,12 +181,12 @@ const GoogleLoginGate: React.FC<GoogleLoginGateProps> = ({ isDarkMode, toggleThe
       />
 
       {/* Top Navigation Bar (Clean 3-Zone Contract) */}
-      <header className="sticky top-0 z-40 w-full bg-white/85 dark:bg-zinc-950/85 backdrop-blur-xl border-b border-zinc-200/80 dark:border-zinc-800/80">
+      <header className="sticky top-0 z-40 w-full bg-white/85 dark:bg-[#0b1120]/90 backdrop-blur-xl border-b border-indigo-100/80 dark:border-indigo-950/80">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-8">
           {/* Zone 1: Brand Wordmark */}
           <a
             href="#top"
-            className="text-lg font-bold tracking-tight text-zinc-900 dark:text-white whitespace-nowrap shrink-0"
+            className="text-lg font-bold tracking-tight bg-gradient-to-r from-indigo-700 via-blue-700 to-amber-600 dark:from-indigo-300 dark:via-sky-300 dark:to-amber-300 bg-clip-text text-transparent whitespace-nowrap shrink-0"
           >
             Srabon Go
           </a>
@@ -222,7 +228,7 @@ const GoogleLoginGate: React.FC<GoogleLoginGateProps> = ({ isDarkMode, toggleThe
               type="button"
               onClick={handleGoogleSignIn}
               disabled={loading}
-              className="hidden sm:inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-zinc-900 dark:bg-indigo-600 text-white text-xs sm:text-sm font-semibold hover:bg-zinc-800 dark:hover:bg-indigo-500 transition-colors whitespace-nowrap shrink-0 disabled:opacity-60"
+              className="hidden sm:inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white text-xs sm:text-sm font-semibold shadow-sm shadow-indigo-500/20 transition-all whitespace-nowrap shrink-0 disabled:opacity-60"
             >
               {loading && <Loader2 size={14} className="animate-spin" />}
               <span>Sign In</span>
@@ -343,12 +349,12 @@ const GoogleLoginGate: React.FC<GoogleLoginGateProps> = ({ isDarkMode, toggleThe
                   type="button"
                   onClick={handleGoogleSignIn}
                   disabled={loading}
-                  className="inline-flex items-center justify-center gap-3 py-3.5 px-6 rounded-xl bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 font-semibold text-sm shadow-sm hover:bg-zinc-800 dark:hover:bg-zinc-100 transition-all active:scale-[0.99] whitespace-nowrap shrink-0 disabled:opacity-60"
+                  className="inline-flex items-center justify-center gap-3 py-3.5 px-6 rounded-xl bg-gradient-to-r from-indigo-600 via-blue-600 to-violet-600 hover:from-indigo-500 hover:via-blue-500 hover:to-violet-500 text-white font-semibold text-sm shadow-lg shadow-indigo-600/25 transition-all active:scale-[0.99] whitespace-nowrap shrink-0 disabled:opacity-60"
                 >
                   {loading ? (
                     <Loader2 size={18} className="animate-spin" />
                   ) : (
-                    <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
+                    <svg className="w-5 h-5 shrink-0 bg-white rounded-full p-0.5" viewBox="0 0 24 24" aria-hidden="true">
                       <path
                         fill="#4285F4"
                         d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17Z"
@@ -372,48 +378,58 @@ const GoogleLoginGate: React.FC<GoogleLoginGateProps> = ({ isDarkMode, toggleThe
 
                 <a
                   href="#voices"
-                  className="inline-flex items-center justify-center gap-2 py-3.5 px-6 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-200 font-medium text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors whitespace-nowrap shrink-0"
+                  className="inline-flex items-center justify-center gap-2 py-3.5 px-6 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/70 text-amber-800 dark:text-amber-300 font-semibold text-sm hover:bg-amber-100 dark:hover:bg-amber-900/50 transition-colors whitespace-nowrap shrink-0"
                 >
                   <AudioLines size={16} />
                   <span>Listen to Voice Samples</span>
                 </a>
               </div>
 
-              <div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
+              <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
                 <ShieldCheck size={14} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
                 <span>Secured by Google Sign-In · Daily free quota included · Instant referral rewards</span>
               </div>
             </div>
 
-            {/* Right: Interactive Live Voice Preview Console */}
-            <div className="lg:col-span-6 flex flex-col justify-between rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-6 sm:p-8 space-y-6">
-              <div className="flex items-center justify-between gap-4 border-b border-zinc-100 dark:border-zinc-800 pb-4">
-                <div>
-                  <h2 className="text-base font-semibold text-zinc-900 dark:text-white">
-                    Live Studio Voice Preview
-                  </h2>
-                  <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                    Click any voice below to audition sample audio before signing in
-                  </p>
+            {/* Right: Interactive Live Voice Preview Console with Studio Art */}
+            <div className="lg:col-span-6 flex flex-col justify-between rounded-2xl bg-white/95 dark:bg-[#0f172a]/95 border border-indigo-100 dark:border-indigo-900/60 overflow-hidden shadow-md">
+              <div className="relative h-40 w-full overflow-hidden bg-slate-900">
+                <img
+                  src={STUDIO_MEDIA.heroStudio}
+                  alt="Srabon Go AI Voice Studio Console"
+                  referrerPolicy="no-referrer"
+                  className="w-full h-full object-cover"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-slate-950/85 via-slate-950/35 to-transparent" />
+                <div className="absolute bottom-3 left-5 right-5 flex items-end justify-between gap-4 text-white">
+                  <div>
+                    <h2 className="text-base font-semibold">
+                      Live Studio Voice Preview
+                    </h2>
+                    <p className="text-xs text-amber-200/90">
+                      Click any voice below to audition sample audio before signing in
+                    </p>
+                  </div>
+                  <span className="text-xs font-mono tabular-nums text-indigo-200">
+                    {VOICE_DATA.length} voices
+                  </span>
                 </div>
-                <span className="text-xs font-mono tabular-nums text-zinc-500 dark:text-zinc-400">
-                  {VOICE_DATA.length} voices
-                </span>
               </div>
 
-              {/* Waveform Box */}
-              <div className="h-28 rounded-xl bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 overflow-hidden relative flex items-center justify-center">
-                {playingVoice ? (
-                  <AudioVisualizer
-                    isPlaying={true}
-                    color={isDarkMode ? '#a5b4fc' : '#18181b'}
-                  />
-                ) : (
-                  <p className="text-xs text-zinc-400 dark:text-zinc-500">
-                    Select a voice sample below to visualize playback
-                  </p>
-                )}
-              </div>
+              <div className="p-6 space-y-5">
+                {/* Waveform Box */}
+                <div className="h-24 rounded-xl bg-gradient-to-r from-indigo-950 via-slate-900 to-teal-950 border border-indigo-800/50 overflow-hidden relative flex items-center justify-center">
+                  {playingVoice ? (
+                    <AudioVisualizer
+                      isPlaying={true}
+                      color="#fbbf24"
+                    />
+                  ) : (
+                    <p className="text-xs text-indigo-200/80">
+                      Select a voice sample below to visualize playback
+                    </p>
+                  )}
+                </div>
 
               {/* 4 Playable Voice Rows */}
               <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
@@ -453,6 +469,7 @@ const GoogleLoginGate: React.FC<GoogleLoginGateProps> = ({ isDarkMode, toggleThe
                     </div>
                   );
                 })}
+              </div>
               </div>
             </div>
           </div>
@@ -574,60 +591,120 @@ const GoogleLoginGate: React.FC<GoogleLoginGateProps> = ({ isDarkMode, toggleThe
           </div>
         </section>
 
-        {/* Voice Library Preview Grid */}
-        <section id="voices" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14 sm:py-20 border-t border-zinc-200/70 dark:border-zinc-800/70">
-          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-10">
-            <div className="space-y-2">
-              <h2 className="text-2xl sm:text-4xl font-serif font-medium text-zinc-900 dark:text-white">
-                Explore Voice Personalities
-              </h2>
-              <p className="text-sm text-zinc-600 dark:text-zinc-400">
-                Audition 6 featured voices now—sign in to unlock all {VOICE_DATA.length} voices, 3D Carousel, and custom TTS Studio.
-              </p>
+        {/* Voice Library & Premium Albums Preview Grid */}
+        <section id="voices" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14 sm:py-20 border-t border-indigo-100 dark:border-slate-800/80 space-y-12">
+          <div>
+            <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
+              <div className="space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-widest text-indigo-600 dark:text-amber-400">
+                  Curated Voice Albums
+                </p>
+                <h2 className="text-2xl sm:text-4xl font-serif font-medium text-slate-900 dark:text-white">
+                  প্রিমিয়াম ভয়েস অ্যালবাম ও স্যাম্পল
+                </h2>
+                <p className="text-sm text-slate-600 dark:text-slate-300">
+                  অ্যালবাম আর্টসহ ৬টি জনপ্রিয় কণ্ঠস্বর এখান থেকেই শুনুন—সাইন-ইন করে আনলক করুন সব {VOICE_DATA.length}টি ভয়েস।
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleGoogleSignIn}
+                disabled={loading}
+                className="text-sm font-semibold text-indigo-600 dark:text-amber-300 hover:underline underline-offset-4 whitespace-nowrap shrink-0 self-start sm:self-auto"
+              >
+                Open Full Library →
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={handleGoogleSignIn}
-              disabled={loading}
-              className="text-sm font-semibold text-indigo-600 dark:text-indigo-400 hover:underline underline-offset-4 whitespace-nowrap shrink-0 self-start sm:self-auto"
-            >
-              Open Full Library →
-            </button>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {FEATURED_VOICE_ALBUMS.map((album) => {
+                const leadVoice = album.featuredVoiceNames[0];
+                const isAlbumPlaying = playingVoice === leadVoice;
+                return (
+                  <div
+                    key={album.id}
+                    className={`rounded-2xl border overflow-hidden shadow-sm flex flex-col justify-between ${album.surfaceTintClass} ${album.borderHoverClass}`}
+                  >
+                    <div>
+                      <div className="relative aspect-[4/3] w-full overflow-hidden bg-slate-900">
+                        <img
+                          src={album.coverImg}
+                          alt={album.titleEn}
+                          referrerPolicy="no-referrer"
+                          className="w-full h-full object-cover transition-transform duration-500 hover:scale-105"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-slate-950/20 to-transparent" />
+                        <div className="absolute bottom-3 left-4 right-4 text-white">
+                          <p className="text-[11px] font-medium text-amber-200">{album.titleEn}</p>
+                          <h3 className="text-lg font-serif font-medium">{album.titleBn}</h3>
+                        </div>
+                      </div>
+                      <div className="p-5 space-y-2">
+                        <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                          {album.subtitleBn}
+                        </p>
+                        <p className={`text-xs font-semibold ${album.accentTextClass}`}>
+                          {album.featuredVoiceNames.join(' · ')}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="px-5 pb-5">
+                      <button
+                        type="button"
+                        onClick={() => handleToggleSample(leadVoice)}
+                        className={`w-full inline-flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-semibold transition-all ${album.buttonBgClass}`}
+                      >
+                        {isAlbumPlaying ? <Pause size={14} /> : <Play size={14} />}
+                        <span>{isAlbumPlaying ? `Stop ${leadVoice}` : `Audition ${leadVoice}`}</span>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
             {featuredVoices.map((voice) => {
               const active = playingVoice === voice.name;
+              const visual = getVoiceAlbumVisual(voice);
               return (
                 <div
                   key={voice.name}
-                  className="rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-5 flex flex-col justify-between gap-4"
+                  className="rounded-2xl bg-white/95 dark:bg-[#0f172a]/95 border border-slate-200 dark:border-slate-800 p-4 flex items-center gap-4 shadow-sm hover:border-indigo-300 dark:hover:border-indigo-700 transition-colors"
                 >
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <h3 className="text-lg font-medium text-zinc-900 dark:text-white">
+                  <div className="relative w-20 h-20 rounded-xl overflow-hidden shrink-0 bg-slate-900">
+                    <img
+                      src={visual.coverImg}
+                      alt={`${voice.name} cover`}
+                      referrerPolicy="no-referrer"
+                      className="w-full h-full object-cover"
+                    />
+                    <div className="absolute inset-0 bg-slate-950/35 flex items-center justify-center">
+                      <button
+                        type="button"
+                        onClick={() => handleToggleSample(voice.name)}
+                        aria-label={active ? `Stop ${voice.name}` : `Play ${voice.name}`}
+                        className="w-9 h-9 rounded-full bg-white/95 text-indigo-700 flex items-center justify-center shadow-md hover:scale-105 transition-transform"
+                      >
+                        {active ? <Pause size={14} fill="currentColor" /> : <Play size={14} fill="currentColor" className="ml-0.5" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <div className="flex items-baseline justify-between gap-2">
+                      <h3 className="text-base font-serif font-medium text-slate-900 dark:text-white truncate">
                         {voice.name}
                       </h3>
-                      <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                      <span className="text-[11px] font-medium text-indigo-600 dark:text-amber-300 shrink-0">
                         {voice.analysis.gender} · {voice.pitch}
                       </span>
                     </div>
-                    <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed">
+                    <p className="text-xs text-slate-600 dark:text-slate-400 line-clamp-2 leading-relaxed">
                       {voice.analysis.characteristics.join(', ')}
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => handleToggleSample(voice.name)}
-                    className={`w-full inline-flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-semibold border transition-colors ${
-                      active
-                        ? 'bg-indigo-600 text-white border-indigo-600'
-                        : 'bg-zinc-50 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-700'
-                    }`}
-                  >
-                    {active ? <Pause size={14} /> : <Play size={14} />}
-                    <span>{active ? 'Stop Sample' : 'Play Sample'}</span>
-                  </button>
                 </div>
               );
             })}
@@ -688,7 +765,7 @@ const GoogleLoginGate: React.FC<GoogleLoginGateProps> = ({ isDarkMode, toggleThe
               <div className="space-y-4">
                 <div>
                   <p className="text-xs font-semibold text-indigo-600 dark:text-indigo-400">
-                    For high-volume voice studios
+                    Monthly (30d) &amp; Yearly (365d) Pro
                   </p>
                   <h3 className="text-2xl font-serif font-medium text-zinc-900 dark:text-white mt-1">
                     Srabon Go Pro
@@ -700,11 +777,11 @@ const GoogleLoginGate: React.FC<GoogleLoginGateProps> = ({ isDarkMode, toggleThe
                 <ul className="space-y-2.5 text-sm text-zinc-700 dark:text-zinc-300">
                   <li className="flex items-start gap-2.5">
                     <Check size={16} className="text-indigo-600 dark:text-indigo-400 shrink-0 mt-0.5" />
-                    <span>Unlimited daily Voice Studio TTS generations</span>
+                    <span>Monthly (30d): Unlimited daily TTS, 2,500 chars &amp; 3 saved scripts</span>
                   </li>
                   <li className="flex items-start gap-2.5">
                     <Check size={16} className="text-indigo-600 dark:text-indigo-400 shrink-0 mt-0.5" />
-                    <span>Unlimited AI Casting Director prompts &amp; character matches</span>
+                    <span>Yearly (365d): 5,000 chars, Speed/Boost audio, custom loop &amp; +4 Pro styles</span>
                   </li>
                   <li className="flex items-start gap-2.5">
                     <Check size={16} className="text-indigo-600 dark:text-indigo-400 shrink-0 mt-0.5" />

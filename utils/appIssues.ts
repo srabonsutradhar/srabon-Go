@@ -69,6 +69,23 @@ export function clearResolvedSessionIssues() {
   if (removed) notifyListeners();
 }
 
+export function isBenignAudioInterrupt(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const name = 'name' in err && typeof (err as { name?: unknown }).name === 'string'
+    ? (err as { name: string }).name.trim().toLowerCase()
+    : '';
+  const message = 'message' in err && typeof (err as { message?: unknown }).message === 'string'
+    ? (err as { message: string }).message.trim().toLowerCase()
+    : '';
+  return (
+    name === 'aborterror' ||
+    message.includes('interrupted by a call to pause') ||
+    message.includes('interrupted by a new load request') ||
+    message.includes('play() request was interrupted') ||
+    message.includes('request was aborted')
+  );
+}
+
 export function isBenignAppIssueNoise(message?: string, name?: string): boolean {
   const safeName = (name || '').trim().toLowerCase();
   const safeMsg = (message || '').trim().toLowerCase();
@@ -78,6 +95,8 @@ export function isBenignAppIssueNoise(message?: string, name?: string): boolean 
     safeMsg.includes('aborted without reason') ||
     safeMsg.includes('the user aborted a request') ||
     safeMsg.includes('request was aborted') ||
+    safeMsg.includes('interrupted by a call to pause') ||
+    safeMsg.includes('play() request was interrupted') ||
     safeMsg.includes('resizeobserver') ||
     safeMsg.includes('websocket') ||
     safeMsg.includes('pending promise was never set')

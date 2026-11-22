@@ -90,21 +90,25 @@ export interface FirestoreErrorInfo {
   };
 }
 
-export function handleFirestoreError(
+export function reportFirestoreError(
   error: unknown,
   operationType: OperationType,
   path: string | null
-) {
+): FirestoreErrorInfo {
+  const errCode = typeof (error as any)?.code === 'string' ? (error as any).code : '';
+  const message = error instanceof Error ? error.message : String(error);
+  const currentUser = auth.currentUser;
+
   const errInfo: FirestoreErrorInfo = {
-    error: error instanceof Error ? error.message : String(error),
+    error: message,
     authInfo: {
-      userId: auth.currentUser?.uid,
-      email: auth.currentUser?.email,
-      emailVerified: auth.currentUser?.emailVerified,
-      isAnonymous: auth.currentUser?.isAnonymous,
-      tenantId: auth.currentUser?.tenantId,
+      userId: currentUser?.uid,
+      email: currentUser?.email,
+      emailVerified: currentUser?.emailVerified,
+      isAnonymous: currentUser?.isAnonymous,
+      tenantId: currentUser?.tenantId,
       providerInfo:
-        auth.currentUser?.providerData?.map((provider) => ({
+        currentUser?.providerData?.map((provider) => ({
           providerId: provider.providerId,
           email: provider.email,
         })) || [],
@@ -112,6 +116,12 @@ export function handleFirestoreError(
     operationType,
     path,
   };
+
+  // Ignore expected teardown race when user just signed out
+  if (!currentUser && (errCode === 'permission-denied' || message.toLowerCase().includes('missing or insufficient permissions'))) {
+    return errInfo;
+  }
+
   console.error('Firestore Error: ', JSON.stringify(errInfo));
   if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
     try {
@@ -127,5 +137,14 @@ export function handleFirestoreError(
       );
     } catch {}
   }
+  return errInfo;
+}
+
+export function handleFirestoreError(
+  error: unknown,
+  operationType: OperationType,
+  path: string | null
+) {
+  const errInfo = reportFirestoreError(error, operationType, path);
   throw new Error(JSON.stringify(errInfo));
 }

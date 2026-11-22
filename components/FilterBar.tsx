@@ -26,6 +26,8 @@ import {
   MessageSquare,
   MoreVertical,
   X,
+  UserCheck,
+  ArrowLeftRight,
 } from 'lucide-react';
 import type { User } from 'firebase/auth';
 
@@ -53,11 +55,14 @@ interface FilterBarProps {
   onOpenNotifications?: () => void;
   unreadChatCount?: number;
   onOpenChat?: () => void;
+  onOpenVoiceCompare?: () => void;
+  compareCount?: number;
 }
 
 const VIEW_LABELS: Record<AppViewMode, string> = {
   home: 'Home',
   studio: 'Voice Studio',
+  'voice-clone': 'My Voice Pro',
   salon: 'Salon',
   ideas: 'Ideas',
   carousel: '3D Voices',
@@ -89,6 +94,8 @@ const FilterBar: React.FC<FilterBarProps> = ({
   onOpenNotifications,
   unreadChatCount = 0,
   onOpenChat,
+  onOpenVoiceCompare,
+  compareCount = 0,
 }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuContainerRef = useRef<HTMLDivElement | null>(null);
@@ -141,6 +148,7 @@ const FilterBar: React.FC<FilterBarProps> = ({
   const primaryDesktopNav: { mode: AppViewMode; label: string }[] = [
     { mode: 'home', label: 'Home' },
     { mode: 'studio', label: 'Voice Studio' },
+    { mode: 'voice-clone', label: 'My Voice (Pro)' },
     { mode: 'salon', label: 'Salon' },
     { mode: 'ideas', label: 'Ideas' },
     { mode: 'grid', label: 'Voices' },
@@ -154,6 +162,11 @@ const FilterBar: React.FC<FilterBarProps> = ({
   }[] = [
     { mode: 'home', label: 'Home', icon: <Home size={16} /> },
     { mode: 'studio', label: 'Voice Studio', icon: <AudioLines size={16} /> },
+    {
+      mode: 'voice-clone',
+      label: 'My Voice (Pro)',
+      icon: <UserCheck size={16} className="text-amber-500" />,
+    },
     { mode: 'salon', label: 'Jagannath Salon', icon: <Scissors size={16} /> },
     { mode: 'ideas', label: 'AI Ideas', icon: <TrendingUp size={16} /> },
     { mode: 'grid', label: 'Voice Grid', icon: <LayoutGrid size={16} /> },
@@ -180,7 +193,7 @@ const FilterBar: React.FC<FilterBarProps> = ({
   ];
 
   return (
-    <header className="relative z-50 w-full bg-white/90 dark:bg-zinc-950/90 backdrop-blur-xl border-b border-zinc-200 dark:border-zinc-800 transition-colors duration-300">
+    <header className="relative z-50 w-full bg-white/85 dark:bg-[#0b1120]/90 backdrop-blur-xl border-b border-indigo-100/80 dark:border-indigo-950/80 transition-colors duration-300">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between gap-4 sm:gap-8">
         {/* Zone 1: Clean Brand Wordmark (+ quiet mobile page indicator) */}
         <div className="flex items-center gap-2.5 min-w-0 shrink-0">
@@ -190,20 +203,20 @@ const FilterBar: React.FC<FilterBarProps> = ({
             className="flex items-center gap-2.5 text-left whitespace-nowrap shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 rounded-lg"
             title="হোম পেজ"
           >
-            <div className="w-8 h-8 sm:w-9 sm:h-9 bg-zinc-900 dark:bg-zinc-100 rounded-xl flex items-center justify-center shrink-0">
-              <Mic size={17} className="text-white dark:text-zinc-900" />
+            <div className="w-8 h-8 sm:w-9 sm:h-9 bg-gradient-to-br from-indigo-600 via-blue-600 to-amber-500 rounded-xl flex items-center justify-center shrink-0 shadow-sm shadow-indigo-500/20">
+              <Mic size={17} className="text-white" />
             </div>
-            <span className="text-base sm:text-lg font-bold tracking-tight text-zinc-900 dark:text-white font-display whitespace-nowrap">
+            <span className="text-base sm:text-lg font-bold tracking-tight text-slate-900 dark:text-white font-display whitespace-nowrap">
               Srabon Go
             </span>
           </button>
           <span
             aria-hidden="true"
-            className="lg:hidden text-zinc-300 dark:text-zinc-700 text-sm"
+            className="lg:hidden text-indigo-300 dark:text-indigo-700 text-sm"
           >
             ·
           </span>
-          <span className="lg:hidden text-xs font-medium text-zinc-500 dark:text-zinc-400 truncate max-w-[110px]">
+          <span className="lg:hidden text-xs font-medium text-indigo-600 dark:text-amber-300 truncate max-w-[110px]">
             {VIEW_LABELS[viewMode]}
           </span>
         </div>
@@ -249,8 +262,8 @@ const FilterBar: React.FC<FilterBarProps> = ({
             title="সকল অপশন (Options)"
             className={`relative min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-xl border transition-colors ${
               isMenuOpen
-                ? 'bg-zinc-900 dark:bg-indigo-600 border-zinc-900 dark:border-indigo-500 text-white'
-                : 'bg-zinc-100 dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-800'
+                ? 'bg-gradient-to-br from-indigo-600 to-blue-600 border-indigo-500 text-white shadow-md shadow-indigo-500/20'
+                : 'bg-indigo-50/80 dark:bg-slate-900 border-indigo-200/80 dark:border-indigo-900/70 text-indigo-700 dark:text-indigo-200 hover:bg-indigo-100 dark:hover:bg-slate-800'
             }`}
           >
             {isMenuOpen ? <X size={18} /> : <MoreVertical size={18} />}
@@ -365,8 +378,8 @@ const FilterBar: React.FC<FilterBarProps> = ({
                         onClick={() => handleNavigate(item.mode)}
                         className={`min-h-[42px] px-3 py-2 rounded-xl text-xs font-medium flex items-center justify-between gap-2 transition-colors text-left ${
                           active
-                            ? 'bg-zinc-900 dark:bg-indigo-600 text-white'
-                            : 'bg-zinc-50 dark:bg-zinc-800/80 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+                            ? 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white shadow-sm'
+                            : 'bg-slate-50 dark:bg-slate-800/80 text-slate-700 dark:text-slate-200 hover:bg-indigo-50 dark:hover:bg-slate-800'
                         }`}
                       >
                         <span className="flex items-center gap-2 min-w-0">
@@ -392,6 +405,27 @@ const FilterBar: React.FC<FilterBarProps> = ({
 
               {/* Tools, Chat, Pro, Admin & Theme */}
               <div className="p-2.5 space-y-1">
+                {onOpenVoiceCompare && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsMenuOpen(false);
+                      onOpenVoiceCompare();
+                    }}
+                    className="w-full min-h-[44px] px-3 py-2 rounded-xl flex items-center justify-between gap-3 text-sm font-medium text-zinc-800 dark:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                  >
+                    <span className="flex items-center gap-3">
+                      <ArrowLeftRight size={16} className="text-amber-500 shrink-0" />
+                      <span>Compare Voices (A vs B)</span>
+                    </span>
+                    {compareCount > 0 && (
+                      <span className="text-xs font-semibold text-amber-600 dark:text-amber-400 tabular-nums">
+                        {compareCount}/2
+                      </span>
+                    )}
+                  </button>
+                )}
+
                 <button
                   type="button"
                   onClick={() => {

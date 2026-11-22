@@ -10,7 +10,7 @@ import {
   setDoc,
   writeBatch,
 } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType } from '../firebase';
+import { db, reportFirestoreError, OperationType } from '../firebase';
 
 const PENDING_REF_STORAGE_KEY = 'srabon_pending_ref';
 const REFERRAL_CODE_RE = /^[A-Z0-9]{6,16}$/;
@@ -84,7 +84,7 @@ export async function ensureReferralCodeRegistered(uid: string, code: string): P
       });
     }
   } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, codePath);
+    reportFirestoreError(error, OperationType.WRITE, codePath);
   }
 }
 
@@ -94,7 +94,7 @@ export async function hasUserClaimedReferral(uid: string): Promise<boolean> {
     const snap = await getDoc(doc(db, 'referrals', uid));
     return snap.exists();
   } catch (error) {
-    handleFirestoreError(error, OperationType.GET, refPath);
+    reportFirestoreError(error, OperationType.GET, refPath);
     return false;
   }
 }
@@ -154,7 +154,7 @@ export async function claimReferralCode(
     clearPendingReferral();
     return { status: 'claimed', code };
   } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, `referrals/${userUid}`);
+    reportFirestoreError(error, OperationType.WRITE, `referrals/${userUid}`);
     throw error;
   }
 }

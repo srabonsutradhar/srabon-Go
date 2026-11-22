@@ -29,8 +29,9 @@ import {
   setDoc,
   where,
 } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType } from '../firebase';
+import { db, reportFirestoreError, OperationType } from '../firebase';
 import { reportAppIssue } from '../utils/appIssues';
+import { STUDIO_TIER_LIMITS } from '../utils/studioTiers';
 import {
   BillingConfig,
   PaymentMethod,
@@ -131,6 +132,10 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
   }, [onClose]);
 
   useEffect(() => {
+    if (!user.emailVerified) {
+      setMyRequests([]);
+      return;
+    }
     const reqQuery = query(
       collection(db, 'proRequests'),
       where('uid', '==', user.uid)
@@ -150,11 +155,11 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
         setMyRequests(items.slice(0, 5));
       },
       (error) => {
-        handleFirestoreError(error, OperationType.LIST, 'proRequests');
+        reportFirestoreError(error, OperationType.LIST, 'proRequests');
       }
     );
     return () => unsubscribe();
-  }, [user.uid]);
+  }, [user.uid, user.emailVerified]);
 
   const handleCopyAccount = () => {
     if (!billingConfig.paymentAccount) return;
@@ -297,15 +302,16 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
       setSubmitSuccess(true);
     } catch (err: any) {
       const msg = err?.message || 'Request submission failed.';
-      reportAppIssue({ source: 'ProUpgrade:Payment', severity: 'error', message: msg });
       if (isAdmin) setSubmitError(msg);
-      handleFirestoreError(err, OperationType.CREATE, reqPath);
+      else setSubmitError('রিকোয়েস্ট পাঠাতে সমস্যা হয়েছে। অনুগ্রহ করে কিছুক্ষণ পর আবার চেষ্টা করুন।');
+      reportFirestoreError(err, OperationType.CREATE, reqPath);
     } finally {
       setSubmitting(false);
     }
   };
 
   const hasPending = myRequests.some((r) => r.status === 'pending');
+  const canSubmitProUpgrade = !isAdmin && (userPlan === 'free' || proPackageType !== 'yearly');
 
   return (
     <div
@@ -528,15 +534,15 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
                   <div className="text-xs space-y-0.5">
                     <p className="font-semibold">
                       {isAdmin
-                        ? 'Admin Account (Unlimited)'
+                        ? 'Admin Account (Unlimited · Yearly Studio Pro Perks)'
                         : proPackageType === 'yearly'
-                        ? 'Yearly Pro Package Active (৩৬৫ দিন)'
-                        : proPackageType === 'monthly'
-                        ? 'Monthly Pro Package Active (৩০ দিন)'
-                        : 'Pro Plan Active'}
+                        ? 'Yearly Pro Package Active (৩৬৫ দিন · সব প্রিমিয়াম সুবিধা)'
+                        : 'Monthly Pro Package Active (৩০ দিন)'}
                     </p>
-                    <p className="opacity-80">
-                      সব ভয়েস স্টুডিও ও AI ফিচার কোনো দৈনিক সীমা ছাড়াই চালু রয়েছে
+                    <p className="opacity-85">
+                      {isAdmin || proPackageType === 'yearly'
+                        ? 'সর্বোচ্চ ৫,০০০ অক্ষর, প্লেব্যাক স্পিড, লাউড অ্যালার্ম বুস্ট, ৮টি ভয়েস স্টাইল ও ২৫টি স্ক্রিপ্ট সেভ চালু আছে'
+                        : 'আপনি চাইলে নিচ থেকে Yearly প্যাকেজে আপগ্রেড করে ২× স্ক্রিপ্ট, স্পিড, বুস্ট ও প্রো স্টাইল চালু করতে পারেন'}
                       {proExpiresAtMs && proExpiresAtMs > Date.now() && !isAdmin
                         ? ` • মেয়াদ শেষ: ${new Date(proExpiresAtMs).toLocaleDateString('bn-BD', {
                             year: 'numeric',
@@ -549,58 +555,68 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
                 </div>
               )}
 
-              {userPlan === 'free' && !isAdmin && (
+              {canSubmitProUpgrade && (
                 <div className="space-y-3">
                   {/* Monthly / Yearly Package Selector */}
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <button
                       type="button"
                       onClick={() => setSelectedPackage('monthly')}
-                      className={`p-3.5 rounded-2xl border text-left transition-all ${
+                      className={`p-3.5 rounded-2xl border text-left transition-all flex flex-col justify-between gap-2 ${
                         selectedPackage === 'monthly'
                           ? 'bg-indigo-50/80 dark:bg-indigo-950/40 border-indigo-500 ring-1 ring-indigo-500/40'
                           : 'bg-zinc-50 dark:bg-zinc-800/60 border-zinc-200 dark:border-zinc-700 hover:border-zinc-300'
                       }`}
                     >
-                      <div className="flex items-center justify-between gap-1">
-                        <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
-                          Monthly
-                        </span>
-                        <span className="text-[10px] font-semibold text-zinc-500 dark:text-zinc-400">
-                          ৩০ দিন
-                        </span>
+                      <div>
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
+                            Monthly
+                          </span>
+                          <span className="text-[10px] font-semibold text-zinc-500 dark:text-zinc-400">
+                            {STUDIO_TIER_LIMITS.monthly.validityLabel}
+                          </span>
+                        </div>
+                        <p className="text-lg font-bold text-zinc-900 dark:text-white mt-1 tabular-nums">
+                          {monthlyPrice}
+                        </p>
                       </div>
-                      <p className="text-lg font-bold text-zinc-900 dark:text-white mt-1 tabular-nums">
-                        {monthlyPrice}
-                      </p>
-                      <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                        মাসিক আনলিমিটেড
-                      </p>
+                      <ul className="space-y-1 text-[11px] text-zinc-600 dark:text-zinc-300">
+                        <li>• {STUDIO_TIER_LIMITS.monthly.maxScriptChars.toLocaleString('en-US')} অক্ষর / স্ক্রিপ্ট</li>
+                        <li>• ৪টি স্ট্যান্ডার্ড ভয়েস স্টাইল</li>
+                        <li>• {STUDIO_TIER_LIMITS.monthly.maxSavedScripts}টি কাস্টম স্ক্রিপ্ট সেভ</li>
+                        <li className="text-zinc-400">• সাধারণ স্পিড ও ফিক্সড ১.২স লুপ</li>
+                      </ul>
                     </button>
 
                     <button
                       type="button"
                       onClick={() => setSelectedPackage('yearly')}
-                      className={`p-3.5 rounded-2xl border text-left transition-all ${
+                      className={`p-3.5 rounded-2xl border text-left transition-all flex flex-col justify-between gap-2 ${
                         selectedPackage === 'yearly'
                           ? 'bg-amber-50/90 dark:bg-amber-950/40 border-amber-500 ring-1 ring-amber-500/40'
                           : 'bg-zinc-50 dark:bg-zinc-800/60 border-zinc-200 dark:border-zinc-700 hover:border-zinc-300'
                       }`}
                     >
-                      <div className="flex items-center justify-between gap-1">
-                        <span className="text-[11px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400">
-                          Yearly
-                        </span>
-                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500 text-zinc-950">
-                          ৩৬৫ দিন
-                        </span>
+                      <div>
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="text-[11px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400">
+                            Yearly (Best Value)
+                          </span>
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500 text-zinc-950">
+                            ৩৬৫ দিন
+                          </span>
+                        </div>
+                        <p className="text-lg font-bold text-zinc-900 dark:text-white mt-1 tabular-nums">
+                          {yearlyPrice}
+                        </p>
                       </div>
-                      <p className="text-lg font-bold text-zinc-900 dark:text-white mt-1 tabular-nums">
-                        {yearlyPrice}
-                      </p>
-                      <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                        বাৎসরিক সেরা অফার
-                      </p>
+                      <ul className="space-y-1 text-[11px] text-zinc-700 dark:text-zinc-200">
+                        <li>• <strong>{STUDIO_TIER_LIMITS.yearly.maxScriptChars.toLocaleString('en-US')} অক্ষর</strong> / স্ক্রিপ্ট (২× বড়)</li>
+                        <li>• <strong>+৪টি এক্সক্লুসিভ স্টুডিও স্টাইল</strong> (মোট ৮টি)</li>
+                        <li>• <strong>{STUDIO_TIER_LIMITS.yearly.maxSavedScripts}টি</strong> কাস্টম স্ক্রিপ্ট লাইব্রেরি</li>
+                        <li>• <strong>স্পিড (0.85x–1.25x), +৪০% বুস্ট ও কাস্টম লুপ</strong></li>
+                      </ul>
                     </button>
                   </div>
 
@@ -656,7 +672,7 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
                 </div>
               )}
 
-              {userPlan === 'free' && !isAdmin && (
+              {canSubmitProUpgrade && (
                 <form onSubmit={handleSubmit} className="space-y-4">
                   <h3 className="text-sm font-semibold text-zinc-900 dark:text-white flex items-center gap-2">
                     <Sparkles size={15} className="text-indigo-500" />

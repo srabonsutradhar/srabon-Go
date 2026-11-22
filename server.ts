@@ -484,7 +484,7 @@ async function startServer() {
       const voiceName = typeof req.body?.voiceName === "string" && req.body.voiceName.trim()
         ? req.body.voiceName.trim().slice(0, 50)
         : "Kore";
-      const style = typeof req.body?.style === "string" ? req.body.style.trim().slice(0, 200) : "";
+      const style = typeof req.body?.style === "string" ? req.body.style.trim().slice(0, 450) : "";
 
       if (!text) {
         return res.status(400).json({ error: "Text is required for speech generation." });
