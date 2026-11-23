@@ -208,13 +208,21 @@ const TrendingIdeas: React.FC<TrendingIdeasProps> = ({
           ? 'Write all titles and speakable scripts in crisp, natural English.'
           : 'Write titles and speakable scripts in natural Bengali with modern English creator keywords where helpful.';
 
+      const previousTitles = ideas
+        .map((item) => item.title)
+        .filter(Boolean)
+        .slice(0, 8)
+        .join(' | ');
+      const freshSeed = `${Date.now().toString(36)}-${Math.floor(Math.random() * 10000)}`;
+
       const voiceNames = voices.map((v) => v.name).join(', ');
       const prompt = `
         You are an expert audio content strategist and viral scriptwriter for YouTube Shorts, Facebook Reels, podcasts, educational study alarms, and voiceovers.
 
-        Generate 5 fresh, high-engagement, trending audio topic ideas.
+        Generate 5 brand-new, high-engagement, trending audio topic ideas (Session seed: ${freshSeed}).
         Category focus: ${categoryLabel}
         ${nicheInput.trim() ? `User custom topic / audience focus: "${nicheInput.trim()}"` : ''}
+        ${previousTitles ? `Do NOT repeat or closely copy these previous topics: ${previousTitles}` : ''}
         Language rule: ${languageInstruction}
 
         Available Voice Talents (pick one exact name from this list for each idea):
@@ -236,11 +244,20 @@ const TrendingIdeas: React.FC<TrendingIdeasProps> = ({
           responseMimeType: 'application/json',
           responseSchema: {
             type: Type.OBJECT,
+            required: ['ideas'],
             properties: {
               ideas: {
                 type: Type.ARRAY,
                 items: {
                   type: Type.OBJECT,
+                  required: [
+                    'title',
+                    'category',
+                    'angle',
+                    'script',
+                    'suggestedVoice',
+                    'deliveryStyle',
+                  ],
                   properties: {
                     title: { type: Type.STRING },
                     category: { type: Type.STRING },
@@ -256,12 +273,27 @@ const TrendingIdeas: React.FC<TrendingIdeasProps> = ({
         },
       });
 
-      const rawText = (response.text || '{}')
+      const rawText = (
+        response?.candidates?.[0]?.content?.parts?.[0]?.text ||
+        response?.text ||
+        '{}'
+      )
         .trim()
         .replace(/^```(?:json)?\s*/i, '')
         .replace(/```\s*$/i, '')
         .trim();
-      const parsed = JSON.parse(rawText);
+
+      let parsed: any = {};
+      try {
+        parsed = JSON.parse(rawText);
+      } catch {
+        const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+        if (!jsonMatch) {
+          throw new Error('AI response could not be parsed as JSON.');
+        }
+        parsed = JSON.parse(jsonMatch[0]);
+      }
+
       const validVoiceSet = new Set(voices.map((v) => v.name));
       const fallbackVoice = voices[0]?.name || 'Kore';
 
@@ -271,6 +303,7 @@ const TrendingIdeas: React.FC<TrendingIdeasProps> = ({
               (item: any) =>
                 item &&
                 typeof item.title === 'string' &&
+                item.title.trim().length > 0 &&
                 typeof item.script === 'string' &&
                 item.script.trim().length > 0
             )

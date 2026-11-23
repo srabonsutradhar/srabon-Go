@@ -26,7 +26,7 @@ import OfflineIndicator from './components/OfflineIndicator';
 import { AppIssueRecord, AppViewMode, CustomVoiceProfile, FilterState, AiRecommendation, BillingConfig, ProPackageType, SalonConfig, UserPlan } from './types';
 import { Info, Heart, Loader2, Bell, AlertTriangle, X, MessageSquare, ArrowLeftRight } from 'lucide-react';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { collection, deleteDoc, doc, onSnapshot, query, setDoc, updateDoc, where, serverTimestamp } from 'firebase/firestore';
+import { collection, deleteDoc, doc, onSnapshot, query, runTransaction, setDoc, updateDoc, where, serverTimestamp } from 'firebase/firestore';
 import { auth, db, signOutUser, reportFirestoreError, OperationType } from './firebase';
 import { initGoogleAdsTag } from './utils/googleAds';
 import { setDynamicApiBaseUrl } from './utils/audio';
@@ -123,6 +123,7 @@ const App: React.FC = () => {
   const [sessionIssues, setSessionIssues] = useState<AppIssueRecord[]>([]);
   const [firestoreIssues, setFirestoreIssues] = useState<AppIssueRecord[]>([]);
   const cleanedObsoleteIssueIdsRef = useRef<Set<string>>(new Set());
+  const quotaLockRef = useRef<Promise<unknown>>(Promise.resolve());
   const [referralCode, setReferralCode] = useState<string>('');
   const [bonusCredits, setBonusCredits] = useState<number>(0);
   const [referralCount, setReferralCount] = useState<number>(0);
@@ -635,77 +636,137 @@ const App: React.FC = () => {
     if (isAdmin || effectiveUserPlan === 'pro') return true;
     if (!user.emailVerified) return false;
 
-    const today = getTodayUtcDate();
-    const currentUsed = lastUsageDate === today ? dailyCount : 0;
-
-    if (currentUsed < billingConfig.freeDailyLimit) {
-      const nextCount = currentUsed + 1;
-      setDailyCount(nextCount);
-      setLastUsageDate(today);
-
+    const runDeduction = async (): Promise<boolean> => {
+      const today = getTodayUtcDate();
       const userPath = `users/${user.uid}`;
       const userRef = doc(db, 'users', user.uid);
+      const freeLimit = Math.max(1, billingConfig.freeDailyLimit || 5);
+
       try {
-        await updateDoc(userRef, {
-          plan: userPlan,
-          dailyCount: nextCount,
-          lastUsageDate: today,
-          updatedAt: serverTimestamp(),
-        });
-      } catch (error: any) {
-        if (error?.code === 'not-found') {
-          const myCode = referralCode || buildReferralCode(user.uid);
-          const payload: Record<string, any> = {
-            uid: user.uid.slice(0, 128),
-            favorites,
-            plan: 'free',
-            dailyCount: nextCount,
-            lastUsageDate: today,
-            referralCode: myCode,
-            bonusCredits: 0,
-            referralCount: 0,
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-          };
-          if (user.displayName) payload.displayName = user.displayName.slice(0, 120);
-          if (user.email) payload.email = user.email.slice(0, 254);
-          if (user.photoURL) payload.photoURL = user.photoURL.slice(0, 512);
-          try {
-            await setDoc(userRef, payload);
-            await ensureReferralCodeRegistered(user.uid, myCode);
-          } catch (createErr) {
-            reportFirestoreError(createErr, OperationType.CREATE, userPath);
+        const outcome = await runTransaction(db, async (tx) => {
+          const snap = await tx.get(userRef);
+          if (!snap.exists()) {
+            const myCode = referralCode || buildReferralCode(user.uid);
+            const payload: Record<string, any> = {
+              uid: user.uid.slice(0, 128),
+              favorites,
+              plan: 'free',
+              dailyCount: 1,
+              lastUsageDate: today,
+              referralCode: myCode,
+              bonusCredits: 0,
+              referralCount: 0,
+              createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp(),
+            };
+            if (user.displayName) payload.displayName = user.displayName.slice(0, 120);
+            if (user.email) payload.email = user.email.slice(0, 254);
+            if (user.photoURL) payload.photoURL = user.photoURL.slice(0, 512);
+            tx.set(userRef, payload);
+            return {
+              allowed: true,
+              created: true,
+              myCode,
+              nextDailyCount: 1,
+              nextUsageDate: today,
+              nextBonus: 0,
+            };
           }
-        } else {
-          reportFirestoreError(error, OperationType.UPDATE, userPath);
-        }
-      }
-      return true;
-    }
 
-    if (bonusCredits > 0) {
-      const nextCredits = bonusCredits - 1;
-      setBonusCredits(nextCredits);
+          const data = snap.data() || {};
+          const serverPlan: UserPlan = data.plan === 'pro' ? 'pro' : 'free';
+          const serverExpiresMs =
+            typeof data.proExpiresAt?.toMillis === 'function' ? data.proExpiresAt.toMillis() : null;
+          if (serverPlan === 'pro' && (!serverExpiresMs || serverExpiresMs > Date.now())) {
+            return {
+              allowed: true,
+              created: false,
+              nextDailyCount: typeof data.dailyCount === 'number' ? data.dailyCount : 0,
+              nextUsageDate: typeof data.lastUsageDate === 'string' ? data.lastUsageDate : today,
+              nextBonus: typeof data.bonusCredits === 'number' ? data.bonusCredits : 0,
+            };
+          }
 
-      const userPath = `users/${user.uid}`;
-      const userRef = doc(db, 'users', user.uid);
-      try {
-        await updateDoc(userRef, {
-          plan: userPlan,
-          dailyCount: currentUsed,
-          lastUsageDate: today,
-          bonusCredits: nextCredits,
-          updatedAt: serverTimestamp(),
+          const serverDate = typeof data.lastUsageDate === 'string' ? data.lastUsageDate : '';
+          const serverCount =
+            serverDate === today && typeof data.dailyCount === 'number' && data.dailyCount >= 0
+              ? data.dailyCount
+              : 0;
+          const serverBonus =
+            typeof data.bonusCredits === 'number' && Number.isInteger(data.bonusCredits) && data.bonusCredits >= 0
+              ? data.bonusCredits
+              : 0;
+
+          if (serverCount < freeLimit) {
+            const nextCount = serverCount + 1;
+            tx.update(userRef, {
+              plan: serverPlan,
+              dailyCount: nextCount,
+              lastUsageDate: today,
+              updatedAt: serverTimestamp(),
+            });
+            return {
+              allowed: true,
+              created: false,
+              nextDailyCount: nextCount,
+              nextUsageDate: today,
+              nextBonus: serverBonus,
+            };
+          }
+
+          if (serverBonus > 0) {
+            const nextCredits = serverBonus - 1;
+            tx.update(userRef, {
+              plan: serverPlan,
+              dailyCount: serverCount,
+              lastUsageDate: today,
+              bonusCredits: nextCredits,
+              updatedAt: serverTimestamp(),
+            });
+            return {
+              allowed: true,
+              created: false,
+              nextDailyCount: serverCount,
+              nextUsageDate: today,
+              nextBonus: nextCredits,
+            };
+          }
+
+          return {
+            allowed: false,
+            created: false,
+            nextDailyCount: serverCount,
+            nextUsageDate: today,
+            nextBonus: serverBonus,
+          };
         });
+
+        setDailyCount(outcome.nextDailyCount);
+        setLastUsageDate(outcome.nextUsageDate);
+        setBonusCredits(outcome.nextBonus);
+
+        if (outcome.created && outcome.myCode) {
+          await ensureReferralCodeRegistered(user.uid, outcome.myCode);
+        }
+
+        if (!outcome.allowed) {
+          setProModalTab('refer');
+          setShowProModal(true);
+          return false;
+        }
+        return true;
       } catch (error) {
         reportFirestoreError(error, OperationType.UPDATE, userPath);
+        return false;
       }
-      return true;
-    }
+    };
 
-    setProModalTab('refer');
-    setShowProModal(true);
-    return false;
+    const chained = quotaLockRef.current.then(runDeduction, runDeduction);
+    quotaLockRef.current = chained.then(
+      () => undefined,
+      () => undefined
+    );
+    return chained;
   };
 
   const handleSignOut = async () => {

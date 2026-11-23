@@ -2,33 +2,40 @@
  * © 2026 Srabon Go — All Rights Reserved.
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  AlertTriangle,
   ArrowLeft,
+  Bell,
+  BellRing,
   Calendar,
   Check,
   CheckCircle2,
   Clock,
   Copy,
+  Hash,
   Loader2,
   MapPin,
   MessageCircle,
+  PenTool,
   Phone,
   Scissors,
   Shield,
   Sparkles,
   Ticket,
+  Users,
   XCircle,
 } from 'lucide-react';
 import type { User } from 'firebase/auth';
 import {
-  addDoc,
   collection,
   doc,
+  getDoc,
+  limit,
   onSnapshot,
   query,
+  runTransaction,
   serverTimestamp,
-  updateDoc,
   where,
   writeBatch,
 } from 'firebase/firestore';
@@ -38,14 +45,25 @@ import {
   SalonBooking,
   SalonConfig,
   SalonCoupon,
+  SalonQueueSummary,
+  SalonQueueTicket,
   SalonServiceKey,
 } from '../types';
 import {
+  SALON_LATE_GRACE_MINUTES,
   SALON_SERVICES,
   SALON_TIME_SLOTS,
+  SALON_TURN_ALERT_MINUTES,
   buildSalonWhatsAppUrl,
   calculateSalonDiscount,
   formatSalonPrice,
+  getMsUntilSlot,
+  getSlotCutoffLabel,
+  isBookingTimeExpired,
+  parseTimeSlotToMinutes,
+  playTurnAlertChime,
+  requestTurnNotificationPermission,
+  sendTurnNotification,
 } from '../utils/salon';
 import { generateAiSalonCoupon } from '../utils/salonCoupon';
 import { STUDIO_MEDIA } from '../utils/studioAlbums';
@@ -55,6 +73,7 @@ import {
   localizeSalonService,
   useLanguage,
 } from '../utils/i18n';
+import CompletionSignatureModal from './CompletionSignatureModal';
 
 interface SalonBookingPageProps {
   user: User;
@@ -64,21 +83,36 @@ interface SalonBookingPageProps {
   onOpenAdminPanel?: () => void;
 }
 
-function getTodayLocalDate(): string {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, '0');
-  const d = String(now.getDate()).padStart(2, '0');
+function getTodayLocalDate(dateObj: Date = new Date()): string {
+  const y = dateObj.getFullYear();
+  const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+  const d = String(dateObj.getDate()).padStart(2, '0');
   return `${y}-${m}-${d}`;
 }
 
-function getMaxBookingDate(): string {
-  const future = new Date();
+function getTomorrowLocalDate(dateObj: Date = new Date()): string {
+  const next = new Date(dateObj);
+  next.setDate(next.getDate() + 1);
+  return getTodayLocalDate(next);
+}
+
+function getMaxBookingDate(dateObj: Date = new Date()): string {
+  const future = new Date(dateObj);
   future.setDate(future.getDate() + 30);
-  const y = future.getFullYear();
-  const m = String(future.getMonth() + 1).padStart(2, '0');
-  const d = String(future.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
+  return getTodayLocalDate(future);
+}
+
+function getInitialBookingTarget(): { date: string; slot: string } {
+  const now = Date.now();
+  const today = getTodayLocalDate(new Date(now));
+  const todayOpenSlot = SALON_TIME_SLOTS.find((s) => !isBookingTimeExpired(today, s, now, 0));
+  if (todayOpenSlot) {
+    return { date: today, slot: todayOpenSlot };
+  }
+  return {
+    date: getTomorrowLocalDate(new Date(now)),
+    slot: SALON_TIME_SLOTS[0],
+  };
 }
 
 const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
@@ -89,9 +123,13 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
   onOpenAdminPanel,
 }) => {
   const { lang, bi } = useLanguage();
+  const biRef = useRef(bi);
+  biRef.current = bi;
+
+  const [initialTarget] = useState(getInitialBookingTarget);
   const [selectedServiceKey, setSelectedServiceKey] = useState<SalonServiceKey>('haircut');
-  const [bookingDate, setBookingDate] = useState<string>(getTodayLocalDate());
-  const [timeSlot, setTimeSlot] = useState<string>(SALON_TIME_SLOTS[1]);
+  const [bookingDate, setBookingDate] = useState<string>(initialTarget.date);
+  const [timeSlot, setTimeSlot] = useState<string>(initialTarget.slot);
   const [customerName, setCustomerName] = useState<string>(
     user.displayName || user.email?.split('@')[0] || ''
   );
@@ -105,6 +143,31 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
   const [lastSubmittedWhatsAppUrl, setLastSubmittedWhatsAppUrl] = useState<string | null>(null);
   const [myBookings, setMyBookings] = useState<SalonBooking[]>([]);
   const [loadingBookings, setLoadingBookings] = useState(true);
+
+  // Live queue, clock, auto-cancel, 5-min turn alert, completion signature
+  const [nowMs, setNowMs] = useState<number>(() => Date.now());
+  const [queueDate, setQueueDate] = useState<string>(() => getTodayLocalDate());
+  const [queueSummary, setQueueSummary] = useState<SalonQueueSummary | null>(null);
+  const [queueTickets, setQueueTickets] = useState<SalonQueueTicket[]>([]);
+  const [separateTodayTickets, setSeparateTodayTickets] = useState<SalonQueueTicket[]>([]);
+  const [loadingQueue, setLoadingQueue] = useState(true);
+  const [autoCancelNotice, setAutoCancelNotice] = useState<string | null>(null);
+  const [signingBooking, setSigningBooking] = useState<SalonBooking | null>(null);
+  const [notifPermission, setNotifPermission] = useState<NotificationPermission | 'unsupported'>(() =>
+    typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'unsupported'
+  );
+  const [turnAlertBanner, setTurnAlertBanner] = useState<{
+    bookingId: string;
+    serialNumber?: number;
+    timeSlot: string;
+    title: string;
+    message: string;
+  } | null>(null);
+
+  const isMountedRef = useRef(true);
+  const copiedCouponTimerRef = useRef<number | null>(null);
+  const autoCancellingIdsRef = useRef<Set<string>>(new Set());
+  const notifiedTurnKeysRef = useRef<Set<string>>(new Set());
 
   const [coupon, setCoupon] = useState<SalonCoupon | null>(null);
   const [loadingCoupon, setLoadingCoupon] = useState(true);
@@ -154,6 +217,37 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
     lang,
   });
 
+  const todayStr = useMemo(() => getTodayLocalDate(new Date(nowMs)), [nowMs]);
+  const hasAnyOpenSlot = useMemo(
+    () => SALON_TIME_SLOTS.some((s) => !isBookingTimeExpired(bookingDate, s, nowMs, 0)),
+    [bookingDate, nowMs]
+  );
+
+  // Mount tracking + 15-second live ticker for slot expiry & turn countdown
+  useEffect(() => {
+    isMountedRef.current = true;
+    const id = window.setInterval(() => {
+      setNowMs(Date.now());
+    }, 15_000);
+    return () => {
+      isMountedRef.current = false;
+      window.clearInterval(id);
+      if (copiedCouponTimerRef.current !== null) {
+        window.clearTimeout(copiedCouponTimerRef.current);
+      }
+    };
+  }, []);
+
+  // Auto-select nearest upcoming slot if selected slot becomes expired on bookingDate
+  useEffect(() => {
+    if (isBookingTimeExpired(bookingDate, timeSlot, nowMs, 0)) {
+      const nextOpen = SALON_TIME_SLOTS.find((s) => !isBookingTimeExpired(bookingDate, s, nowMs, 0));
+      if (nextOpen && nextOpen !== timeSlot) {
+        setTimeSlot(nextOpen);
+      }
+    }
+  }, [bookingDate, timeSlot, nowMs]);
+
   useEffect(() => {
     if (!user.emailVerified) {
       setMyBookings([]);
@@ -187,6 +281,82 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
     return () => unsubscribe();
   }, [user.uid, user.emailVerified]);
 
+  // Live non-PII Daily Serial Queue Summary + Tickets listener
+  useEffect(() => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(queueDate)) return;
+    setLoadingQueue(true);
+
+    const summaryRef = doc(db, 'salonQueues', queueDate);
+    const unsubSummary = onSnapshot(
+      summaryRef,
+      (snap) => {
+        if (snap.exists()) {
+          setQueueSummary(snap.data() as SalonQueueSummary);
+        } else {
+          setQueueSummary(null);
+        }
+      },
+      (error) => {
+        reportFirestoreError(error, OperationType.GET, `salonQueues/${queueDate}`);
+      }
+    );
+
+    const ticketsQuery = query(
+      collection(db, 'salonQueues', queueDate, 'tickets'),
+      where('serialNumber', '>=', 1),
+      limit(200)
+    );
+    const unsubTickets = onSnapshot(
+      ticketsQuery,
+      (snapshot) => {
+        const list: SalonQueueTicket[] = snapshot.docs.map((d) => ({
+          id: d.id,
+          ...(d.data() as Omit<SalonQueueTicket, 'id'>),
+        }));
+        list.sort((a, b) => a.serialNumber - b.serialNumber);
+        setQueueTickets(list);
+        setLoadingQueue(false);
+      },
+      (error) => {
+        setLoadingQueue(false);
+        reportFirestoreError(error, OperationType.LIST, `salonQueues/${queueDate}/tickets`);
+      }
+    );
+
+    return () => {
+      unsubSummary();
+      unsubTickets();
+    };
+  }, [queueDate]);
+
+  // Dedicated live listener for today's tickets whenever queueDate points to a different day
+  useEffect(() => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(todayStr) || queueDate === todayStr) {
+      setSeparateTodayTickets([]);
+      return;
+    }
+    const todayTicketsQuery = query(
+      collection(db, 'salonQueues', todayStr, 'tickets'),
+      where('serialNumber', '>=', 1),
+      limit(200)
+    );
+    const unsubToday = onSnapshot(
+      todayTicketsQuery,
+      (snapshot) => {
+        const list: SalonQueueTicket[] = snapshot.docs.map((d) => ({
+          id: d.id,
+          ...(d.data() as Omit<SalonQueueTicket, 'id'>),
+        }));
+        list.sort((a, b) => a.serialNumber - b.serialNumber);
+        setSeparateTodayTickets(list);
+      },
+      (error) => {
+        reportFirestoreError(error, OperationType.LIST, `salonQueues/${todayStr}/tickets`);
+      }
+    );
+    return () => unsubToday();
+  }, [queueDate, todayStr]);
+
   useEffect(() => {
     const couponRef = doc(db, 'salonCoupons', user.uid);
     const unsubscribe = onSnapshot(
@@ -211,6 +381,166 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
     );
     return () => unsubscribe();
   }, [user.uid]);
+
+  // Auto-cancel user's overdue active bookings (+ 10 min grace period)
+  useEffect(() => {
+    if (!user.emailVerified || myBookings.length === 0) return;
+
+    const overdue = myBookings.filter(
+      (b) =>
+        (b.status === 'pending' || b.status === 'confirmed') &&
+        isBookingTimeExpired(b.bookingDate, b.timeSlot, nowMs) &&
+        !autoCancellingIdsRef.current.has(b.id)
+    );
+    if (overdue.length === 0) return;
+
+    overdue.forEach(async (b) => {
+      autoCancellingIdsRef.current.add(b.id);
+      try {
+        const bookingRef = doc(db, 'salonBookings', b.id);
+        const ticketRef = doc(db, 'salonQueues', b.bookingDate, 'tickets', b.id);
+        const ticketSnap = await getDoc(ticketRef);
+
+        const batch = writeBatch(db);
+        batch.update(bookingRef, {
+          status: 'cancelled',
+          autoCancelledReason: 'time_expired',
+          updatedAt: serverTimestamp(),
+        });
+        if (ticketSnap.exists()) {
+          batch.update(ticketRef, {
+            status: 'cancelled',
+            updatedAt: serverTimestamp(),
+          });
+        }
+        await batch.commit();
+
+        if (!isMountedRef.current) return;
+        const serialLabel = typeof b.serialNumber === 'number' ? `#${b.serialNumber}` : b.timeSlot;
+        setAutoCancelNotice(
+          biRef.current(
+            `নির্ধারিত সময় (${b.timeSlot} + ${SALON_LATE_GRACE_MINUTES} মি.) পার হওয়ায় আপনার সিরিয়াল ${serialLabel} অটো-ক্যানসেল হয়ে গেছে।`,
+            `Your booking (${serialLabel} at ${b.timeSlot}) exceeded the ${SALON_LATE_GRACE_MINUTES}-min grace window and was automatically cancelled.`
+          )
+        );
+      } catch (error) {
+        autoCancellingIdsRef.current.delete(b.id);
+        reportFirestoreError(error, OperationType.UPDATE, `salonBookings/${b.id}`);
+      }
+    });
+  }, [myBookings, nowMs, user.emailVerified]);
+
+  // Live Queue insights & 5-minute before turn notifications
+  const todayTickets = useMemo(() => {
+    return queueDate === todayStr ? queueTickets : separateTodayTickets;
+  }, [queueDate, todayStr, queueTickets, separateTodayTickets]);
+
+  const queueStats = useMemo(() => {
+    const total = Math.max(queueTickets.length, queueSummary?.totalSerials ?? 0);
+    const completed = queueTickets.filter((t) => t.status === 'completed').length;
+    const cancelled = queueTickets.filter((t) => t.status === 'cancelled').length;
+    const active = queueTickets.filter((t) => t.status === 'pending' || t.status === 'confirmed').length;
+    const currentServing =
+      queueTickets.find((t) => t.status === 'confirmed') ||
+      queueTickets.find((t) => t.status === 'pending') ||
+      null;
+    const myTicketsOnDate = queueTickets.filter((t) => t.uid === user.uid);
+    return { total, completed, cancelled, active, currentServing, myTicketsOnDate };
+  }, [queueTickets, queueSummary, user.uid]);
+
+  useEffect(() => {
+    const activeTodayBookings = myBookings.filter(
+      (b) =>
+        b.bookingDate === todayStr &&
+        (b.status === 'pending' || b.status === 'confirmed') &&
+        !isBookingTimeExpired(b.bookingDate, b.timeSlot, nowMs)
+    );
+
+    if (activeTodayBookings.length === 0) {
+      setTurnAlertBanner(null);
+      return;
+    }
+
+    let nextBanner: {
+      bookingId: string;
+      serialNumber?: number;
+      timeSlot: string;
+      title: string;
+      message: string;
+    } | null = null;
+
+    for (const b of activeTodayBookings) {
+      const msLeft = getMsUntilSlot(b.bookingDate, b.timeSlot, nowMs);
+      const isWithinFiveMins = msLeft !== null && msLeft > 0 && msLeft <= SALON_TURN_ALERT_MINUTES * 60_000;
+
+      let prevCompletedReady = false;
+      let prevSerialNumber: number | undefined;
+
+      if (typeof b.serialNumber === 'number' && b.serialNumber > 1 && todayTickets.length > 0) {
+        const earlier = todayTickets.filter((t) => t.serialNumber < b.serialNumber!);
+        const activeAhead = earlier.filter((t) => t.status === 'pending' || t.status === 'confirmed');
+        const lastEarlier = earlier[earlier.length - 1];
+        if (lastEarlier) {
+          prevSerialNumber = lastEarlier.serialNumber;
+        }
+        if (activeAhead.length === 0 && earlier.some((t) => t.status === 'completed')) {
+          prevCompletedReady = true;
+        }
+      }
+
+      if (isWithinFiveMins || prevCompletedReady) {
+        const minsLeft = msLeft !== null ? Math.max(1, Math.ceil(msLeft / 60_000)) : SALON_TURN_ALERT_MINUTES;
+        const serialText = typeof b.serialNumber === 'number' ? `#${b.serialNumber}` : '';
+        const title = bi(
+          `প্রস্তুত হোন! আপনার পালা চলে আসছে ${serialText}`.trim(),
+          `Get Ready! Your Turn Is Next ${serialText}`.trim()
+        );
+        const message = prevCompletedReady
+          ? bi(
+              `আগের সিরিয়াল #${prevSerialNumber ?? (b.serialNumber! - 1)} সম্পন্ন হয়েছে — আর মাত্র ৫ মিনিটের মধ্যে আপনার সিরিয়াল ${serialText} (${b.timeSlot}) শুরু হবে!`,
+              `Previous serial #${prevSerialNumber ?? (b.serialNumber! - 1)} is completed — your turn ${serialText} (${b.timeSlot}) is up within 5 minutes!`
+            )
+          : bi(
+              `আর মাত্র ~${minsLeft} মিনিট পর আপনার সিরিয়াল ${serialText} (${b.timeSlot})। দয়া করে সেলুনে উপস্থিত থাকুন!`,
+              `About ${minsLeft} min until your serial ${serialText} (${b.timeSlot}). Please be ready at the salon!`
+            );
+
+        nextBanner = {
+          bookingId: b.id,
+          serialNumber: b.serialNumber,
+          timeSlot: b.timeSlot,
+          title,
+          message,
+        };
+
+        const alertKey = prevCompletedReady ? `prev_${b.id}` : `time_${b.id}`;
+        if (!notifiedTurnKeysRef.current.has(alertKey)) {
+          notifiedTurnKeysRef.current.add(alertKey);
+          playTurnAlertChime();
+          sendTurnNotification(title, message, `salon-turn-${b.id}`);
+        }
+        break;
+      }
+    }
+
+    setTurnAlertBanner(nextBanner);
+  }, [myBookings, todayTickets, nowMs, todayStr, bi]);
+
+  const handleEnableNotifications = async () => {
+    const result = await requestTurnNotificationPermission();
+    setNotifPermission(result);
+    if (result === 'granted') {
+      playTurnAlertChime();
+      sendTurnNotification(
+        salonConfig.salonName,
+        bi(
+          '৫ মিনিট আগের সিরিয়াল নোটিফিকেশন চালু হয়েছে!',
+          '5-minute before-turn alerts are now enabled!'
+        ),
+        'salon-notif-enabled'
+      );
+    }
+  };
 
   const handleGenerateCoupon = async () => {
     if (generatingCoupon || coupon) return;
@@ -264,7 +594,12 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
     const copied = await copyTextSafely(coupon.code);
     if (copied) {
       setCopiedCoupon(true);
-      setTimeout(() => setCopiedCoupon(false), 2000);
+      if (copiedCouponTimerRef.current !== null) {
+        window.clearTimeout(copiedCouponTimerRef.current);
+      }
+      copiedCouponTimerRef.current = window.setTimeout(() => {
+        if (isMountedRef.current) setCopiedCoupon(false);
+      }, 2000);
     }
   };
 
@@ -306,8 +641,25 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
       return;
     }
 
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(bookingDate)) {
-      setFormError(bi('সঠিক তারিখ নির্বাচন করুন।', 'Please select a valid date.'));
+    const minDate = getTodayLocalDate();
+    const maxDate = getMaxBookingDate();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(bookingDate) || bookingDate < minDate || bookingDate > maxDate) {
+      setFormError(
+        bi(
+          'অনুগ্রহ করে আজ থেকে আগামী ৩০ দিনের মধ্যে সঠিক তারিখ নির্বাচন করুন।',
+          'Please select a valid date between today and the next 30 days.'
+        )
+      );
+      return;
+    }
+
+    if (!SALON_TIME_SLOTS.includes(timeSlot) || isBookingTimeExpired(bookingDate, timeSlot, Date.now(), 0)) {
+      setFormError(
+        bi(
+          'এই সময়ের স্লটটি ইতিমধ্যে শেষ হয়ে গেছে। অনুগ্রহ করে পরবর্তী কোনো সময় বা আগামীকাল নির্বাচন করুন।',
+          'This time slot has already passed. Please select an upcoming time slot or tomorrow.'
+        )
+      );
       return;
     }
 
@@ -323,49 +675,120 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
         currentServicePrice + currentBookingFee - appliedDiscountAmount
       );
 
-      const payload: Record<string, any> = {
-        uid: user.uid.slice(0, 128),
-        customerName: cleanName.slice(0, 100),
-        customerPhone: cleanPhone.slice(0, 25),
-        serviceKey: selectedService.key,
-        serviceTitle: selectedService.title.slice(0, 100),
-        servicePrice: currentServicePrice,
-        bookingFee: currentBookingFee,
-        totalPrice: finalTotalPrice,
-        bookingDate,
-        timeSlot: timeSlot.slice(0, 30),
-        status: 'pending',
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      };
-      if (user.email) {
-        payload.customerEmail = user.email.slice(0, 254);
-      }
-      const cleanNotes = notes.trim();
-      if (cleanNotes) {
-        payload.notes = cleanNotes.slice(0, 300);
-      }
-      if (usingCouponNow && coupon) {
-        payload.couponCode = coupon.code;
-        payload.discountPercent = coupon.discountPercent;
-        payload.discountAmount = appliedDiscountAmount;
-      }
+      const newBookingRef = doc(collection(db, 'salonBookings'));
+      const queueRef = doc(db, 'salonQueues', bookingDate);
+      const ticketRef = doc(db, 'salonQueues', bookingDate, 'tickets', newBookingRef.id);
+      const couponRef = doc(db, 'salonCoupons', user.uid);
 
-      if (usingCouponNow && coupon) {
-        const batch = writeBatch(db);
-        const newBookingRef = doc(collection(db, 'salonBookings'));
-        batch.set(newBookingRef, payload);
-        batch.update(doc(db, 'salonCoupons', user.uid), {
-          status: 'used',
-          usedBookingId: newBookingRef.id,
-          usedAt: serverTimestamp(),
+      const assignedSerial = await runTransaction(db, async (tx) => {
+        const queueSnap = await tx.get(queueRef);
+        if (usingCouponNow && coupon) {
+          const couponSnap = await tx.get(couponRef);
+          const couponData = couponSnap.data();
+          if (
+            !couponSnap.exists() ||
+            couponData?.status !== 'available' ||
+            couponData?.code !== coupon.code ||
+            couponData?.discountPercent !== coupon.discountPercent
+          ) {
+            throw new Error(
+              bi(
+                'এই AI কুপনটি ইতিমধ্যে ব্যবহৃত হয়েছে বা এখন আর প্রযোজ্য নয়।',
+                'This AI coupon has already been redeemed or is no longer available.'
+              )
+            );
+          }
+        }
+
+        const currentTotal = queueSnap.exists()
+          ? Number(queueSnap.data()?.totalSerials) || 0
+          : 0;
+        if (currentTotal >= 500) {
+          throw new Error(
+            bi(
+              'এই তারিখের জন্য সর্বোচ্চ দৈনিক সিরিয়াল পূর্ণ হয়ে গেছে।',
+              'Daily serial limit has been reached for this date.'
+            )
+          );
+        }
+        const nextSerial = currentTotal + 1;
+
+        const payload: Record<string, any> = {
+          uid: user.uid.slice(0, 128),
+          customerName: cleanName.slice(0, 100),
+          customerPhone: cleanPhone.slice(0, 25),
+          serviceKey: selectedService.key,
+          serviceTitle: selectedService.title.slice(0, 100),
+          servicePrice: currentServicePrice,
+          bookingFee: currentBookingFee,
+          totalPrice: finalTotalPrice,
+          bookingDate,
+          timeSlot: timeSlot.slice(0, 30),
+          serialNumber: nextSerial,
+          status: 'pending',
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        };
+        if (user.email) {
+          payload.customerEmail = user.email.slice(0, 254);
+        }
+        const cleanNotes = notes.trim();
+        if (cleanNotes) {
+          payload.notes = cleanNotes.slice(0, 300);
+        }
+        if (usingCouponNow && coupon) {
+          payload.couponCode = coupon.code;
+          payload.discountPercent = coupon.discountPercent;
+          payload.discountAmount = appliedDiscountAmount;
+        }
+
+        tx.set(newBookingRef, payload);
+
+        if (!queueSnap.exists()) {
+          tx.set(queueRef, {
+            bookingDate,
+            totalSerials: 1,
+            lastBookingId: newBookingRef.id,
+            updatedAt: serverTimestamp(),
+          });
+        } else {
+          tx.update(queueRef, {
+            totalSerials: nextSerial,
+            lastBookingId: newBookingRef.id,
+            updatedAt: serverTimestamp(),
+          });
+        }
+
+        tx.set(ticketRef, {
+          bookingId: newBookingRef.id,
+          uid: user.uid.slice(0, 128),
+          bookingDate,
+          serialNumber: nextSerial,
+          serviceKey: selectedService.key,
+          timeSlot: timeSlot.slice(0, 30),
+          slotMinutes: parseTimeSlotToMinutes(timeSlot),
+          status: 'pending',
+          hasCompletionSignature: false,
+          createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
         });
-        await batch.commit();
+
+        if (usingCouponNow && coupon) {
+          tx.update(couponRef, {
+            status: 'used',
+            usedBookingId: newBookingRef.id,
+            usedAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          });
+        }
+
+        return nextSerial;
+      });
+
+      if (usingCouponNow) {
         setApplyCoupon(false);
-      } else {
-        await addDoc(collection(db, 'salonBookings'), payload);
       }
+      setQueueDate(bookingDate);
 
       setLastSubmittedWhatsAppUrl(
         buildSalonWhatsAppUrl({
@@ -373,7 +796,7 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
           adminPhone: salonConfig.phone,
           customerName: cleanName,
           customerPhone: cleanPhone,
-          serviceTitle: `${localizedSelected.primaryTitle} (${localizedSelected.secondaryTitle})`,
+          serviceTitle: `${localizedSelected.primaryTitle} (Serial #${assignedSerial})`,
           bookingDate,
           timeSlot,
           couponCode: usingCouponNow && coupon ? coupon.code : undefined,
@@ -385,7 +808,7 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
                 )
               : undefined,
           totalPriceLabel: formatSalonPrice(finalTotalPrice, salonConfig.currencySymbol),
-          notes: cleanNotes,
+          notes: notes.trim(),
           lang,
         })
       );
@@ -393,16 +816,18 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
       setBookingSuccess(
         usingCouponNow && coupon
           ? bi(
-              `AI কুপন (${coupon.code}) সহ আপনার "${localizedSelected.primaryTitle}" বুকিং (${bookingDate}, ${timeSlot}) সফলভাবে জমা হয়েছে!`,
-              `Your "${localizedSelected.primaryTitle}" booking (${bookingDate}, ${timeSlot}) with AI coupon (${coupon.code}) was submitted successfully!`
+              `আপনার সিরিয়াল নম্বর #${assignedSerial}! AI কুপন (${coupon.code}) সহ "${localizedSelected.primaryTitle}" বুকিং (${bookingDate}, ${timeSlot}) সফলভাবে জমা হয়েছে।`,
+              `Your serial is #${assignedSerial}! "${localizedSelected.primaryTitle}" booking (${bookingDate}, ${timeSlot}) with AI coupon (${coupon.code}) was submitted.`
             )
           : bi(
-              `আপনার "${localizedSelected.primaryTitle}" বুকিং (${bookingDate}, ${timeSlot}) সফলভাবে জমা হয়েছে!`,
-              `Your "${localizedSelected.primaryTitle}" booking (${bookingDate}, ${timeSlot}) was submitted successfully!`
+              `আপনার সিরিয়াল নম্বর #${assignedSerial}! "${localizedSelected.primaryTitle}" বুকিং (${bookingDate}, ${timeSlot}) সফলভাবে জমা হয়েছে।`,
+              `Your serial is #${assignedSerial}! "${localizedSelected.primaryTitle}" booking (${bookingDate}, ${timeSlot}) was submitted.`
             )
       );
     } catch (error: any) {
-      const msg = error?.message || bi('বুকিং জমা দেওয়া যায়নি। আবার চেষ্টা করুন।', 'Could not submit booking. Please try again.');
+      const msg =
+        error?.message ||
+        bi('বুকিং জমা দেওয়া যায়নি। আবার চেষ্টা করুন।', 'Could not submit booking. Please try again.');
       if (isAdmin) setFormError(msg);
       else
         setFormError(
@@ -417,15 +842,27 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
     }
   };
 
-  const handleCancelMyBooking = async (bookingId: string) => {
+  const handleCancelMyBooking = async (booking: SalonBooking) => {
     if (cancellingId) return;
     setFormError(null);
-    setCancellingId(bookingId);
+    setCancellingId(booking.id);
     try {
-      await updateDoc(doc(db, 'salonBookings', bookingId), {
+      const bookingRef = doc(db, 'salonBookings', booking.id);
+      const ticketRef = doc(db, 'salonQueues', booking.bookingDate, 'tickets', booking.id);
+      const ticketSnap = await getDoc(ticketRef);
+
+      const batch = writeBatch(db);
+      batch.update(bookingRef, {
         status: 'cancelled',
         updatedAt: serverTimestamp(),
       });
+      if (ticketSnap.exists()) {
+        batch.update(ticketRef, {
+          status: 'cancelled',
+          updatedAt: serverTimestamp(),
+        });
+      }
+      await batch.commit();
     } catch (error: any) {
       const msg = error?.message || bi('বুকিং বাতিল করা যায়নি।', 'Could not cancel booking.');
       if (isAdmin) {
@@ -438,10 +875,48 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
           )
         );
       }
-      reportFirestoreError(error, OperationType.UPDATE, `salonBookings/${bookingId}`);
+      reportFirestoreError(error, OperationType.UPDATE, `salonBookings/${booking.id}`);
     } finally {
       setCancellingId(null);
     }
+  };
+
+  const handleSubmitCompletionSignature = async ({
+    signaturePath,
+    signerName,
+  }: {
+    signaturePath: string;
+    signerName: string;
+  }) => {
+    if (!signingBooking) return;
+    const bookingRef = doc(db, 'salonBookings', signingBooking.id);
+    const ticketRef = doc(
+      db,
+      'salonQueues',
+      signingBooking.bookingDate,
+      'tickets',
+      signingBooking.id
+    );
+    const ticketSnap = await getDoc(ticketRef);
+
+    const batch = writeBatch(db);
+    batch.update(bookingRef, {
+      status: 'completed',
+      completionSignaturePath: signaturePath,
+      completionSignerName: signerName,
+      completedAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+    if (ticketSnap.exists()) {
+      batch.update(ticketRef, {
+        status: 'completed',
+        hasCompletionSignature: true,
+        completionSignerName: signerName,
+        updatedAt: serverTimestamp(),
+      });
+    }
+    await batch.commit();
+    setSigningBooking(null);
   };
 
   return (
@@ -693,6 +1168,274 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
           </div>
         </section>
 
+        {/* 5-Minute Turn Alert Banner */}
+        {turnAlertBanner && (
+          <section className="rounded-2xl bg-amber-600 text-white px-5 py-4 shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center shrink-0">
+                <BellRing size={20} />
+              </div>
+              <div className="space-y-0.5">
+                <h2 className="text-sm sm:text-base font-bold">{turnAlertBanner.title}</h2>
+                <p className="text-xs sm:text-sm text-amber-50">{turnAlertBanner.message}</p>
+              </div>
+            </div>
+            <div className="text-xs font-semibold tabular-nums bg-black/20 px-3 py-1.5 rounded-xl shrink-0">
+              {turnAlertBanner.serialNumber ? `#${turnAlertBanner.serialNumber} · ` : ''}
+              {turnAlertBanner.timeSlot}
+            </div>
+          </section>
+        )}
+
+        {/* Auto-Cancel Overdue Notice */}
+        {autoCancelNotice && (
+          <section className="rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 px-5 py-3.5 flex items-center justify-between gap-3 text-xs sm:text-sm text-rose-700 dark:text-rose-300">
+            <div className="flex items-center gap-2.5">
+              <AlertTriangle size={16} className="shrink-0" />
+              <span>{autoCancelNotice}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setAutoCancelNotice(null)}
+              className="text-xs font-semibold underline shrink-0"
+            >
+              {bi('বুঝেছি', 'Dismiss')}
+            </button>
+          </section>
+        )}
+
+        {/* Daily Live Serial Queue & Previous Customer Tracker */}
+        <section className="rounded-3xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-5 sm:p-6 space-y-5 shadow-sm">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
+                <Users size={14} />
+                <span>{bi('লাইভ দৈনিক সিরিয়াল ও কিউ বোর্ড', 'Live Daily Serial & Queue Board')}</span>
+              </div>
+              <h2 className="text-lg sm:text-xl font-serif font-medium text-zinc-900 dark:text-white mt-0.5">
+                {bi('প্রতিদিনের মোট সিরিয়াল ও আপনার সিরিয়ালের অবস্থান', "Daily Total Serials & Your Position in Line")}
+              </h2>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={handleEnableNotifications}
+                disabled={notifPermission === 'unsupported'}
+                className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold border transition-colors min-h-[40px] ${
+                  notifPermission === 'granted'
+                    ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300'
+                    : 'bg-zinc-50 dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-200 hover:bg-amber-50 dark:hover:bg-amber-950/40'
+                }`}
+              >
+                <Bell size={14} />
+                <span>
+                  {notifPermission === 'granted'
+                    ? bi('৫ মি. নোটিফিকেশন চালু ✓', '5-Min Alerts On ✓')
+                    : notifPermission === 'denied'
+                    ? bi('নোটিফিকেশন ব্লক করা আছে', 'Alerts Blocked in Browser')
+                    : bi('৫ মি. আগে নোটিফিকেশন চালু করুন', 'Enable 5-Min Turn Alerts')}
+                </span>
+              </button>
+
+              <input
+                type="date"
+                value={queueDate}
+                min={todayStr}
+                max={getMaxBookingDate()}
+                onChange={(e) => setQueueDate(e.target.value)}
+                aria-label={bi('সিরিয়াল তারিখ দেখুন', 'View queue date')}
+                className="px-3 py-2 rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-xs font-semibold text-zinc-900 dark:text-white tabular-nums min-h-[40px]"
+              />
+            </div>
+          </div>
+
+          {/* Queue Metrics Row (tabular-nums) */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/70 border border-zinc-200/80 dark:border-zinc-700/80">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                {bi('মোট কাটা সিরিয়াল', 'Total Serials Cut')}
+              </p>
+              <p className="text-2xl font-bold text-zinc-900 dark:text-white tabular-nums mt-1">
+                {queueStats.total}
+              </p>
+            </div>
+            <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/70 border border-zinc-200/80 dark:border-zinc-700/80">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                {bi('বর্তমানে চলছে', 'Now Serving')}
+              </p>
+              <p className="text-2xl font-bold text-amber-600 dark:text-amber-400 tabular-nums mt-1">
+                {queueStats.currentServing ? `#${queueStats.currentServing.serialNumber}` : '—'}
+              </p>
+            </div>
+            <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/70 border border-zinc-200/80 dark:border-zinc-700/80">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                {bi('কাজ সম্পন্ন হয়েছে', 'Completed')}
+              </p>
+              <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 tabular-nums mt-1">
+                {queueStats.completed}
+              </p>
+            </div>
+            <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/70 border border-zinc-200/80 dark:border-zinc-700/80">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                {bi('অপেক্ষায় / বাতিল', 'Waiting / Cancelled')}
+              </p>
+              <p className="text-2xl font-bold text-zinc-900 dark:text-white tabular-nums mt-1">
+                {queueStats.active} <span className="text-zinc-400 font-normal">/</span>{' '}
+                <span className="text-rose-500">{queueStats.cancelled}</span>
+              </p>
+            </div>
+          </div>
+
+          {/* User's Own Serial(s) & Previous Person Status */}
+          {queueStats.myTicketsOnDate.length > 0 && (
+            <div className="space-y-2.5">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                {bi('আপনার কাটা সিরিয়াল ও আগের গ্রাহকের অবস্থা', 'Your Booked Serial & Previous Customer Status')}
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {queueStats.myTicketsOnDate.map((myTicket) => {
+                  const earlierTickets = queueTickets.filter(
+                    (t) => t.serialNumber < myTicket.serialNumber
+                  );
+                  const activeAhead = earlierTickets.filter(
+                    (t) => t.status === 'pending' || t.status === 'confirmed'
+                  );
+                  const previousTicket = earlierTickets[earlierTickets.length - 1] || null;
+                  const localizedSvc = localizeSalonService(myTicket.serviceKey, lang).primaryTitle;
+
+                  return (
+                    <div
+                      key={myTicket.id}
+                      className="p-4 rounded-2xl bg-amber-50/70 dark:bg-amber-950/25 border border-amber-200 dark:border-amber-800/70 space-y-2"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className="inline-flex items-center gap-1 text-base font-bold text-amber-700 dark:text-amber-300 tabular-nums">
+                            <Hash size={15} />
+                            {bi(`সিরিয়াল ${myTicket.serialNumber}`, `Serial ${myTicket.serialNumber}`)}
+                          </span>
+                          <span className="text-xs text-zinc-500 dark:text-zinc-400">·</span>
+                          <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                            {localizedSvc}
+                          </span>
+                        </div>
+                        <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-200 tabular-nums">
+                          {myTicket.timeSlot}
+                        </span>
+                      </div>
+
+                      <div className="text-xs text-zinc-700 dark:text-zinc-300 space-y-1">
+                        {!previousTicket ? (
+                          <p className="font-medium text-emerald-700 dark:text-emerald-300">
+                            {bi(
+                              'আপনার সামনে কোনো সিরিয়াল নেই — আপনিই প্রথম!',
+                              'No customer ahead of you — you are first in line!'
+                            )}
+                          </p>
+                        ) : (
+                          <p>
+                            {bi(
+                              `আগের সিরিয়াল #${previousTicket.serialNumber} (${previousTicket.timeSlot}): `,
+                              `Previous serial #${previousTicket.serialNumber} (${previousTicket.timeSlot}): `
+                            )}
+                            <strong
+                              className={
+                                previousTicket.status === 'completed'
+                                  ? 'text-emerald-700 dark:text-emerald-300'
+                                  : previousTicket.status === 'cancelled'
+                                  ? 'text-zinc-500 dark:text-zinc-400'
+                                  : 'text-amber-700 dark:text-amber-300'
+                              }
+                            >
+                              {previousTicket.status === 'completed'
+                                ? bi('কাজ শেষ হয়েছে ✓', 'Finished ✓')
+                                : previousTicket.status === 'confirmed'
+                                ? bi('কাজ চলছে...', 'In Progress...')
+                                : previousTicket.status === 'cancelled'
+                                ? bi('বাতিল / সময় শেষ', 'Cancelled / Expired')
+                                : bi('এখনও শেষ হয়নি (অপেক্ষায়)', 'Not finished yet (Waiting)')}
+                            </strong>
+                          </p>
+                        )}
+                        <p className="tabular-nums text-zinc-600 dark:text-zinc-400">
+                          {bi(
+                            `স্ট্যাটাস: ${localizeBookingStatus(myTicket.status, lang)} · আপনার সামনে সক্রিয় সিরিয়াল: ${activeAhead.length} জন`,
+                            `Status: ${localizeBookingStatus(myTicket.status, lang)} · Active ahead of you: ${activeAhead.length}`
+                          )}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Public Non-PII Daily Serial Ledger */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                {bi(`${queueDate} তারিখের সকল সিরিয়াল`, `All Serials for ${queueDate}`)}
+              </h3>
+              <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                {bi('ব্যক্তিগত তথ্য গোপন রাখা হয়েছে', 'Customer personal details hidden')}
+              </span>
+            </div>
+
+            {loadingQueue ? (
+              <div className="py-6 flex items-center justify-center text-zinc-400">
+                <Loader2 size={18} className="animate-spin" />
+              </div>
+            ) : queueTickets.length === 0 ? (
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 py-4 text-center rounded-2xl bg-zinc-50 dark:bg-zinc-800/40">
+                {bi('এই তারিখে এখনও কোনো সিরিয়াল কাটা হয়নি।', 'No serials issued for this date yet.')}
+              </p>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 max-h-64 overflow-y-auto pr-1">
+                {queueTickets.map((t) => {
+                  const isMine = t.uid === user.uid;
+                  const svcTitle = localizeSalonService(t.serviceKey, lang).primaryTitle;
+                  return (
+                    <div
+                      key={t.id}
+                      className={`p-3 rounded-xl border text-xs flex items-center justify-between gap-2 ${
+                        isMine
+                          ? 'bg-amber-50/70 dark:bg-amber-950/30 border-amber-300 dark:border-amber-700'
+                          : 'bg-zinc-50 dark:bg-zinc-800/50 border-zinc-200/80 dark:border-zinc-700/80'
+                      }`}
+                    >
+                      <div className="min-w-0">
+                        <p className="font-semibold text-zinc-900 dark:text-white truncate tabular-nums">
+                          #{t.serialNumber} · {t.timeSlot}
+                          {isMine ? bi(' (আপনি)', ' (You)') : ''}
+                        </p>
+                        <p className="text-[11px] text-zinc-500 dark:text-zinc-400 truncate">
+                          {svcTitle}
+                          {t.hasCompletionSignature ? bi(' · স্বাক্ষরিত ✓', ' · Signed ✓') : ''}
+                        </p>
+                      </div>
+                      <span
+                        className={`text-[11px] font-bold shrink-0 ${
+                          t.status === 'completed'
+                            ? 'text-emerald-600 dark:text-emerald-400'
+                            : t.status === 'confirmed'
+                            ? 'text-indigo-600 dark:text-indigo-400'
+                            : t.status === 'cancelled'
+                            ? 'text-rose-500 dark:text-rose-400'
+                            : 'text-amber-600 dark:text-amber-400'
+                        }`}
+                      >
+                        {localizeBookingStatus(t.status, lang)}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </section>
+
         {/* Main 2-column Booking Workspace */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           {/* Left: Interactive Service & Live Rate List */}
@@ -809,32 +1552,60 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
                     min={getTodayLocalDate()}
                     max={getMaxBookingDate()}
                     value={bookingDate}
-                    onChange={(e) => setBookingDate(e.target.value)}
+                    onChange={(e) => {
+                      const nextDate = e.target.value;
+                      setBookingDate(nextDate);
+                      if (/^\d{4}-\d{2}-\d{2}$/.test(nextDate)) {
+                        setQueueDate(nextDate);
+                      }
+                    }}
                     className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-sm text-zinc-900 dark:text-white tabular-nums"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1.5">
-                  {bi('সময় নির্বাচন করুন', 'Select Time Slot')}
-                </label>
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-2 gap-2">
-                  {SALON_TIME_SLOTS.map((slot) => (
-                    <button
-                      key={slot}
-                      type="button"
-                      onClick={() => setTimeSlot(slot)}
-                      className={`px-3 py-2 rounded-xl text-xs font-semibold tabular-nums border transition-colors ${
-                        timeSlot === slot
-                          ? 'bg-zinc-900 dark:bg-amber-500 text-white dark:text-zinc-950 border-zinc-900 dark:border-amber-500'
-                          : 'bg-zinc-50 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border-zinc-200 dark:border-zinc-700 hover:border-zinc-400'
-                      }`}
-                    >
-                      {slot}
-                    </button>
-                  ))}
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                    {bi('সময় নির্বাচন করুন', 'Select Time Slot')}
+                  </label>
+                  <span className="text-[11px] text-zinc-500 dark:text-zinc-400 tabular-nums">
+                    {bi(
+                      `+${SALON_LATE_GRACE_MINUTES} মি. পর অটো-ক্যানসেল`,
+                      `Auto-cancels +${SALON_LATE_GRACE_MINUTES}m late`
+                    )}
+                  </span>
                 </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-2 gap-2">
+                  {SALON_TIME_SLOTS.map((slot) => {
+                    const isExpiredSlot = isBookingTimeExpired(bookingDate, slot, nowMs, 0);
+                    return (
+                      <button
+                        key={slot}
+                        type="button"
+                        disabled={isExpiredSlot}
+                        onClick={() => setTimeSlot(slot)}
+                        className={`px-3 py-2.5 rounded-xl text-xs font-semibold tabular-nums border transition-colors min-h-[40px] ${
+                          isExpiredSlot
+                            ? 'bg-zinc-100 dark:bg-zinc-900 text-zinc-400 dark:text-zinc-600 border-zinc-200 dark:border-zinc-800 line-through cursor-not-allowed opacity-60'
+                            : timeSlot === slot
+                            ? 'bg-zinc-900 dark:bg-amber-500 text-white dark:text-zinc-950 border-zinc-900 dark:border-amber-500'
+                            : 'bg-zinc-50 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border-zinc-200 dark:border-zinc-700 hover:border-zinc-400'
+                        }`}
+                      >
+                        {slot}
+                      </button>
+                    );
+                  })}
+                </div>
+                {!hasAnyOpenSlot && (
+                  <p className="mt-2 text-[11px] font-medium text-amber-700 dark:text-amber-300">
+                    {bi(
+                      'এই তারিখের সকল সময় শেষ হয়ে গেছে। বুকিং করতে আগামীকালের তারিখ নির্বাচন করুন।',
+                      'All slots for this date have passed. Please choose tomorrow’s date to book.'
+                    )}
+                  </p>
+                )}
               </div>
 
               <div>
@@ -923,7 +1694,7 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
 
             <button
               type="submit"
-              disabled={submitting || !salonConfig.isBookingOpen}
+              disabled={submitting || !salonConfig.isBookingOpen || !hasAnyOpenSlot}
               className="w-full inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-sm font-semibold transition-colors disabled:opacity-50"
             >
               {submitting ? (
@@ -932,9 +1703,11 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
                 <Scissors size={16} />
               )}
               <span>
-                {salonConfig.isBookingOpen
-                  ? bi('বুকিং কনফার্ম করুন', 'Confirm Booking')
-                  : bi('অনলাইন বুকিং বন্ধ আছে', 'Online Booking Closed')}
+                {!salonConfig.isBookingOpen
+                  ? bi('অনলাইন বুকিং বন্ধ আছে', 'Online Booking Closed')
+                  : !hasAnyOpenSlot
+                  ? bi('আজকের সময় শেষ (আগামীকাল দিন)', 'No Open Slots on Date')
+                  : bi('বুকিং কনফার্ম করুন', 'Confirm Booking')}
               </span>
             </button>
 
@@ -995,38 +1768,64 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
                 const localizedBookingService = b.serviceKey
                   ? localizeSalonService(b.serviceKey, lang).primaryTitle
                   : b.serviceTitle;
+                const cutoffLabel = getSlotCutoffLabel(b.timeSlot);
+                const canSignBooking =
+                  b.status === 'confirmed' ||
+                  (b.status === 'completed' && !b.completionSignaturePath);
+                const matchingQueueTickets =
+                  b.bookingDate === queueDate
+                    ? queueTickets
+                    : b.bookingDate === todayStr
+                    ? todayTickets
+                    : [];
+                const earlierToday =
+                  matchingQueueTickets.length > 0 && typeof b.serialNumber === 'number'
+                    ? matchingQueueTickets.filter((t) => t.serialNumber < b.serialNumber!)
+                    : [];
+                const prevToday = earlierToday[earlierToday.length - 1] || null;
+
                 return (
                 <div
                   key={b.id}
                   className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200/80 dark:border-zinc-700/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
                 >
-                  <div className="space-y-1 min-w-0">
+                  <div className="space-y-1.5 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
+                      {typeof b.serialNumber === 'number' && (
+                        <span className="text-xs font-bold text-amber-700 dark:text-amber-300 tabular-nums">
+                          #{b.serialNumber} ·
+                        </span>
+                      )}
                       <span className="text-sm font-semibold text-zinc-900 dark:text-white">
                         {localizedBookingService}
                       </span>
                       <span
-                        className={`px-2 py-0.5 rounded-md text-[11px] font-semibold ${
+                        className={`text-[11px] font-bold ${
                           b.status === 'confirmed'
-                            ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300'
+                            ? 'text-emerald-600 dark:text-emerald-400'
                             : b.status === 'completed'
-                            ? 'bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300'
+                            ? 'text-indigo-600 dark:text-indigo-400'
                             : b.status === 'cancelled'
-                            ? 'bg-red-100 dark:bg-red-950/60 text-red-700 dark:text-red-300'
-                            : 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300'
+                            ? 'text-rose-600 dark:text-rose-400'
+                            : 'text-amber-600 dark:text-amber-400'
                         }`}
                       >
-                        {localizeBookingStatus(b.status, lang)}
+                        · {localizeBookingStatus(b.status, lang)}
                       </span>
+                      {b.autoCancelledReason === 'time_expired' && (
+                        <span className="text-[11px] font-semibold text-rose-600 dark:text-rose-400">
+                          · {bi('সময় পার হওয়ায় অটো-ক্যানসেল', 'Auto-cancelled (Time Expired)')}
+                        </span>
+                      )}
                       {b.couponCode && (
-                        <span className="px-2 py-0.5 rounded-md text-[11px] font-mono font-semibold bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300">
-                          {bi('AI কুপন:', 'AI Coupon:')} {b.couponCode}
+                        <span className="text-[11px] font-mono font-semibold text-emerald-700 dark:text-emerald-300">
+                          · {bi('AI কুপন:', 'AI Coupon:')} {b.couponCode}
                           {typeof b.discountPercent === 'number' ? ` (-${b.discountPercent}%)` : ''}
                         </span>
                       )}
                     </div>
                     <p className="text-xs text-zinc-600 dark:text-zinc-300 tabular-nums">
-                      {bi('তারিখ:', 'Date:')} {b.bookingDate} · {bi('সময়:', 'Time:')} {b.timeSlot} · {bi('ফোন:', 'Phone:')} {b.customerPhone}
+                      {bi('তারিখ:', 'Date:')} {b.bookingDate} · {bi('সময়:', 'Time:')} {b.timeSlot} ({bi('শেষ সীমা:', 'Cutoff:')} {cutoffLabel}) · {bi('ফোন:', 'Phone:')} {b.customerPhone}
                     </p>
                     <p className="text-xs text-zinc-500 dark:text-zinc-400 tabular-nums">
                       {bi('সার্ভিস:', 'Service:')} {formatSalonPrice(b.servicePrice, salonConfig.currencySymbol)} + {bi('বুকিং ফি:', 'Booking Fee:')}{' '}
@@ -1039,10 +1838,51 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
                         {formatSalonPrice(b.totalPrice, salonConfig.currencySymbol)}
                       </strong>
                     </p>
+                    {prevToday && (b.status === 'pending' || b.status === 'confirmed') && (
+                      <p className="text-xs text-zinc-600 dark:text-zinc-300 tabular-nums">
+                        {bi(`আগের সিরিয়াল #${prevToday.serialNumber}: `, `Previous serial #${prevToday.serialNumber}: `)}
+                        <strong
+                          className={
+                            prevToday.status === 'completed'
+                              ? 'text-emerald-600 dark:text-emerald-400'
+                              : 'text-amber-600 dark:text-amber-400'
+                          }
+                        >
+                          {prevToday.status === 'completed'
+                            ? bi('শেষ হয়েছে ✓', 'Finished ✓')
+                            : prevToday.status === 'cancelled'
+                            ? bi('বাতিল হয়েছে', 'Cancelled')
+                            : bi('এখনও চলছে / অপেক্ষায়', 'Still in queue')}
+                        </strong>
+                      </p>
+                    )}
                     {b.notes && (
                       <p className="text-xs text-zinc-500 dark:text-zinc-400 italic">
                         {bi('নোট:', 'Note:')} {b.notes}
                       </p>
+                    )}
+                    {b.completionSignaturePath && (
+                      <div className="pt-1.5 flex items-center gap-3 flex-wrap">
+                        <div className="rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 px-2.5 py-1">
+                          <svg
+                            viewBox="0 0 480 170"
+                            className="w-28 h-9 text-amber-600 dark:text-amber-400"
+                            aria-label={bi('কমপ্লিট সিগনেচার', 'Completion signature')}
+                          >
+                            <path
+                              d={b.completionSignaturePath}
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="6"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                        </div>
+                        <span className="text-[11px] font-medium text-emerald-700 dark:text-emerald-300">
+                          {bi('কমপ্লিট স্বাক্ষর:', 'Completion Sign-off:')} {b.completionSignerName || b.customerName}
+                        </span>
+                      </div>
                     )}
                   </div>
 
@@ -1053,7 +1893,10 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
                         adminPhone: salonConfig.phone,
                         customerName: b.customerName,
                         customerPhone: b.customerPhone,
-                        serviceTitle: localizedBookingService,
+                        serviceTitle:
+                          typeof b.serialNumber === 'number'
+                            ? `${localizedBookingService} (Serial #${b.serialNumber})`
+                            : localizedBookingService,
                         bookingDate: b.bookingDate,
                         timeSlot: b.timeSlot,
                         couponCode: b.couponCode,
@@ -1073,7 +1916,7 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
                           href={itemWaUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-xs font-semibold text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 transition-colors shrink-0"
+                          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-xs font-semibold text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 transition-colors shrink-0 min-h-[40px]"
                         >
                           <MessageCircle size={13} />
                           <span>WhatsApp</span>
@@ -1081,12 +1924,23 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
                       ) : null;
                     })()}
 
-                    {b.status === 'pending' && (
+                    {canSignBooking && (
+                      <button
+                        type="button"
+                        onClick={() => setSigningBooking(b)}
+                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold transition-colors shrink-0 min-h-[40px]"
+                      >
+                        <PenTool size={13} />
+                        <span>{bi('কমপ্লিট সিগনেচার দিন', 'Complete Signature')}</span>
+                      </button>
+                    )}
+
+                    {(b.status === 'pending' || b.status === 'confirmed') && (
                       <button
                         type="button"
                         disabled={cancellingId === b.id}
-                        onClick={() => handleCancelMyBooking(b.id)}
-                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 text-xs font-semibold text-zinc-700 dark:text-zinc-200 hover:text-red-600 dark:hover:text-red-400 hover:border-red-300 transition-colors shrink-0 disabled:opacity-50"
+                        onClick={() => handleCancelMyBooking(b)}
+                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 text-xs font-semibold text-zinc-700 dark:text-zinc-200 hover:text-red-600 dark:hover:text-red-400 hover:border-red-300 transition-colors shrink-0 disabled:opacity-50 min-h-[40px]"
                       >
                         {cancellingId === b.id ? (
                           <Loader2 size={13} className="animate-spin" />
@@ -1104,6 +1958,20 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
           )}
         </section>
       </div>
+
+      {signingBooking && (
+        <CompletionSignatureModal
+          title={bi('বুকিং কমপ্লিট সিগনেচার', 'Booking Completion Signature')}
+          subtitle={`${
+            typeof signingBooking.serialNumber === 'number'
+              ? `#${signingBooking.serialNumber} · `
+              : ''
+          }${localizeSalonService(signingBooking.serviceKey, lang).primaryTitle} · ${signingBooking.timeSlot}`}
+          defaultSignerName={signingBooking.customerName}
+          onClose={() => setSigningBooking(null)}
+          onSubmit={handleSubmitCompletionSignature}
+        />
+      )}
     </div>
   );
 };

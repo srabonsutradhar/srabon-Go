@@ -195,7 +195,6 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
   const isMountedRef = useRef(true);
   const isLoopingRef = useRef(isLooping);
   const speedRef = useRef(playbackSpeed);
-  const boostRef = useRef(loudnessBoost);
   const alarmDelayRef = useRef(alarmDelayMs);
   const activeRunIdRef = useRef(0);
 
@@ -215,10 +214,6 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
       } catch {}
     }
   }, [effectiveSpeed]);
-
-  useEffect(() => {
-    boostRef.current = effectiveBoost;
-  }, [effectiveBoost]);
 
   useEffect(() => {
     alarmDelayRef.current = effectiveAlarmDelayMs;
@@ -282,7 +277,10 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
       }`.slice(0, 440)
     : style.trim();
 
-  const requestKey = `${activeCustomVoice ? `cv:${activeCustomVoice.id}` : selectedVoiceName}::${effectiveTtsStyle}::${text.trim()}`;
+  const calibrationKey = activeCustomVoice
+    ? `cv:${activeCustomVoice.id}:${activeCustomVoice.pitchCentsOffset ?? 0}:${activeCustomVoice.rateMultiplier ?? 1}:${activeCustomVoice.warmthBoost ?? 0}`
+    : selectedVoiceName;
+  const requestKey = `${calibrationKey}::boost:${effectiveBoost ? 1 : 0}::${effectiveTtsStyle}::${text.trim()}`;
   const isOverCharLimit = text.length > caps.maxScriptChars;
 
   const clearLoopTimer = () => {
@@ -499,17 +497,7 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
     const source = ctx.createBufferSource();
     source.buffer = audioBuffer;
     source.playbackRate.value = speedRef.current;
-
-    if (boostRef.current) {
-      const gainNode = ctx.createGain();
-      gainNode.gain.value = 1.4;
-      const compressor = ctx.createDynamicsCompressor();
-      source.connect(gainNode);
-      gainNode.connect(compressor);
-      compressor.connect(ctx.destination);
-    } else {
-      source.connect(ctx.destination);
-    }
+    source.connect(ctx.destination);
 
     source.onended = () => {
       if (!isMountedRef.current || activeRunIdRef.current !== runId) return;
@@ -622,15 +610,17 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
       if (!isMountedRef.current || activeRunIdRef.current !== runId) return;
 
       const rawBytes = decodeBase64(audioData);
-      const bytes = activeCustomVoice
-        ? await renderCalibratedAudioBytes({
-            rawBytes,
-            pitchCentsOffset: activeCustomVoice.pitchCentsOffset,
-            rateMultiplier: activeCustomVoice.rateMultiplier,
-            warmthBoost: activeCustomVoice.warmthBoost,
-            loudnessBoost: effectiveBoost,
-          })
-        : rawBytes;
+      const bytes =
+        activeCustomVoice || effectiveBoost
+          ? await renderCalibratedAudioBytes({
+              rawBytes,
+              pitchCentsOffset: activeCustomVoice?.pitchCentsOffset ?? 0,
+              rateMultiplier: activeCustomVoice?.rateMultiplier ?? 1.0,
+              warmthBoost: activeCustomVoice?.warmthBoost ?? 0,
+              loudnessBoost: effectiveBoost,
+            })
+          : rawBytes;
+      if (!isMountedRef.current || activeRunIdRef.current !== runId) return;
       setCachedBytes(bytes);
       setCachedKey(requestKey);
 
@@ -697,15 +687,16 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
           style: effectiveTtsStyle,
         });
         const rawBytes = decodeBase64(audioData);
-        bytesToDownload = activeCustomVoice
-          ? await renderCalibratedAudioBytes({
-              rawBytes,
-              pitchCentsOffset: activeCustomVoice.pitchCentsOffset,
-              rateMultiplier: activeCustomVoice.rateMultiplier,
-              warmthBoost: activeCustomVoice.warmthBoost,
-              loudnessBoost: effectiveBoost,
-            })
-          : rawBytes;
+        bytesToDownload =
+          activeCustomVoice || effectiveBoost
+            ? await renderCalibratedAudioBytes({
+                rawBytes,
+                pitchCentsOffset: activeCustomVoice?.pitchCentsOffset ?? 0,
+                rateMultiplier: activeCustomVoice?.rateMultiplier ?? 1.0,
+                warmthBoost: activeCustomVoice?.warmthBoost ?? 0,
+                loudnessBoost: effectiveBoost,
+              })
+            : rawBytes;
         if (isMountedRef.current) {
           setCachedBytes(bytesToDownload);
           setCachedKey(requestKey);

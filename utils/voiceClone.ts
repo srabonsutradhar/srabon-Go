@@ -335,7 +335,7 @@ Rules:
 
   const ai = new GoogleGenAI();
   const response = await ai.models.generateContent({
-    model: 'gemini-4-hydrogen',
+    model: 'gemini-3.1-flash-lite',
     contents: [
       {
         role: 'user',

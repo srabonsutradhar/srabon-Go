@@ -11,6 +11,10 @@ service cloud.firestore {
       return id is string && id.size() >= 1 && id.size() <= 140 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
+    function isValidDateStr(d) {
+      return d is string && d.size() == 10 && d.matches('^\\d{4}-\\d{2}-\\d{2}$');
+    }
+
     function isValidReferralCode(code) {
       return code is string && code.size() >= 6 && code.size() <= 16 && code.matches('^[A-Z0-9]+$');
     }
@@ -204,7 +208,9 @@ service cloud.firestore {
           'uid', 'customerName', 'customerPhone', 'customerEmail',
           'serviceKey', 'serviceTitle', 'servicePrice', 'bookingFee',
           'couponCode', 'discountPercent', 'discountAmount', 'totalPrice',
-          'bookingDate', 'timeSlot', 'notes', 'status', 'createdAt', 'updatedAt'
+          'bookingDate', 'timeSlot', 'serialNumber', 'notes', 'status',
+          'completionSignaturePath', 'completionSignerName', 'completedAt',
+          'autoCancelledReason', 'createdAt', 'updatedAt'
         ])
         && isValidId(data.uid)
         && data.customerName is string
@@ -246,15 +252,66 @@ service cloud.firestore {
             && data.totalPrice == data.servicePrice + data.bookingFee - data.discountAmount
           )
         )
-        && data.bookingDate is string
-        && data.bookingDate.size() == 10
-        && data.bookingDate.matches('^\\d{4}-\\d{2}-\\d{2}$')
+        && isValidDateStr(data.bookingDate)
         && data.timeSlot is string
         && data.timeSlot.size() >= 2
         && data.timeSlot.size() <= 30
+        && (!('serialNumber' in data) || (data.serialNumber is int && data.serialNumber >= 1 && data.serialNumber <= 500))
         && (!('notes' in data) || (data.notes is string && data.notes.size() <= 300))
         && data.status is string
         && data.status in ['pending', 'confirmed', 'completed', 'cancelled']
+        && (!('completionSignaturePath' in data) || (data.completionSignaturePath is string && data.completionSignaturePath.size() >= 5 && data.completionSignaturePath.size() <= 1500 && data.completionSignaturePath.matches('^M[ML0-9., ]+$')))
+        && (!('completionSignerName' in data) || (data.completionSignerName is string && data.completionSignerName.size() >= 2 && data.completionSignerName.size() <= 80))
+        && (!('completedAt' in data) || data.completedAt is timestamp)
+        && (!('autoCancelledReason' in data) || (data.autoCancelledReason is string && data.autoCancelledReason in ['time_expired']))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidSalonQueueSummary(data, expectedDate) {
+      return data.keys().hasAll(['bookingDate', 'totalSerials', 'lastBookingId', 'updatedAt'])
+        && data.keys().hasOnly(['bookingDate', 'totalSerials', 'lastBookingId', 'updatedAt'])
+        && isValidDateStr(data.bookingDate)
+        && data.bookingDate == expectedDate
+        && data.totalSerials is int
+        && data.totalSerials >= 1
+        && data.totalSerials <= 500
+        && isValidId(data.lastBookingId)
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidSalonQueueTicket(data, expectedDate, expectedBookingId) {
+      return data.keys().hasAll([
+          'bookingId', 'uid', 'bookingDate', 'serialNumber',
+          'serviceKey', 'timeSlot', 'slotMinutes', 'status',
+          'hasCompletionSignature', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'bookingId', 'uid', 'bookingDate', 'serialNumber',
+          'serviceKey', 'timeSlot', 'slotMinutes', 'status',
+          'hasCompletionSignature', 'completionSignerName',
+          'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.bookingId)
+        && data.bookingId == expectedBookingId
+        && isValidId(data.uid)
+        && isValidDateStr(data.bookingDate)
+        && data.bookingDate == expectedDate
+        && data.serialNumber is int
+        && data.serialNumber >= 1
+        && data.serialNumber <= 500
+        && data.serviceKey is string
+        && data.serviceKey in ['haircut', 'beard', 'shave', 'color', 'facial', 'combo']
+        && data.timeSlot is string
+        && data.timeSlot.size() >= 2
+        && data.timeSlot.size() <= 30
+        && data.slotMinutes is int
+        && data.slotMinutes >= 0
+        && data.slotMinutes <= 1439
+        && data.status is string
+        && data.status in ['pending', 'confirmed', 'completed', 'cancelled']
+        && data.hasCompletionSignature is bool
+        && (!('completionSignerName' in data) || (data.completionSignerName is string && data.completionSignerName.size() >= 2 && data.completionSignerName.size() <= 80))
         && data.createdAt is timestamp
         && data.updatedAt is timestamp;
     }
@@ -395,6 +452,32 @@ service cloud.firestore {
         && data.text.size() >= 1
         && data.text.size() <= 1000
         && data.createdAt is timestamp;
+    }
+
+    function isValidSiteReview(data, expectedUid) {
+      return data.keys().hasAll(['uid', 'authorName', 'rating', 'pageTag', 'comment', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly([
+          'uid', 'authorName', 'authorPhotoUrl',
+          'rating', 'pageTag', 'comment',
+          'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.uid)
+        && data.uid == expectedUid
+        && data.uid.size() <= 128
+        && data.authorName is string
+        && data.authorName.size() >= 1
+        && data.authorName.size() <= 80
+        && (!('authorPhotoUrl' in data) || (data.authorPhotoUrl is string && data.authorPhotoUrl.size() <= 512 && data.authorPhotoUrl.matches('^https://[a-zA-Z0-9._~:/?#@!$&()*+,;=%-]+$')))
+        && data.rating is int
+        && data.rating >= 1
+        && data.rating <= 5
+        && data.pageTag is string
+        && data.pageTag in ['overall', 'studio', 'voice-clone', 'ideas', 'salon']
+        && data.comment is string
+        && data.comment.size() >= 4
+        && data.comment.size() <= 600
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
     }
 
     match /users/{userId} {
@@ -569,8 +652,16 @@ service cloud.firestore {
         && isValidSalonBooking(incoming())
         && incoming().uid == request.auth.uid
         && incoming().status == 'pending'
+        && 'serialNumber' in incoming()
+        && !('completionSignaturePath' in incoming())
+        && !('completionSignerName' in incoming())
+        && !('completedAt' in incoming())
+        && !('autoCancelledReason' in incoming())
         && incoming().createdAt == request.time
         && incoming().updatedAt == request.time
+        && getAfter(/databases/$(database)/documents/salonQueues/$(incoming().bookingDate)).data.totalSerials == incoming().serialNumber
+        && getAfter(/databases/$(database)/documents/salonQueues/$(incoming().bookingDate)).data.lastBookingId == bookingId
+        && existsAfter(/databases/$(database)/documents/salonQueues/$(incoming().bookingDate)/tickets/$(bookingId))
         && (
           !('couponCode' in incoming())
           || (
@@ -589,10 +680,37 @@ service cloud.firestore {
         && incoming().uid == existing().uid
         && incoming().createdAt == existing().createdAt
         && incoming().updatedAt == request.time
-        && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])
         && (
-          (isBootstrappedAdmin() && incoming().status in ['pending', 'confirmed', 'completed', 'cancelled'])
-          || (existing().uid == request.auth.uid && existing().status == 'pending' && incoming().status == 'cancelled')
+          (!('serialNumber' in existing()) && !('serialNumber' in incoming()))
+          || ('serialNumber' in existing() && 'serialNumber' in incoming() && incoming().serialNumber == existing().serialNumber)
+        )
+        && (
+          (
+            isBootstrappedAdmin()
+            && incoming().status in ['pending', 'confirmed', 'completed', 'cancelled']
+            && (!('completedAt' in incoming()) || incoming().completedAt == request.time || ('completedAt' in existing() && incoming().completedAt == existing().completedAt))
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'status', 'completionSignaturePath', 'completionSignerName', 'completedAt', 'autoCancelledReason', 'updatedAt'
+            ])
+          )
+          || (
+            existing().uid == request.auth.uid
+            && existing().status in ['pending', 'confirmed']
+            && incoming().status == 'cancelled'
+            && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'autoCancelledReason', 'updatedAt'])
+          )
+          || (
+            existing().uid == request.auth.uid
+            && existing().status in ['confirmed', 'completed']
+            && incoming().status == 'completed'
+            && 'completionSignaturePath' in incoming()
+            && 'completionSignerName' in incoming()
+            && 'completedAt' in incoming()
+            && incoming().completedAt == request.time
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'status', 'completionSignaturePath', 'completionSignerName', 'completedAt', 'updatedAt'
+            ])
+          )
         );
       allow delete: if isBootstrappedAdmin() && isValidId(bookingId);
     }
@@ -722,6 +840,108 @@ service cloud.firestore {
         );
       allow update: if false;
       allow delete: if isVerifiedUser() && isValidId(messageId) && (existing().uid == request.auth.uid || isBootstrappedAdmin());
+    }
+
+    match /siteReviews/{userId} {
+      allow get: if isSignedIn() && isValidId(userId);
+      allow list: if isSignedIn() && existing().rating >= 1;
+      allow create: if isVerifiedUser()
+        && isValidId(userId)
+        && isOwner(userId)
+        && isValidSiteReview(incoming(), userId)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser()
+        && isValidId(userId)
+        && isOwner(userId)
+        && isValidSiteReview(incoming(), userId)
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'authorName', 'authorPhotoUrl', 'rating', 'pageTag', 'comment', 'updatedAt'
+        ]);
+      allow delete: if isVerifiedUser() && isValidId(userId) && (isOwner(userId) || isBootstrappedAdmin());
+    }
+
+    match /salonQueues/{dateId} {
+      allow get: if isSignedIn() && isValidDateStr(dateId);
+      allow list: if false;
+      allow create: if isVerifiedUser()
+        && isValidDateStr(dateId)
+        && isValidSalonQueueSummary(incoming(), dateId)
+        && incoming().totalSerials == 1
+        && incoming().updatedAt == request.time
+        && getAfter(/databases/$(database)/documents/salonBookings/$(incoming().lastBookingId)).data.uid == request.auth.uid
+        && getAfter(/databases/$(database)/documents/salonBookings/$(incoming().lastBookingId)).data.serialNumber == 1
+        && getAfter(/databases/$(database)/documents/salonBookings/$(incoming().lastBookingId)).data.bookingDate == dateId;
+      allow update: if isVerifiedUser()
+        && isValidDateStr(dateId)
+        && isValidSalonQueueSummary(incoming(), dateId)
+        && incoming().bookingDate == existing().bookingDate
+        && incoming().totalSerials == existing().totalSerials + 1
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['totalSerials', 'lastBookingId', 'updatedAt'])
+        && getAfter(/databases/$(database)/documents/salonBookings/$(incoming().lastBookingId)).data.uid == request.auth.uid
+        && getAfter(/databases/$(database)/documents/salonBookings/$(incoming().lastBookingId)).data.serialNumber == existing().totalSerials + 1
+        && getAfter(/databases/$(database)/documents/salonBookings/$(incoming().lastBookingId)).data.bookingDate == dateId;
+      allow delete: if false;
+
+      match /tickets/{bookingId} {
+        allow get: if isSignedIn() && isValidDateStr(dateId) && isValidId(bookingId);
+        allow list: if isSignedIn() && existing().serialNumber >= 1;
+        allow create: if isVerifiedUser()
+          && isValidDateStr(dateId)
+          && isValidId(bookingId)
+          && isValidSalonQueueTicket(incoming(), dateId, bookingId)
+          && incoming().uid == request.auth.uid
+          && incoming().status == 'pending'
+          && incoming().hasCompletionSignature == false
+          && !('completionSignerName' in incoming())
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time
+          && getAfter(/databases/$(database)/documents/salonBookings/$(bookingId)).data.uid == request.auth.uid
+          && getAfter(/databases/$(database)/documents/salonBookings/$(bookingId)).data.bookingDate == dateId
+          && getAfter(/databases/$(database)/documents/salonBookings/$(bookingId)).data.serialNumber == incoming().serialNumber;
+        allow update: if isVerifiedUser()
+          && isValidDateStr(dateId)
+          && isValidId(bookingId)
+          && isValidSalonQueueTicket(incoming(), dateId, bookingId)
+          && incoming().bookingId == existing().bookingId
+          && incoming().uid == existing().uid
+          && incoming().bookingDate == existing().bookingDate
+          && incoming().serialNumber == existing().serialNumber
+          && incoming().serviceKey == existing().serviceKey
+          && incoming().timeSlot == existing().timeSlot
+          && incoming().slotMinutes == existing().slotMinutes
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && (
+            (
+              isBootstrappedAdmin()
+              && incoming().diff(existing()).affectedKeys().hasOnly([
+                'status', 'hasCompletionSignature', 'completionSignerName', 'updatedAt'
+              ])
+            )
+            || (
+              existing().uid == request.auth.uid
+              && existing().status in ['pending', 'confirmed']
+              && incoming().status == 'cancelled'
+              && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])
+            )
+            || (
+              existing().uid == request.auth.uid
+              && existing().status in ['confirmed', 'completed']
+              && incoming().status == 'completed'
+              && incoming().hasCompletionSignature == true
+              && 'completionSignerName' in incoming()
+              && incoming().diff(existing()).affectedKeys().hasOnly([
+                'status', 'hasCompletionSignature', 'completionSignerName', 'updatedAt'
+              ])
+            )
+          );
+        allow delete: if isBootstrappedAdmin() && isValidDateStr(dateId) && isValidId(bookingId);
+      }
     }
   }
 }

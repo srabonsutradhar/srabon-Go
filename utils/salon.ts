@@ -234,3 +234,122 @@ export function buildSalonWhatsAppUrl(payload: WhatsAppBookingPayload): string |
   return `https://wa.me/${waNumber}?text=${encodeURIComponent(lines.join('\n'))}`;
 }
 
+export const SALON_LATE_GRACE_MINUTES = 10;
+export const SALON_TURN_ALERT_MINUTES = 5;
+
+export function parseTimeSlotToMinutes(timeSlot: string): number {
+  const match = (timeSlot || '').trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (!match) return 12 * 60;
+  let hours = parseInt(match[1], 10);
+  const minutes = parseInt(match[2], 10);
+  const period = match[3].toUpperCase();
+  if (period === 'PM' && hours !== 12) hours += 12;
+  if (period === 'AM' && hours === 12) hours = 0;
+  return Math.min(1439, Math.max(0, hours * 60 + minutes));
+}
+
+export function getSlotDateTime(bookingDate: string, timeSlot: string): Date | null {
+  const dateMatch = (bookingDate || '').trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!dateMatch) return null;
+  const year = parseInt(dateMatch[1], 10);
+  const month = parseInt(dateMatch[2], 10) - 1;
+  const day = parseInt(dateMatch[3], 10);
+  const totalMinutes = parseTimeSlotToMinutes(timeSlot);
+  const hours = Math.floor(totalMinutes / 60);
+  const mins = totalMinutes % 60;
+  const dt = new Date(year, month, day, hours, mins, 0, 0);
+  return Number.isNaN(dt.getTime()) ? null : dt;
+}
+
+export function getMsUntilSlot(
+  bookingDate: string,
+  timeSlot: string,
+  nowMs: number = Date.now()
+): number | null {
+  const slotDt = getSlotDateTime(bookingDate, timeSlot);
+  if (!slotDt) return null;
+  return slotDt.getTime() - nowMs;
+}
+
+export function isBookingTimeExpired(
+  bookingDate: string,
+  timeSlot: string,
+  nowMs: number = Date.now(),
+  graceMinutes: number = SALON_LATE_GRACE_MINUTES
+): boolean {
+  const diffMs = getMsUntilSlot(bookingDate, timeSlot, nowMs);
+  if (diffMs === null) return false;
+  return diffMs < -graceMinutes * 60_000;
+}
+
+export function getSlotCutoffLabel(
+  timeSlot: string,
+  graceMinutes: number = SALON_LATE_GRACE_MINUTES
+): string {
+  const totalMins = Math.min(1439, parseTimeSlotToMinutes(timeSlot) + graceMinutes);
+  const h24 = Math.floor(totalMins / 60);
+  const m = totalMins % 60;
+  const period = h24 >= 12 ? 'PM' : 'AM';
+  const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+  return `${String(h12).padStart(2, '0')}:${String(m).padStart(2, '0')} ${period}`;
+}
+
+export function playTurnAlertChime(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    const now = ctx.currentTime;
+    const notes = [587.33, 880, 1046.5];
+    notes.forEach((freq, idx) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, now + idx * 0.14);
+      gain.gain.setValueAtTime(0.001, now + idx * 0.14);
+      gain.gain.exponentialRampToValueAtTime(0.14, now + idx * 0.14 + 0.03);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.14 + 0.25);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now + idx * 0.14);
+      osc.stop(now + idx * 0.14 + 0.26);
+    });
+    window.setTimeout(() => {
+      if (ctx.state !== 'closed') {
+        ctx.close().catch(() => {});
+      }
+    }, 1200);
+  } catch {
+    // Audio playback may be blocked prior to user gesture
+  }
+}
+
+export async function requestTurnNotificationPermission(): Promise<NotificationPermission | 'unsupported'> {
+  if (typeof window === 'undefined' || !('Notification' in window)) {
+    return 'unsupported';
+  }
+  if (Notification.permission === 'granted' || Notification.permission === 'denied') {
+    return Notification.permission;
+  }
+  try {
+    return await Notification.requestPermission();
+  } catch {
+    return Notification.permission;
+  }
+}
+
+export function sendTurnNotification(title: string, body: string, tag?: string): void {
+  if (typeof window === 'undefined' || !('Notification' in window)) return;
+  if (Notification.permission !== 'granted') return;
+  try {
+    new Notification(title, {
+      body,
+      tag: tag || 'srabon-salon-turn',
+    });
+  } catch {
+    // Ignore environments restricting Notification constructor
+  }
+}
+
+

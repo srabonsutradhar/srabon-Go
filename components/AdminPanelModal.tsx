@@ -2,7 +2,7 @@
  * © 2026 Srabon Go — All Rights Reserved.
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   X,
   Shield,
@@ -16,6 +16,7 @@ import {
   Save,
   Globe,
   Scissors,
+  PenTool,
 } from 'lucide-react';
 import { normalizeApiBaseUrl, setDynamicApiBaseUrl, testApiHealthAtUrl } from '../utils/audio';
 import {
@@ -23,7 +24,9 @@ import {
   collection,
   doc,
   getDoc,
+  limit,
   onSnapshot,
+  query,
   serverTimestamp,
   setDoc,
   updateDoc,
@@ -40,7 +43,7 @@ import {
   UserAccountRecord,
   UserPlan,
 } from '../types';
-import { SALON_SERVICES, formatSalonPrice } from '../utils/salon';
+import { SALON_SERVICES, formatSalonPrice, isBookingTimeExpired } from '../utils/salon';
 import {
   localizeBookingStatus,
   localizeDate,
@@ -49,6 +52,7 @@ import {
   localizeUpgradeStatus,
   useLanguage,
 } from '../utils/i18n';
+import CompletionSignatureModal from './CompletionSignatureModal';
 
 export type AdminPanelTab = 'requests' | 'users' | 'settings' | 'salon';
 
@@ -107,6 +111,8 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   const [isBookingOpen, setIsBookingOpen] = useState(salonConfig.isBookingOpen);
   const [savingSalon, setSavingSalon] = useState(false);
   const [savedSalonBanner, setSavedSalonBanner] = useState(false);
+  const [signingTargetBooking, setSigningTargetBooking] = useState<SalonBooking | null>(null);
+  const adminAutoCancelRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     setFeeAmount(billingConfig.feeAmount);
@@ -197,7 +203,7 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
     );
 
     const unsubSalonBookings = onSnapshot(
-      collection(db, 'salonBookings'),
+      query(collection(db, 'salonBookings'), limit(250)),
       (snapshot) => {
         const list: SalonBooking[] = snapshot.docs.map((d) => ({
           id: d.id,
@@ -221,6 +227,56 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
       unsubReqs();
       unsubUsers();
       unsubSalonBookings();
+    };
+  }, []);
+
+  const salonBookingsRef = useRef<SalonBooking[]>([]);
+  salonBookingsRef.current = salonBookings;
+
+  // Admin auto-cancels overdue active bookings (+10 min grace window)
+  useEffect(() => {
+    let mounted = true;
+    const expireOverdue = async () => {
+      if (!mounted || salonBookingsRef.current.length === 0) return;
+      const now = Date.now();
+      const overdue = salonBookingsRef.current.filter(
+        (b) =>
+          (b.status === 'pending' || b.status === 'confirmed') &&
+          isBookingTimeExpired(b.bookingDate, b.timeSlot, now) &&
+          !adminAutoCancelRef.current.has(b.id)
+      );
+      for (const b of overdue) {
+        if (!mounted) break;
+        adminAutoCancelRef.current.add(b.id);
+        try {
+          const bookingRef = doc(db, 'salonBookings', b.id);
+          const ticketRef = doc(db, 'salonQueues', b.bookingDate, 'tickets', b.id);
+          const ticketSnap = await getDoc(ticketRef);
+
+          const batch = writeBatch(db);
+          batch.update(bookingRef, {
+            status: 'cancelled',
+            autoCancelledReason: 'time_expired',
+            updatedAt: serverTimestamp(),
+          });
+          if (ticketSnap.exists()) {
+            batch.update(ticketRef, {
+              status: 'cancelled',
+              updatedAt: serverTimestamp(),
+            });
+          }
+          await batch.commit();
+        } catch (error) {
+          adminAutoCancelRef.current.delete(b.id);
+          reportFirestoreError(error, OperationType.UPDATE, `salonBookings/${b.id}`);
+        }
+      }
+    };
+    void expireOverdue();
+    const timer = window.setInterval(() => void expireOverdue(), 20_000);
+    return () => {
+      mounted = false;
+      window.clearInterval(timer);
     };
   }, []);
 
@@ -471,25 +527,76 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   };
 
   const handleUpdateBookingStatus = async (
-    bookingId: string,
+    booking: SalonBooking,
     nextStatus: SalonBookingStatus
   ) => {
     if (busyId) return;
-    setBusyId(`bk_${bookingId}`);
+    setBusyId(`bk_${booking.id}`);
     setActionError(null);
     try {
-      await updateDoc(doc(db, 'salonBookings', bookingId), {
+      const bookingRef = doc(db, 'salonBookings', booking.id);
+      const ticketRef = doc(db, 'salonQueues', booking.bookingDate, 'tickets', booking.id);
+      const ticketSnap = await getDoc(ticketRef);
+
+      const batch = writeBatch(db);
+      const bookingUpdate: Record<string, any> = {
         status: nextStatus,
         updatedAt: serverTimestamp(),
-      });
+      };
+      if (nextStatus === 'completed') {
+        bookingUpdate.completedAt = serverTimestamp();
+      }
+      batch.update(bookingRef, bookingUpdate);
+
+      if (ticketSnap.exists()) {
+        batch.update(ticketRef, {
+          status: nextStatus,
+          updatedAt: serverTimestamp(),
+        });
+      }
+      await batch.commit();
     } catch (error: any) {
       setActionError(
         error?.message || bi('বুকিং স্ট্যাটাস আপডেট করা যায়নি।', 'Failed to update booking status.')
       );
-      reportFirestoreError(error, OperationType.UPDATE, `salonBookings/${bookingId}`);
+      reportFirestoreError(error, OperationType.UPDATE, `salonBookings/${booking.id}`);
     } finally {
       setBusyId(null);
     }
+  };
+
+  const handleAdminSubmitSignature = async ({
+    signaturePath,
+    signerName,
+  }: {
+    signaturePath: string;
+    signerName: string;
+  }) => {
+    if (!signingTargetBooking) return;
+    setActionError(null);
+    const target = signingTargetBooking;
+    const bookingRef = doc(db, 'salonBookings', target.id);
+    const ticketRef = doc(db, 'salonQueues', target.bookingDate, 'tickets', target.id);
+    const ticketSnap = await getDoc(ticketRef);
+
+    const batch = writeBatch(db);
+    batch.update(bookingRef, {
+      status: 'completed',
+      completionSignaturePath: signaturePath,
+      completionSignerName: signerName,
+      completedAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+    if (ticketSnap.exists()) {
+      batch.update(ticketRef, {
+        status: 'completed',
+        hasCompletionSignature: true,
+        completionSignerName: signerName,
+        updatedAt: serverTimestamp(),
+      });
+    }
+    await batch.commit();
+    setSigningTargetBooking(null);
   };
 
   const pendingCount = requests.filter((r) => r.status === 'pending').length;
@@ -1216,6 +1323,11 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                       >
                         <div className="space-y-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
+                            {typeof b.serialNumber === 'number' && (
+                              <span className="text-xs font-bold text-amber-600 dark:text-amber-400 tabular-nums">
+                                #{b.serialNumber} ·
+                              </span>
+                            )}
                             <span className="text-sm font-semibold text-zinc-900 dark:text-white">
                               {b.customerName}
                             </span>
@@ -1223,21 +1335,26 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                               ({b.customerPhone})
                             </span>
                             <span
-                              className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase ${
+                              className={`text-[11px] font-bold uppercase ${
                                 b.status === 'confirmed'
-                                  ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300'
+                                  ? 'text-emerald-600 dark:text-emerald-400'
                                   : b.status === 'completed'
-                                  ? 'bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300'
+                                  ? 'text-indigo-600 dark:text-indigo-400'
                                   : b.status === 'cancelled'
-                                  ? 'bg-red-100 dark:bg-red-950/60 text-red-700 dark:text-red-300'
-                                  : 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300'
+                                  ? 'text-rose-600 dark:text-rose-400'
+                                  : 'text-amber-600 dark:text-amber-400'
                               }`}
                             >
-                              {localizeBookingStatus(b.status, lang)}
+                              · {localizeBookingStatus(b.status, lang)}
                             </span>
+                            {b.autoCancelledReason === 'time_expired' && (
+                              <span className="text-[11px] font-semibold text-rose-600 dark:text-rose-400">
+                                · {bi('সময় পার হওয়ায় অটো-ক্যানসেল', 'Auto-cancelled (Expired)')}
+                              </span>
+                            )}
                             {b.couponCode && (
-                              <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-semibold bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300">
-                                {bi('AI কুপন:', 'AI Coupon:')} {b.couponCode}
+                              <span className="text-[11px] font-mono font-semibold text-emerald-700 dark:text-emerald-300">
+                                · {bi('AI কুপন:', 'AI Coupon:')} {b.couponCode}
                                 {typeof b.discountPercent === 'number' ? ` (-${b.discountPercent}%)` : ''}
                               </span>
                             )}
@@ -1256,6 +1373,29 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                               {bi('নোট:', 'Note:')} {b.notes}
                             </p>
                           )}
+                          {b.completionSignaturePath && (
+                            <div className="pt-1 flex items-center gap-2.5 flex-wrap">
+                              <div className="rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 px-2 py-0.5">
+                                <svg
+                                  viewBox="0 0 480 170"
+                                  className="w-24 h-7 text-amber-600 dark:text-amber-400"
+                                  aria-label={bi('কমপ্লিট সিগনেচার', 'Completion signature')}
+                                >
+                                  <path
+                                    d={b.completionSignaturePath}
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="6"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                  />
+                                </svg>
+                              </div>
+                              <span className="text-[11px] font-medium text-emerald-700 dark:text-emerald-300">
+                                {bi('স্বাক্ষরিত:', 'Signed by:')} {b.completionSignerName || b.customerName}
+                              </span>
+                            </div>
+                          )}
                         </div>
 
                         <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
@@ -1263,28 +1403,29 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                             <button
                               type="button"
                               disabled={busyId === `bk_${b.id}`}
-                              onClick={() => handleUpdateBookingStatus(b.id, 'confirmed')}
-                              className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition-colors disabled:opacity-50"
+                              onClick={() => handleUpdateBookingStatus(b, 'confirmed')}
+                              className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition-colors disabled:opacity-50 min-h-[38px]"
                             >
                               {bi('নিশ্চিত করুন', 'Confirm')}
                             </button>
                           )}
-                          {(b.status === 'pending' || b.status === 'confirmed') && (
+                          {(b.status === 'pending' || b.status === 'confirmed' || (b.status === 'completed' && !b.completionSignaturePath)) && (
                             <button
                               type="button"
                               disabled={busyId === `bk_${b.id}`}
-                              onClick={() => handleUpdateBookingStatus(b.id, 'completed')}
-                              className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold transition-colors disabled:opacity-50"
+                              onClick={() => setSigningTargetBooking(b)}
+                              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold transition-colors disabled:opacity-50 min-h-[38px]"
                             >
-                              {bi('সম্পন্ন করুন', 'Complete')}
+                              <PenTool size={12} />
+                              <span>{bi('সম্পন্ন ও সিগনেচার', 'Complete & Sign')}</span>
                             </button>
                           )}
                           {(b.status === 'pending' || b.status === 'confirmed') && (
                             <button
                               type="button"
                               disabled={busyId === `bk_${b.id}`}
-                              onClick={() => handleUpdateBookingStatus(b.id, 'cancelled')}
-                              className="px-3 py-1.5 rounded-xl bg-zinc-200 dark:bg-zinc-700 hover:bg-red-100 dark:hover:bg-red-950/60 text-zinc-700 dark:text-zinc-200 hover:text-red-600 dark:hover:text-red-300 text-xs font-semibold transition-colors disabled:opacity-50"
+                              onClick={() => handleUpdateBookingStatus(b, 'cancelled')}
+                              className="px-3 py-2 rounded-xl bg-zinc-200 dark:bg-zinc-700 hover:bg-red-100 dark:hover:bg-red-950/60 text-zinc-700 dark:text-zinc-200 hover:text-red-600 dark:hover:text-red-300 text-xs font-semibold transition-colors disabled:opacity-50 min-h-[38px]"
                             >
                               {bi('বাতিল', 'Cancel')}
                             </button>
@@ -1299,6 +1440,20 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
           )}
         </div>
       </div>
+
+      {signingTargetBooking && (
+        <CompletionSignatureModal
+          title={bi('বুকিং সম্পন্ন ও কমপ্লিট সিগনেচার', 'Complete Booking & Sign')}
+          subtitle={`${
+            typeof signingTargetBooking.serialNumber === 'number'
+              ? `#${signingTargetBooking.serialNumber} · `
+              : ''
+          }${signingTargetBooking.customerName} · ${signingTargetBooking.timeSlot}`}
+          defaultSignerName={signingTargetBooking.customerName}
+          onClose={() => setSigningTargetBooking(null)}
+          onSubmit={handleAdminSubmitSignature}
+        />
+      )}
     </div>
   );
 };

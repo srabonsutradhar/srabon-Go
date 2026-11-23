@@ -52,7 +52,7 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
 
   const safeOpenUrl =
     typeof window !== 'undefined'
-      ? `${window.location.origin}${window.location.pathname}`
+      ? `${window.location.origin}${window.location.pathname}${window.location.search}`
       : '/';
 
   const handleInstallClick = async () => {

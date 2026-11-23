@@ -79,6 +79,7 @@ Create a unique, warm Bengali welcome coupon offer:
       responseMimeType: 'application/json',
       responseSchema: {
         type: Type.OBJECT,
+        required: ['codePrefix', 'title', 'aiMessage', 'discountPercent'],
         properties: {
           codePrefix: { type: Type.STRING },
           title: { type: Type.STRING },
@@ -89,12 +90,25 @@ Create a unique, warm Bengali welcome coupon offer:
     },
   });
 
-  const rawText = (response.text || '{}')
+  const rawText = (
+    response?.candidates?.[0]?.content?.parts?.[0]?.text ||
+    response?.text ||
+    '{}'
+  )
     .trim()
     .replace(/^```(?:json)?\s*/i, '')
     .replace(/```\s*$/i, '')
     .trim();
-  const parsed = JSON.parse(rawText);
+
+  let parsed: any = {};
+  try {
+    parsed = JSON.parse(rawText);
+  } catch {
+    const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      parsed = JSON.parse(jsonMatch[0]);
+    }
+  }
 
   const code = sanitizeCouponCode(parsed?.codePrefix, safeUid);
   const rawTitle = typeof parsed?.title === 'string' ? parsed.title.trim() : '';

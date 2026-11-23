@@ -38,6 +38,10 @@ const ControlBar: React.FC<ControlBarProps> = ({
   const { lang, bi } = useLanguage();
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape' && isFiltersOpen) {
+      setIsFiltersOpen(false);
+      return;
+    }
     if (e.key === 'Enter') {
       if (filters.search.length > 5) {
          onAiSearch(filters.search);

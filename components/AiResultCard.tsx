@@ -21,7 +21,16 @@ interface AiResultCardProps {
 const AiResultCard: React.FC<AiResultCardProps> = ({ result, voices, onClose, onBeforeGenerate, isAdmin = false }) => {
   const [copiedSection, setCopiedSection] = useState<string | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
+  const copyTimerRef = useRef<number | null>(null);
   const { bi } = useLanguage();
+
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current !== null) {
+        window.clearTimeout(copyTimerRef.current);
+      }
+    };
+  }, []);
 
   // Focus trap implementation
   useEffect(() => {
@@ -65,7 +74,10 @@ const AiResultCard: React.FC<AiResultCardProps> = ({ result, voices, onClose, on
     const ok = await copyTextSafely(text);
     if (ok) {
       setCopiedSection(section);
-      setTimeout(() => setCopiedSection(null), 2000);
+      if (copyTimerRef.current !== null) {
+        window.clearTimeout(copyTimerRef.current);
+      }
+      copyTimerRef.current = window.setTimeout(() => setCopiedSection(null), 2000);
     }
   };
 
@@ -133,7 +145,9 @@ const AiResultCard: React.FC<AiResultCardProps> = ({ result, voices, onClose, on
                               urlTransform={(url) => {
                                 const trimmed = (url || '').trim();
                                 if (!trimmed) return '';
-                                if (trimmed.startsWith('#') || trimmed.startsWith('/')) return trimmed;
+                                if (trimmed.startsWith('#') || (trimmed.startsWith('/') && !trimmed.startsWith('//'))) {
+                                  return trimmed;
+                                }
                                 try {
                                   const parsed = new URL(trimmed);
                                   return parsed.protocol === 'https:' ||

@@ -124,6 +124,8 @@ export interface SalonConfig {
   isBookingOpen: boolean;
 }
 
+export type SalonAutoCancelReason = 'time_expired';
+
 export interface SalonBooking {
   id: string;
   uid: string;
@@ -140,8 +142,36 @@ export interface SalonBooking {
   totalPrice: number;
   bookingDate: string;
   timeSlot: string;
+  serialNumber?: number;
   notes?: string;
   status: SalonBookingStatus;
+  completionSignaturePath?: string;
+  completionSignerName?: string;
+  completedAt?: any;
+  autoCancelledReason?: SalonAutoCancelReason;
+  createdAt?: any;
+  updatedAt?: any;
+}
+
+export interface SalonQueueSummary {
+  bookingDate: string;
+  totalSerials: number;
+  lastBookingId: string;
+  updatedAt?: any;
+}
+
+export interface SalonQueueTicket {
+  id: string;
+  bookingId: string;
+  uid: string;
+  bookingDate: string;
+  serialNumber: number;
+  serviceKey: SalonServiceKey;
+  timeSlot: string;
+  slotMinutes: number;
+  status: SalonBookingStatus;
+  hasCompletionSignature: boolean;
+  completionSignerName?: string;
   createdAt?: any;
   updatedAt?: any;
 }
@@ -239,4 +269,18 @@ export interface CustomVoiceProfile {
   pitchCentsOffset: number;
   rateMultiplier: number;
   warmthBoost: number;
+}
+
+export type SiteReviewPageTag = 'overall' | 'studio' | 'voice-clone' | 'ideas' | 'salon';
+
+export interface SiteReview {
+  id: string;
+  uid: string;
+  authorName: string;
+  authorPhotoUrl?: string;
+  rating: number;
+  pageTag: SiteReviewPageTag;
+  comment: string;
+  createdAt?: any;
+  updatedAt?: any;
 }

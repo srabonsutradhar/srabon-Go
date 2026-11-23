@@ -26,6 +26,7 @@ import { SALON_SERVICES, formatSalonPrice } from '../utils/salon';
 import { FEATURED_VOICE_ALBUMS, STUDIO_MEDIA } from '../utils/studioAlbums';
 import { localizeSalonService, useLanguage } from '../utils/i18n';
 import PWAInstallButton from './PWAInstallButton';
+import SiteReviewsSection from './SiteReviewsSection';
 
 interface HomePageProps {
   user: User;
@@ -509,6 +510,9 @@ const HomePage: React.FC<HomePageProps> = ({
             </button>
           </div>
         </section>
+
+        {/* User Star Ratings & Public Reviews Section */}
+        <SiteReviewsSection user={user} isAdmin={isAdmin} />
 
         {/* Dedicated Android Mobile App Download Section */}
         <section className="rounded-3xl bg-gradient-to-r from-emerald-950 via-teal-950 to-slate-950 text-white border border-emerald-500/35 p-6 sm:p-8 shadow-xl">

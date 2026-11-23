@@ -29,6 +29,7 @@ import {
   UserCheck,
   ArrowLeftRight,
   Languages,
+  Star,
 } from 'lucide-react';
 import type { User } from 'firebase/auth';
 import { localizeGender, localizePitch, useLanguage } from '../utils/i18n';
@@ -489,6 +490,27 @@ const FilterBar: React.FC<FilterBarProps> = ({
                   <span className="flex items-center gap-3">
                     <Sparkles size={16} className="text-indigo-500 shrink-0" />
                     <span>{bi('এআই কাস্টিং ডিরেক্টর', 'AI Casting Director')}</span>
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsMenuOpen(false);
+                    if (viewMode !== 'home') {
+                      onViewModeChange('home');
+                    }
+                    window.setTimeout(() => {
+                      document
+                        .getElementById('site-reviews-section')
+                        ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }, 90);
+                  }}
+                  className="w-full min-h-[44px] px-3 py-2 rounded-xl flex items-center justify-between gap-3 text-sm font-medium text-zinc-800 dark:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                >
+                  <span className="flex items-center gap-3">
+                    <Star size={16} className="text-amber-500 fill-amber-400 shrink-0" />
+                    <span>{bi('ইউজার রিভিউ ও স্টার রেটিং', 'User Ratings & Reviews')}</span>
                   </span>
                 </button>
 

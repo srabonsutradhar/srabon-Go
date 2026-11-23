@@ -32,10 +32,12 @@ const VoiceFinder: React.FC<VoiceFinderProps> = ({
   const [userNotice, setUserNotice] = useState<string | null>(null);
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
   const modalRef = useRef<HTMLDivElement>(null);
+  const isMountedRef = useRef(true);
   const { bi } = useLanguage();
 
-  // Focus trap implementation
+  // Focus trap implementation & mount tracking
   useEffect(() => {
+    isMountedRef.current = true;
     textAreaRef.current?.focus();
 
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -69,7 +71,10 @@ const VoiceFinder: React.FC<VoiceFinderProps> = ({
     };
 
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    return () => {
+      isMountedRef.current = false;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
   }, [onClose]);
 
   const examples = [
@@ -96,6 +101,7 @@ const VoiceFinder: React.FC<VoiceFinderProps> = ({
 
     try {
       const hasBackend = await checkBackendHealth();
+      if (!isMountedRef.current) return;
       if (!hasBackend) {
         const msg =
           'AI Casting সার্ভার সক্রিয় নেই (Static Host)। এটি ব্যবহার করতে Node সার্ভার বা VITE_API_BASE_URL যুক্ত করুন।';
@@ -116,6 +122,7 @@ const VoiceFinder: React.FC<VoiceFinderProps> = ({
 
       if (onBeforeGenerate) {
         const allowed = await onBeforeGenerate();
+        if (!isMountedRef.current) return;
         if (!allowed) {
           setLoading(false);
           return;
@@ -173,6 +180,7 @@ const VoiceFinder: React.FC<VoiceFinderProps> = ({
           responseMimeType: "application/json",
           responseSchema: {
             type: Type.OBJECT,
+            required: ["recommendedVoices", "systemInstruction", "sampleText"],
             properties: {
               recommendedVoices: {
                 type: Type.ARRAY,
@@ -192,17 +200,31 @@ const VoiceFinder: React.FC<VoiceFinderProps> = ({
         }
       });
 
-      const rawText = (response.text || '{}')
+      const rawText = (
+        response?.candidates?.[0]?.content?.parts?.[0]?.text ||
+        response?.text ||
+        '{}'
+      )
         .trim()
         .replace(/^```(?:json)?\s*/i, '')
         .replace(/```\s*$/i, '')
         .trim();
-      const result = JSON.parse(rawText);
+      let result: any = {};
+      try {
+        result = JSON.parse(rawText);
+      } catch {
+        const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+        if (!jsonMatch) {
+          throw new Error('Could not parse AI casting output.');
+        }
+        result = JSON.parse(jsonMatch[0]);
+      }
       const validVoiceSet = new Set(voices.map(v => v.name));
       const matchedVoices = Array.isArray(result.recommendedVoices)
         ? result.recommendedVoices.filter((name: unknown): name is string => typeof name === 'string' && validVoiceSet.has(name))
         : [];
 
+      if (!isMountedRef.current) return;
       if (matchedVoices.length > 0) {
         onRecommendation({
           voiceNames: matchedVoices,
@@ -227,18 +249,22 @@ const VoiceFinder: React.FC<VoiceFinderProps> = ({
     } catch (err: any) {
       const msg = err?.message || 'AI Casting analysis failed.';
       reportAppIssue({ source: 'VoiceFinder', severity: 'error', message: msg });
-      if (isAdmin) {
-        setError(msg);
-      } else {
-        setUserNotice(
-          bi(
-            'ভয়েস বিশ্লেষণ সম্পন্ন করা যায়নি। অনুগ্রহ করে আবার চেষ্টা করুন।',
-            'Could not complete voice analysis. Please try again.'
-          )
-        );
+      if (isMountedRef.current) {
+        if (isAdmin) {
+          setError(msg);
+        } else {
+          setUserNotice(
+            bi(
+              'ভয়েস বিশ্লেষণ সম্পন্ন করা যায়নি। অনুগ্রহ করে আবার চেষ্টা করুন।',
+              'Could not complete voice analysis. Please try again.'
+            )
+          );
+        }
       }
     } finally {
-      setLoading(false);
+      if (isMountedRef.current) {
+        setLoading(false);
+      }
     }
   };
 
@@ -316,7 +342,7 @@ const VoiceFinder: React.FC<VoiceFinderProps> = ({
                   ) : userNotice ? (
                     <span className="text-amber-600 dark:text-amber-400 flex items-center gap-1"><X size={14}/> {userNotice}</span>
                   ) : (
-                    <>{bi('পরিচালিত:', 'Powered by')} <span className="text-indigo-500 dark:text-indigo-400">Gemini 3.1 Flash Lite</span></>
+                    <>{bi('পরিচালিত:', 'Powered by')} <span className="text-indigo-500 dark:text-indigo-400">Gemini AI</span></>
                   )}
               </span>
               

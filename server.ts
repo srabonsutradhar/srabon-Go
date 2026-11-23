@@ -324,7 +324,6 @@ async function acquireTtsQuotaSlot(tokensNeeded: number): Promise<void> {
 
     if (!rpmExceeded && !tpmExceeded) {
       ttsMinuteWindow.push({ ts: now, tokens: tokensNeeded });
-      ttsDailyCount += 1;
       return;
     }
 
@@ -642,6 +641,7 @@ async function startServer() {
             throw new TtsQuotaError("No audio data received from the TTS model.", 502, 5);
           }
 
+          ttsDailyCount += 1;
           const mimeType = inlineData.mimeType || "audio/wav";
           setCachedTts(cacheKey, inlineData.data, mimeType);
           return { audioData: inlineData.data, mimeType };
@@ -767,8 +767,28 @@ async function startServer() {
       if (sessionId !== undefined && (typeof sessionId !== "string" || !VALID_SESSION_ID_RE.test(sessionId))) {
         return res.status(400).json({ error: "Invalid chat session identifier." });
       }
-      if (message === undefined || message === null || (typeof message === "string" && !message.trim())) {
-        return res.status(400).json({ error: "Chat message is required." });
+      if (
+        message === undefined ||
+        message === null ||
+        (typeof message === "string" && (!message.trim() || message.length > 20000)) ||
+        (typeof message !== "string" && (!Array.isArray(message) || message.length === 0 || message.length > 20))
+      ) {
+        return res.status(400).json({ error: "Valid chat message is required." });
+      }
+      if (
+        history !== undefined &&
+        (!Array.isArray(history) ||
+          history.length > 50 ||
+          history.some(
+            (turn: any) =>
+              !turn ||
+              typeof turn !== "object" ||
+              (turn.role !== "user" && turn.role !== "model") ||
+              !Array.isArray(turn.parts) ||
+              turn.parts.length > 20
+          ))
+      ) {
+        return res.status(400).json({ error: "Invalid chat history payload." });
       }
       const ai = createAiClient(apiKey);
       const chatKey = sessionId ? `${getOwnerSessionKey(req)}:${sessionId}` : "";
@@ -804,8 +824,28 @@ async function startServer() {
       if (sessionId !== undefined && (typeof sessionId !== "string" || !VALID_SESSION_ID_RE.test(sessionId))) {
         return res.status(400).json({ error: "Invalid chat session identifier." });
       }
-      if (message === undefined || message === null || (typeof message === "string" && !message.trim())) {
-        return res.status(400).json({ error: "Chat message is required." });
+      if (
+        message === undefined ||
+        message === null ||
+        (typeof message === "string" && (!message.trim() || message.length > 20000)) ||
+        (typeof message !== "string" && (!Array.isArray(message) || message.length === 0 || message.length > 20))
+      ) {
+        return res.status(400).json({ error: "Valid chat message is required." });
+      }
+      if (
+        history !== undefined &&
+        (!Array.isArray(history) ||
+          history.length > 50 ||
+          history.some(
+            (turn: any) =>
+              !turn ||
+              typeof turn !== "object" ||
+              (turn.role !== "user" && turn.role !== "model") ||
+              !Array.isArray(turn.parts) ||
+              turn.parts.length > 20
+          ))
+      ) {
+        return res.status(400).json({ error: "Invalid chat history payload." });
       }
       const ai = createAiClient(apiKey);
       const chatKey = sessionId ? `${getOwnerSessionKey(req)}:${sessionId}` : "";
@@ -870,10 +910,13 @@ async function startServer() {
           error: MISSING_API_KEY_ERROR,
         });
       }
+      const prompt = typeof req.body?.prompt === "string" ? req.body.prompt.trim() : "";
+      if (!prompt || prompt.length > 4000) {
+        return res.status(400).json({ error: "Valid prompt is required for video generation." });
+      }
       const ai = createAiClient(apiKey);
-      const body = { ...req.body };
+      const body = { ...req.body, prompt };
       delete body.video;
-      if (body.video && typeof body.video === 'object') { const c = { ...body.video }; delete c.uri; delete c.videoUri; body.video = Object.keys(c).length ? c : undefined; }
       delete body.source;
       body.model = resolveModel(body.model || "veo-3.1-fast-generate-preview");
       const ownerKey = getOwnerSessionKey(req);
