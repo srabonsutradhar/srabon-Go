@@ -379,8 +379,8 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
         onClick={onClose}
       />
 
-      <div className="relative w-full max-w-xl max-h-[90vh] overflow-y-auto bg-white dark:bg-zinc-900 rounded-3xl shadow-2xl border border-zinc-200 dark:border-zinc-800 animate-slide-up">
-        <div className="p-6 sm:p-8 space-y-5">
+      <div className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-white dark:bg-zinc-900 rounded-3xl shadow-2xl border border-zinc-200 dark:border-zinc-800 animate-slide-up">
+        <div className="p-6 sm:p-8 space-y-6">
           {/* Header */}
           <div className="flex items-start justify-between gap-4">
             <div className="space-y-1.5">
@@ -457,12 +457,12 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
             <div className="space-y-4">
               {/* Stats */}
               <div className="grid grid-cols-2 gap-3">
-                <div className="p-4 rounded-2xl bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/60">
-                  <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
-                    <Sparkles size={12} />
+                <div className="p-5 rounded-2xl bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/60">
+                  <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
+                    <Sparkles size={13} />
                     <span>{bi('মোট বোনাস ক্রেডিট', 'Total Bonus Credits')}</span>
                   </div>
-                  <p className="text-2xl font-bold text-zinc-900 dark:text-white mt-1 tabular-nums">
+                  <p className="text-2xl font-bold text-zinc-900 dark:text-white mt-1.5 tabular-nums">
                     {bonusCredits}{' '}
                     <span className="text-xs font-medium text-zinc-500">
                       {bi('ক্রেডিট', 'Credits')}
@@ -470,9 +470,9 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
                   </p>
                 </div>
 
-                <div className="p-4 rounded-2xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-100 dark:border-emerald-900/60">
-                  <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
-                    <Users size={12} />
+                <div className="p-5 rounded-2xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-100 dark:border-emerald-900/60">
+                  <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                    <Users size={13} />
                     <span>{bi('সফল রেফার', 'Successful Referrals')}</span>
                   </div>
                   <p className="text-2xl font-bold text-zinc-900 dark:text-white mt-1 tabular-nums">
@@ -500,12 +500,12 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
                 </p>
 
                 {/* Referral Code */}
-                <div className="flex items-center justify-between gap-2 px-3.5 py-2 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700">
-                  <div>
-                    <span className="text-[10px] uppercase tracking-wider text-zinc-400 block">
+                <div className="flex items-center justify-between gap-2 px-4 py-2.5 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700">
+                  <div className="space-y-0.5">
+                    <span className="text-xs uppercase tracking-wider text-zinc-500 dark:text-zinc-400 block">
                       {bi('আপনার রেফার কোড', 'Your Referral Code')}
                     </span>
-                    <span className="text-sm font-mono font-bold tracking-wider text-zinc-900 dark:text-white">
+                    <span className="text-sm sm:text-base font-mono font-bold tracking-wider text-zinc-900 dark:text-white">
                       {referralCode || bi('তৈরি হচ্ছে...', 'Generating...')}
                     </span>
                   </div>
@@ -513,7 +513,7 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
                     type="button"
                     onClick={handleCopyReferralCode}
                     disabled={!referralCode}
-                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-xs font-medium text-zinc-700 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-xs font-medium text-zinc-700 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
                   >
                     {copiedCode ? <Check size={13} className="text-emerald-500" /> : <Copy size={13} />}
                     <span>{copiedCode ? bi('কপি হয়েছে', 'Copied') : bi('কোড কপি', 'Copy Code')}</span>
@@ -521,12 +521,12 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
                 </div>
 
                 {/* Referral Link */}
-                <div className="flex items-center justify-between gap-2 px-3.5 py-2 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700">
-                  <div className="min-w-0 flex-1">
-                    <span className="text-[10px] uppercase tracking-wider text-zinc-400 block">
+                <div className="flex items-center justify-between gap-2 px-4 py-2.5 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700">
+                  <div className="min-w-0 flex-1 space-y-0.5">
+                    <span className="text-xs uppercase tracking-wider text-zinc-500 dark:text-zinc-400 block">
                       {bi('আপনার রেফার লিংক', 'Your Referral Link')}
                     </span>
-                    <span className="text-xs font-mono text-zinc-700 dark:text-zinc-300 truncate block">
+                    <span className="text-xs sm:text-sm font-mono text-zinc-700 dark:text-zinc-300 truncate block">
                       {referralLink || bi('লোড হচ্ছে...', 'Loading...')}
                     </span>
                   </div>
@@ -656,20 +656,20 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
                           : 'bg-zinc-50 dark:bg-zinc-800/60 border-zinc-200 dark:border-zinc-700 hover:border-zinc-300'
                       }`}
                     >
-                      <div>
-                        <div className="flex items-center justify-between gap-1">
-                          <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
                             {bi('মান্থলি', 'Monthly')}
                           </span>
-                          <span className="text-[10px] font-semibold text-zinc-500 dark:text-zinc-400">
+                          <span className="text-xs font-semibold text-zinc-500 dark:text-zinc-400">
                             {bi('৩০ দিন মেয়াদ', '30 Days Validity')}
                           </span>
                         </div>
-                        <p className="text-lg font-bold text-zinc-900 dark:text-white mt-1 tabular-nums">
+                        <p className="text-xl font-bold text-zinc-900 dark:text-white mt-1 tabular-nums">
                           {monthlyPrice}
                         </p>
                       </div>
-                      <ul className="space-y-1 text-[11px] text-zinc-600 dark:text-zinc-300">
+                      <ul className="space-y-1.5 text-xs text-zinc-600 dark:text-zinc-300 leading-relaxed">
                         <li>
                           • {STUDIO_TIER_LIMITS.monthly.maxScriptChars.toLocaleString(lang === 'bn' ? 'bn-BD' : 'en-US')}{' '}
                           {bi('অক্ষর / স্ক্রিপ্ট', 'chars / script')}
@@ -679,7 +679,7 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
                           • {STUDIO_TIER_LIMITS.monthly.maxSavedScripts}
                           {bi('টি কাস্টম স্ক্রিপ্ট সেভ', ' saved custom scripts')}
                         </li>
-                        <li className="text-zinc-400">
+                        <li className="text-zinc-500 dark:text-zinc-400">
                           • {bi('সাধারণ স্পিড ও ফিক্সড ১.২স লুপ', 'Standard 1.0x speed & fixed 1.2s loop')}
                         </li>
                       </ul>
@@ -688,26 +688,26 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
                     <button
                       type="button"
                       onClick={() => setSelectedPackage('yearly')}
-                      className={`p-3.5 rounded-2xl border text-left transition-all flex flex-col justify-between gap-2 ${
+                      className={`p-4 rounded-2xl border text-left transition-all flex flex-col justify-between gap-3 ${
                         selectedPackage === 'yearly'
                           ? 'bg-amber-50/90 dark:bg-amber-950/40 border-amber-500 ring-1 ring-amber-500/40'
                           : 'bg-zinc-50 dark:bg-zinc-800/60 border-zinc-200 dark:border-zinc-700 hover:border-zinc-300'
                       }`}
                     >
-                      <div>
-                        <div className="flex items-center justify-between gap-1">
-                          <span className="text-[11px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400">
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400">
                             {bi('ইয়ারলি (সেরা অফার)', 'Yearly (Best Value)')}
                           </span>
-                          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500 text-zinc-950">
+                          <span className="px-2 py-0.5 rounded text-xs font-bold bg-amber-500 text-zinc-950">
                             {bi('৩৬৫ দিন', '365 Days')}
                           </span>
                         </div>
-                        <p className="text-lg font-bold text-zinc-900 dark:text-white mt-1 tabular-nums">
+                        <p className="text-xl font-bold text-zinc-900 dark:text-white mt-1 tabular-nums">
                           {yearlyPrice}
                         </p>
                       </div>
-                      <ul className="space-y-1 text-[11px] text-zinc-700 dark:text-zinc-200">
+                      <ul className="space-y-1.5 text-xs text-zinc-700 dark:text-zinc-200 leading-relaxed">
                         <li>
                           •{' '}
                           <strong>
@@ -738,10 +738,10 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
                     </button>
                   </div>
 
-                  <div className="p-4 sm:p-5 rounded-2xl bg-zinc-50 dark:bg-zinc-800/70 border border-zinc-200 dark:border-zinc-700 space-y-3">
+                  <div className="p-5 rounded-2xl bg-zinc-50 dark:bg-zinc-800/70 border border-zinc-200 dark:border-zinc-700 space-y-3.5">
                     <div className="flex items-center justify-between gap-2">
-                      <div>
-                        <p className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
+                      <div className="space-y-0.5">
+                        <p className="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
                           {selectedPackage === 'yearly'
                             ? bi('Yearly প্যাকেজ ফি (৩৬৫ দিন)', 'Yearly Package Fee (365 Days)')
                             : bi('Monthly প্যাকেজ ফি (৩০ দিন)', 'Monthly Package Fee (30 Days)')}
@@ -750,8 +750,8 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
                           {selectedPackage === 'yearly' ? yearlyPrice : monthlyPrice}
                         </p>
                       </div>
-                      <div className="text-right">
-                        <p className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
+                      <div className="text-right space-y-0.5">
+                        <p className="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
                           {bi('পেমেন্ট মাধ্যম', 'Payment Method')}
                         </p>
                         <p className="text-sm font-semibold text-indigo-600 dark:text-indigo-400">
@@ -761,12 +761,12 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
                     </div>
 
                     {billingConfig.paymentAccount ? (
-                      <div className="flex items-center justify-between gap-2 px-3.5 py-2.5 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700">
-                        <div className="min-w-0">
-                          <span className="text-[11px] text-zinc-400 block">
+                      <div className="flex items-center justify-between gap-2 px-4 py-3 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700">
+                        <div className="min-w-0 space-y-0.5">
+                          <span className="text-xs text-zinc-500 dark:text-zinc-400 block">
                             {bi('পেমেন্ট নম্বর / অ্যাকাউন্ট', 'Payment Number / Account')}
                           </span>
-                          <span className="text-sm font-mono font-semibold text-zinc-900 dark:text-white break-all">
+                          <span className="text-sm sm:text-base font-mono font-semibold text-zinc-900 dark:text-white break-all">
                             {billingConfig.paymentAccount}
                           </span>
                         </div>
@@ -806,15 +806,15 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
                     <span>{bi('পেমেন্টের তথ্য জমা দিন', 'Submit Payment Details')}</span>
                   </h3>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1">
+                      <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-600 dark:text-zinc-300 mb-1.5">
                         {bi('পেমেন্ট মেথড', 'Payment Method')}
                       </label>
                       <select
                         value={paymentMethod}
                         onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
-                        className="w-full rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-3 py-2 text-sm text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:focus:ring-indigo-900"
+                        className="w-full rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-3.5 py-2.5 text-sm sm:text-base text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:focus:ring-indigo-900"
                       >
                         {PAYMENT_METHODS.map((m) => (
                           <option key={m} value={m}>
@@ -825,7 +825,7 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
                     </div>
 
                     <div>
-                      <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1">
+                      <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-600 dark:text-zinc-300 mb-1.5">
                         {bi('পাঠানো টাকার পরিমাণ', 'Amount Sent')}
                       </label>
                       <input
@@ -834,12 +834,12 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
                         onChange={(e) => setAmountText(e.target.value)}
                         maxLength={40}
                         placeholder={bi('যেমন: 50 BDT', 'e.g. 50 BDT')}
-                        className="w-full rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-3 py-2 text-sm text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:focus:ring-indigo-900"
+                        className="w-full rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-3.5 py-2.5 text-sm sm:text-base text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:focus:ring-indigo-900"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1">
+                      <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-600 dark:text-zinc-300 mb-1.5">
                         {bi('যে নম্বর থেকে পাঠিয়েছেন', 'Sender Account / Number')}
                       </label>
                       <input
@@ -848,12 +848,12 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
                         onChange={(e) => setSenderNumber(e.target.value)}
                         maxLength={30}
                         placeholder="01XXXXXXXXX"
-                        className="w-full rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-3 py-2 text-sm text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:focus:ring-indigo-900"
+                        className="w-full rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-3.5 py-2.5 text-sm sm:text-base text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:focus:ring-indigo-900"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1">
+                      <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-600 dark:text-zinc-300 mb-1.5">
                         {bi('ট্রানজেকশন আইডি (TrxID)', 'Transaction ID (TrxID)')}
                       </label>
                       <input
@@ -862,13 +862,13 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
                         onChange={(e) => setTransactionId(e.target.value)}
                         maxLength={64}
                         placeholder={bi('যেমন: BGD9X2K10', 'e.g. BGD9X2K10')}
-                        className="w-full rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-3 py-2 text-sm text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:focus:ring-indigo-900"
+                        className="w-full rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-3.5 py-2.5 text-sm sm:text-base text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:focus:ring-indigo-900"
                       />
                     </div>
                   </div>
 
                   <div>
-                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1">
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-600 dark:text-zinc-300 mb-1.5">
                       {bi('নোট (ঐচ্ছিক)', 'Note (Optional)')}
                     </label>
                     <input
@@ -877,7 +877,7 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
                       onChange={(e) => setNote(e.target.value)}
                       maxLength={300}
                       placeholder={bi('অতিরিক্ত কোনো তথ্য থাকলে লিখুন...', 'Any additional notes...')}
-                      className="w-full rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-3 py-2 text-sm text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:focus:ring-indigo-900"
+                      className="w-full rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-3.5 py-2.5 text-sm sm:text-base text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:focus:ring-indigo-900"
                     />
                   </div>
 
@@ -922,29 +922,29 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
               )}
 
               {myRequests.length > 0 && (
-                <div className="space-y-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
-                  <p className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
+                <div className="space-y-3 pt-3 border-t border-zinc-100 dark:border-zinc-800">
+                  <p className="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
                     {bi('আপনার রিকোয়েস্টের অবস্থা', 'Your Request Status')}
                   </p>
-                  <div className="space-y-2">
+                  <div className="space-y-2.5">
                     {myRequests.map((req) => (
                       <div
                         key={req.id}
-                        className="flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200/70 dark:border-zinc-700/70 text-xs"
+                        className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200/70 dark:border-zinc-700/70 text-xs sm:text-sm"
                       >
-                        <div className="min-w-0">
+                        <div className="min-w-0 space-y-0.5">
                           <p className="font-medium text-zinc-900 dark:text-white truncate">
                             {req.packageType === 'yearly'
                               ? bi('Yearly (৩৬৫ দিন)', 'Yearly (365 Days)')
                               : bi('Monthly (৩০ দিন)', 'Monthly (30 Days)')}{' '}
                             • {req.paymentMethod} • TrxID: {req.transactionId}
                           </p>
-                          <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                          <p className="text-xs text-zinc-500 dark:text-zinc-400">
                             {req.amountText} • {req.senderNumber}
                           </p>
                         </div>
                         <span
-                          className={`shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold ${
+                          className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${
                             req.status === 'approved'
                               ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300'
                               : req.status === 'rejected'
@@ -953,11 +953,11 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
                           }`}
                         >
                           {req.status === 'approved' ? (
-                            <CheckCircle2 size={12} />
+                            <CheckCircle2 size={13} />
                           ) : req.status === 'rejected' ? (
-                            <XCircle size={12} />
+                            <XCircle size={13} />
                           ) : (
-                            <Clock size={12} />
+                            <Clock size={13} />
                           )}
                           <span>{localizeUpgradeStatus(req.status, lang)}</span>
                         </span>

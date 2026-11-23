@@ -162,6 +162,10 @@ service cloud.firestore {
       return val is int && val >= 0 && val <= 50000;
     }
 
+    function isValidSalonTitle(val) {
+      return val is string && val.size() >= 2 && val.size() <= 100;
+    }
+
     function isValidSalonConfig(data) {
       return data.keys().hasAll([
           'salonName', 'currencySymbol',
@@ -173,6 +177,8 @@ service cloud.firestore {
           'salonName', 'currencySymbol',
           'haircutPrice', 'beardTrimPrice', 'shavePrice',
           'hairColorPrice', 'facialPrice', 'comboPrice', 'bookingFee',
+          'haircutTitle', 'beardTrimTitle', 'shaveTitle',
+          'hairColorTitle', 'facialTitle', 'comboTitle',
           'address', 'phone', 'openHours', 'isBookingOpen', 'updatedAt'
         ])
         && data.salonName is string
@@ -187,6 +193,12 @@ service cloud.firestore {
         && isValidSalonPrice(data.hairColorPrice)
         && isValidSalonPrice(data.facialPrice)
         && isValidSalonPrice(data.comboPrice)
+        && (!('haircutTitle' in data) || isValidSalonTitle(data.haircutTitle))
+        && (!('beardTrimTitle' in data) || isValidSalonTitle(data.beardTrimTitle))
+        && (!('shaveTitle' in data) || isValidSalonTitle(data.shaveTitle))
+        && (!('hairColorTitle' in data) || isValidSalonTitle(data.hairColorTitle))
+        && (!('facialTitle' in data) || isValidSalonTitle(data.facialTitle))
+        && (!('comboTitle' in data) || isValidSalonTitle(data.comboTitle))
         && isValidSalonPrice(data.bookingFee)
         && data.address is string
         && data.address.size() <= 200
@@ -210,6 +222,7 @@ service cloud.firestore {
           'couponCode', 'discountPercent', 'discountAmount', 'totalPrice',
           'bookingDate', 'timeSlot', 'serialNumber', 'notes', 'status',
           'completionSignaturePath', 'completionSignerName', 'completedAt',
+          'shopSignaturePath', 'shopSignerName', 'shopSignedAt',
           'autoCancelledReason', 'createdAt', 'updatedAt'
         ])
         && isValidId(data.uid)
@@ -263,6 +276,9 @@ service cloud.firestore {
         && (!('completionSignaturePath' in data) || (data.completionSignaturePath is string && data.completionSignaturePath.size() >= 5 && data.completionSignaturePath.size() <= 1500 && data.completionSignaturePath.matches('^M[ML0-9., ]+$')))
         && (!('completionSignerName' in data) || (data.completionSignerName is string && data.completionSignerName.size() >= 2 && data.completionSignerName.size() <= 80))
         && (!('completedAt' in data) || data.completedAt is timestamp)
+        && (!('shopSignaturePath' in data) || (data.shopSignaturePath is string && data.shopSignaturePath.size() >= 5 && data.shopSignaturePath.size() <= 1500 && data.shopSignaturePath.matches('^M[ML0-9., ]+$')))
+        && (!('shopSignerName' in data) || (data.shopSignerName is string && data.shopSignerName.size() >= 2 && data.shopSignerName.size() <= 80))
+        && (!('shopSignedAt' in data) || data.shopSignedAt is timestamp)
         && (!('autoCancelledReason' in data) || (data.autoCancelledReason is string && data.autoCancelledReason in ['time_expired']))
         && data.createdAt is timestamp
         && data.updatedAt is timestamp;
@@ -290,6 +306,7 @@ service cloud.firestore {
           'bookingId', 'uid', 'bookingDate', 'serialNumber',
           'serviceKey', 'timeSlot', 'slotMinutes', 'status',
           'hasCompletionSignature', 'completionSignerName',
+          'hasShopSignature', 'shopSignerName',
           'createdAt', 'updatedAt'
         ])
         && isValidId(data.bookingId)
@@ -312,6 +329,8 @@ service cloud.firestore {
         && data.status in ['pending', 'confirmed', 'completed', 'cancelled']
         && data.hasCompletionSignature is bool
         && (!('completionSignerName' in data) || (data.completionSignerName is string && data.completionSignerName.size() >= 2 && data.completionSignerName.size() <= 80))
+        && (!('hasShopSignature' in data) || data.hasShopSignature is bool)
+        && (!('shopSignerName' in data) || (data.shopSignerName is string && data.shopSignerName.size() >= 2 && data.shopSignerName.size() <= 80))
         && data.createdAt is timestamp
         && data.updatedAt is timestamp;
     }
@@ -488,7 +507,7 @@ service cloud.firestore {
         && isOwner(userId)
         && isValidUserVoicePreferences(incoming(), userId)
         && incoming().plan == 'free'
-        && incoming().dailyCount == 0
+        && incoming().dailyCount in [0, 1]
         && (!('bonusCredits' in incoming()) || incoming().bonusCredits == 0)
         && (!('referralCount' in incoming()) || incoming().referralCount == 0)
         && incoming().createdAt == request.time
@@ -638,6 +657,8 @@ service cloud.firestore {
           'salonName', 'currencySymbol',
           'haircutPrice', 'beardTrimPrice', 'shavePrice',
           'hairColorPrice', 'facialPrice', 'comboPrice', 'bookingFee',
+          'haircutTitle', 'beardTrimTitle', 'shaveTitle',
+          'hairColorTitle', 'facialTitle', 'comboTitle',
           'address', 'phone', 'openHours', 'isBookingOpen', 'updatedAt'
         ])
         && incoming().updatedAt == request.time;
@@ -656,6 +677,9 @@ service cloud.firestore {
         && !('completionSignaturePath' in incoming())
         && !('completionSignerName' in incoming())
         && !('completedAt' in incoming())
+        && !('shopSignaturePath' in incoming())
+        && !('shopSignerName' in incoming())
+        && !('shopSignedAt' in incoming())
         && !('autoCancelledReason' in incoming())
         && incoming().createdAt == request.time
         && incoming().updatedAt == request.time
@@ -688,9 +712,11 @@ service cloud.firestore {
           (
             isBootstrappedAdmin()
             && incoming().status in ['pending', 'confirmed', 'completed', 'cancelled']
-            && (!('completedAt' in incoming()) || incoming().completedAt == request.time || ('completedAt' in existing() && incoming().completedAt == existing().completedAt))
+            && (incoming().status != 'completed' || ('shopSignaturePath' in incoming() && 'shopSignerName' in incoming() && 'shopSignedAt' in incoming()))
+            && (!('shopSignedAt' in incoming()) || (!('shopSignedAt' in existing()) && incoming().shopSignedAt == request.time) || ('shopSignedAt' in existing() && incoming().shopSignedAt == existing().shopSignedAt))
+            && (!('completedAt' in incoming()) || (!('completedAt' in existing()) && incoming().completedAt == request.time) || ('completedAt' in existing() && incoming().completedAt == existing().completedAt))
             && incoming().diff(existing()).affectedKeys().hasOnly([
-              'status', 'completionSignaturePath', 'completionSignerName', 'completedAt', 'autoCancelledReason', 'updatedAt'
+              'status', 'shopSignaturePath', 'shopSignerName', 'shopSignedAt', 'completedAt', 'autoCancelledReason', 'updatedAt'
             ])
           )
           || (
@@ -701,12 +727,15 @@ service cloud.firestore {
           )
           || (
             existing().uid == request.auth.uid
-            && existing().status in ['confirmed', 'completed']
+            && existing().status in ['pending', 'confirmed', 'completed']
             && incoming().status == 'completed'
             && 'completionSignaturePath' in incoming()
             && 'completionSignerName' in incoming()
             && 'completedAt' in incoming()
-            && incoming().completedAt == request.time
+            && (
+              (!('completedAt' in existing()) && incoming().completedAt == request.time)
+              || ('completedAt' in existing() && incoming().completedAt == existing().completedAt)
+            )
             && incoming().diff(existing()).affectedKeys().hasOnly([
               'status', 'completionSignaturePath', 'completionSignerName', 'completedAt', 'updatedAt'
             ])
@@ -898,6 +927,8 @@ service cloud.firestore {
           && incoming().status == 'pending'
           && incoming().hasCompletionSignature == false
           && !('completionSignerName' in incoming())
+          && !('hasShopSignature' in incoming())
+          && !('shopSignerName' in incoming())
           && incoming().createdAt == request.time
           && incoming().updatedAt == request.time
           && getAfter(/databases/$(database)/documents/salonBookings/$(bookingId)).data.uid == request.auth.uid
@@ -920,7 +951,7 @@ service cloud.firestore {
             (
               isBootstrappedAdmin()
               && incoming().diff(existing()).affectedKeys().hasOnly([
-                'status', 'hasCompletionSignature', 'completionSignerName', 'updatedAt'
+                'status', 'hasShopSignature', 'shopSignerName', 'updatedAt'
               ])
             )
             || (
@@ -931,7 +962,7 @@ service cloud.firestore {
             )
             || (
               existing().uid == request.auth.uid
-              && existing().status in ['confirmed', 'completed']
+              && existing().status in ['pending', 'confirmed', 'completed']
               && incoming().status == 'completed'
               && incoming().hasCompletionSignature == true
               && 'completionSignerName' in incoming()

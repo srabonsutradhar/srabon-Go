@@ -65,7 +65,7 @@ const HomePage: React.FC<HomePageProps> = ({
 
   return (
     <div className="flex-1 overflow-y-auto">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10 space-y-10">
+      <div className="max-w-7xl mx-auto px-4 sm:px-8 lg:px-10 py-8 sm:py-12 space-y-12">
         {/* Hero Section with Studio Photography */}
         <section className="rounded-3xl bg-gradient-to-br from-white via-[#f8faff] to-indigo-50/70 dark:from-[#0f172a] dark:via-[#111936] dark:to-[#1a1630] border border-indigo-100 dark:border-indigo-900/60 overflow-hidden shadow-md">
           <div className="grid grid-cols-1 lg:grid-cols-12 items-stretch">
@@ -229,7 +229,7 @@ const HomePage: React.FC<HomePageProps> = ({
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-slate-950/15 to-transparent" />
                       <div className="absolute bottom-3.5 left-4 right-4 text-white">
-                        <p className="text-[11px] font-medium text-amber-200">
+                        <p className="text-xs sm:text-sm font-medium text-amber-200 leading-relaxed">
                           {bi(album.titleEn, album.titleBn)}
                         </p>
                         <h4 className="text-lg font-serif font-medium leading-snug">
@@ -377,7 +377,7 @@ const HomePage: React.FC<HomePageProps> = ({
 
                 <ul className="divide-y divide-amber-500/15 text-sm">
                   {SALON_SERVICES.slice(0, 5).map((service) => {
-                    const loc = localizeSalonService(service.key, lang);
+                    const loc = localizeSalonService(service.key, lang, salonConfig);
                     return (
                       <li
                         key={service.key}

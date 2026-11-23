@@ -153,21 +153,21 @@ const AdminNotificationsBox: React.FC<AdminNotificationsBoxProps> = ({
         onClick={onClose}
       />
 
-      <div className="relative w-full max-w-2xl max-h-[88vh] flex flex-col bg-white dark:bg-zinc-900 rounded-3xl shadow-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden animate-slide-up">
+      <div className="relative w-full max-w-4xl max-h-[88vh] flex flex-col bg-white dark:bg-zinc-900 rounded-3xl shadow-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden animate-slide-up">
         {/* Header */}
-        <div className="px-6 py-5 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900 flex items-center justify-center text-rose-600 dark:text-rose-400">
-              <Bell size={18} />
+        <div className="px-6 sm:px-8 py-5 sm:py-6 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5">
+            <div className="w-11 h-11 rounded-xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900 flex items-center justify-center text-rose-600 dark:text-rose-400 shrink-0">
+              <Bell size={20} />
             </div>
-            <div>
+            <div className="space-y-1">
               <h2
                 id="admin-notifications-title"
-                className="text-lg font-serif font-medium text-zinc-900 dark:text-white"
+                className="text-lg sm:text-xl font-serif font-medium text-zinc-900 dark:text-white"
               >
                 {bi('অ্যাডমিন সমস্যা নোটিফিকেশন বক্স', 'Admin Issue Notification Box')}
               </h2>
-              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+              <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 leading-relaxed">
                 {bi(
                   'সাধারণ ইউজাররা কোনো সমস্যা দেখবে না—সব সমস্যা শুধু এখানে অ্যাডমিনের কাছে আসবে',
                   'Regular users never see system errors—all issues arrive privately here for the admin'
@@ -240,18 +240,18 @@ const AdminNotificationsBox: React.FC<AdminNotificationsBoxProps> = ({
         </div>
 
         {/* Notifications List */}
-        <div className="p-6 overflow-y-auto flex-1 space-y-3">
+        <div className="p-6 sm:p-8 overflow-y-auto flex-1 space-y-4">
           {displayedIssues.length === 0 ? (
-            <div className="py-12 text-center space-y-2">
+            <div className="py-12 text-center space-y-3">
               <div className="w-12 h-12 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto">
                 <CheckCircle2 size={22} />
               </div>
-              <p className="text-sm font-medium text-zinc-900 dark:text-white">
+              <p className="text-base font-medium text-zinc-900 dark:text-white">
                 {filterTab === 'unread'
                   ? bi('এই মুহূর্তে কোনো নতুন সমস্যা বা এরর নেই', 'No new issues or errors right now')
                   : bi('কোনো নোটিফিকেশন জমা নেই', 'No notifications recorded')}
               </p>
-              <p className="text-xs text-zinc-500 dark:text-zinc-400 max-w-sm mx-auto">
+              <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 max-w-md mx-auto leading-relaxed">
                 {bi(
                   'কোনো ইউজার সার্ভার, API Key, 429 রেট-লিমিট বা ডেটাবেস সমস্যার মুখোমুখি হলে সেটি সাথে সাথে এই বক্সে চলে আসবে।',
                   'Whenever any user encounters a server, API key, 429 rate-limit, or database issue, it appears here immediately.'
@@ -262,7 +262,7 @@ const AdminNotificationsBox: React.FC<AdminNotificationsBoxProps> = ({
             displayedIssues.map((issue) => (
               <div
                 key={issue.id}
-                className={`p-4 rounded-2xl border transition-colors flex flex-col sm:flex-row sm:items-start justify-between gap-4 ${
+                className={`p-5 rounded-2xl border transition-colors flex flex-col sm:flex-row sm:items-start justify-between gap-4 ${
                   issue.status === 'unread'
                     ? issue.severity === 'warning'
                       ? 'bg-amber-50/70 dark:bg-amber-950/25 border-amber-200 dark:border-amber-900/70'
@@ -270,7 +270,7 @@ const AdminNotificationsBox: React.FC<AdminNotificationsBoxProps> = ({
                     : 'bg-zinc-50 dark:bg-zinc-800/40 border-zinc-200/80 dark:border-zinc-800 opacity-75'
                 }`}
               >
-                <div className="space-y-1.5 min-w-0">
+                <div className="space-y-2 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap text-xs">
                     <span
                       className={`inline-flex items-center gap-1 font-bold uppercase tracking-wider ${
@@ -295,18 +295,18 @@ const AdminNotificationsBox: React.FC<AdminNotificationsBoxProps> = ({
                       </>
                     )}
                     {issue.status === 'resolved' && (
-                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300">
+                      <span className="px-2.5 py-0.5 rounded-md text-xs font-bold uppercase bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300">
                         {bi('সমাধান হয়েছে', 'Resolved')}
                       </span>
                     )}
                   </div>
 
-                  <p className="text-sm font-medium text-zinc-900 dark:text-white leading-snug break-words">
+                  <p className="text-sm sm:text-base font-medium text-zinc-900 dark:text-white leading-relaxed break-words">
                     {issue.message}
                   </p>
 
                   {issue.details && (
-                    <p className="text-xs font-mono text-zinc-600 dark:text-zinc-400 bg-white/70 dark:bg-zinc-900/70 border border-zinc-200/70 dark:border-zinc-700/70 rounded-xl px-3 py-2 break-all">
+                    <p className="text-xs sm:text-sm font-mono text-zinc-600 dark:text-zinc-400 bg-white/70 dark:bg-zinc-900/70 border border-zinc-200/70 dark:border-zinc-700/70 rounded-xl px-3.5 py-2.5 break-all leading-relaxed">
                       {issue.details}
                     </p>
                   )}

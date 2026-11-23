@@ -17,6 +17,10 @@ import {
   Globe,
   Scissors,
   PenTool,
+  ArrowLeft,
+  ChevronRight,
+  Search,
+  CalendarDays,
 } from 'lucide-react';
 import { normalizeApiBaseUrl, setDynamicApiBaseUrl, testApiHealthAtUrl } from '../utils/audio';
 import {
@@ -45,6 +49,7 @@ import {
 } from '../types';
 import { SALON_SERVICES, formatSalonPrice, isBookingTimeExpired } from '../utils/salon';
 import {
+  isCustomSalonServiceTitle,
   localizeBookingStatus,
   localizeDate,
   localizePlanLabel,
@@ -54,7 +59,15 @@ import {
 } from '../utils/i18n';
 import CompletionSignatureModal from './CompletionSignatureModal';
 
-export type AdminPanelTab = 'requests' | 'users' | 'settings' | 'salon';
+export type AdminPanelTab =
+  | 'menu'
+  | 'requests'
+  | 'users'
+  | 'settings'
+  | 'api'
+  | 'salon'
+  | 'salon-settings'
+  | 'salon-bookings';
 
 interface AdminPanelModalProps {
   billingConfig: BillingConfig;
@@ -70,11 +83,17 @@ function getTodayUtcDate(): string {
 const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   billingConfig,
   salonConfig,
-  initialTab = 'requests',
+  initialTab = 'menu',
   onClose,
 }) => {
   const { lang, bi } = useLanguage();
-  const [activeTab, setActiveTab] = useState<AdminPanelTab>(initialTab);
+  const [activeTab, setActiveTab] = useState<AdminPanelTab>(
+    initialTab === 'salon' ? 'salon-settings' : initialTab
+  );
+  const [userSearchQuery, setUserSearchQuery] = useState('');
+  const [bookingStatusFilter, setBookingStatusFilter] = useState<
+    'all' | SalonBookingStatus
+  >('all');
   const [requests, setRequests] = useState<ProUpgradeRequest[]>([]);
   const [usersList, setUsersList] = useState<UserAccountRecord[]>([]);
   const [salonBookings, setSalonBookings] = useState<SalonBooking[]>([]);
@@ -104,6 +123,36 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   const [hairColorPrice, setHairColorPrice] = useState(String(salonConfig.hairColorPrice));
   const [facialPrice, setFacialPrice] = useState(String(salonConfig.facialPrice));
   const [comboPrice, setComboPrice] = useState(String(salonConfig.comboPrice));
+  const [haircutTitle, setHaircutTitle] = useState(() =>
+    isCustomSalonServiceTitle('haircut', salonConfig.haircutTitle)
+      ? salonConfig.haircutTitle!
+      : localizeSalonService('haircut', lang).primaryTitle
+  );
+  const [beardTrimTitle, setBeardTrimTitle] = useState(() =>
+    isCustomSalonServiceTitle('beard', salonConfig.beardTrimTitle)
+      ? salonConfig.beardTrimTitle!
+      : localizeSalonService('beard', lang).primaryTitle
+  );
+  const [shaveTitle, setShaveTitle] = useState(() =>
+    isCustomSalonServiceTitle('shave', salonConfig.shaveTitle)
+      ? salonConfig.shaveTitle!
+      : localizeSalonService('shave', lang).primaryTitle
+  );
+  const [hairColorTitle, setHairColorTitle] = useState(() =>
+    isCustomSalonServiceTitle('color', salonConfig.hairColorTitle)
+      ? salonConfig.hairColorTitle!
+      : localizeSalonService('color', lang).primaryTitle
+  );
+  const [facialTitle, setFacialTitle] = useState(() =>
+    isCustomSalonServiceTitle('facial', salonConfig.facialTitle)
+      ? salonConfig.facialTitle!
+      : localizeSalonService('facial', lang).primaryTitle
+  );
+  const [comboTitle, setComboTitle] = useState(() =>
+    isCustomSalonServiceTitle('combo', salonConfig.comboTitle)
+      ? salonConfig.comboTitle!
+      : localizeSalonService('combo', lang).primaryTitle
+  );
   const [bookingFee, setBookingFee] = useState(String(salonConfig.bookingFee));
   const [salonAddress, setSalonAddress] = useState(salonConfig.address);
   const [salonPhone, setSalonPhone] = useState(salonConfig.phone);
@@ -134,12 +183,42 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
     setHairColorPrice(String(salonConfig.hairColorPrice));
     setFacialPrice(String(salonConfig.facialPrice));
     setComboPrice(String(salonConfig.comboPrice));
+    setHaircutTitle(
+      isCustomSalonServiceTitle('haircut', salonConfig.haircutTitle)
+        ? salonConfig.haircutTitle!
+        : localizeSalonService('haircut', lang).primaryTitle
+    );
+    setBeardTrimTitle(
+      isCustomSalonServiceTitle('beard', salonConfig.beardTrimTitle)
+        ? salonConfig.beardTrimTitle!
+        : localizeSalonService('beard', lang).primaryTitle
+    );
+    setShaveTitle(
+      isCustomSalonServiceTitle('shave', salonConfig.shaveTitle)
+        ? salonConfig.shaveTitle!
+        : localizeSalonService('shave', lang).primaryTitle
+    );
+    setHairColorTitle(
+      isCustomSalonServiceTitle('color', salonConfig.hairColorTitle)
+        ? salonConfig.hairColorTitle!
+        : localizeSalonService('color', lang).primaryTitle
+    );
+    setFacialTitle(
+      isCustomSalonServiceTitle('facial', salonConfig.facialTitle)
+        ? salonConfig.facialTitle!
+        : localizeSalonService('facial', lang).primaryTitle
+    );
+    setComboTitle(
+      isCustomSalonServiceTitle('combo', salonConfig.comboTitle)
+        ? salonConfig.comboTitle!
+        : localizeSalonService('combo', lang).primaryTitle
+    );
     setBookingFee(String(salonConfig.bookingFee));
     setSalonAddress(salonConfig.address);
     setSalonPhone(salonConfig.phone);
     setSalonOpenHours(salonConfig.openHours);
     setIsBookingOpen(salonConfig.isBookingOpen);
-  }, [salonConfig]);
+  }, [salonConfig, lang]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -487,6 +566,12 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
     return Math.min(50000, Math.max(0, n));
   };
 
+  const cleanTitleInput = (val: string, key: (typeof SALON_SERVICES)[number]['key']): string => {
+    const trimmed = val.trim().slice(0, 100);
+    if (trimmed.length >= 2) return trimmed;
+    return localizeSalonService(key, lang).primaryTitle.slice(0, 100);
+  };
+
   const handleSaveSalonConfig = async (e: React.FormEvent) => {
     e.preventDefault();
     if (savingSalon) return;
@@ -503,6 +588,12 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
       hairColorPrice: parsePriceInput(hairColorPrice, salonConfig.hairColorPrice),
       facialPrice: parsePriceInput(facialPrice, salonConfig.facialPrice),
       comboPrice: parsePriceInput(comboPrice, salonConfig.comboPrice),
+      haircutTitle: cleanTitleInput(haircutTitle, 'haircut'),
+      beardTrimTitle: cleanTitleInput(beardTrimTitle, 'beard'),
+      shaveTitle: cleanTitleInput(shaveTitle, 'shave'),
+      hairColorTitle: cleanTitleInput(hairColorTitle, 'color'),
+      facialTitle: cleanTitleInput(facialTitle, 'facial'),
+      comboTitle: cleanTitleInput(comboTitle, 'combo'),
       bookingFee: parsePriceInput(bookingFee, salonConfig.bookingFee),
       address: salonAddress.trim().slice(0, 200),
       phone: salonPhone.trim().slice(0, 30),
@@ -518,7 +609,7 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
     } catch (error: any) {
       setActionError(
         error?.message ||
-          bi('সেলুনের প্রাইস ও সেটিংস সেভ করা যায়নি।', 'Failed to save salon prices and settings.')
+          bi('সেলুনের নাম, প্রাইস ও সেটিংস সেভ করা যায়নি।', 'Failed to save salon names, prices, and settings.')
       );
       reportFirestoreError(error, OperationType.WRITE, 'salonConfig/default');
     } finally {
@@ -528,7 +619,7 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
 
   const handleUpdateBookingStatus = async (
     booking: SalonBooking,
-    nextStatus: SalonBookingStatus
+    nextStatus: 'pending' | 'confirmed' | 'cancelled'
   ) => {
     if (busyId) return;
     setBusyId(`bk_${booking.id}`);
@@ -543,9 +634,6 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
         status: nextStatus,
         updatedAt: serverTimestamp(),
       };
-      if (nextStatus === 'completed') {
-        bookingUpdate.completedAt = serverTimestamp();
-      }
       batch.update(bookingRef, bookingUpdate);
 
       if (ticketSnap.exists()) {
@@ -580,18 +668,22 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
     const ticketSnap = await getDoc(ticketRef);
 
     const batch = writeBatch(db);
-    batch.update(bookingRef, {
+    const bookingUpdate: Record<string, any> = {
       status: 'completed',
-      completionSignaturePath: signaturePath,
-      completionSignerName: signerName,
-      completedAt: serverTimestamp(),
+      shopSignaturePath: signaturePath,
+      shopSignerName: signerName,
+      shopSignedAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
-    });
+    };
+    if (!target.completedAt) {
+      bookingUpdate.completedAt = serverTimestamp();
+    }
+    batch.update(bookingRef, bookingUpdate);
     if (ticketSnap.exists()) {
       batch.update(ticketRef, {
         status: 'completed',
-        hasCompletionSignature: true,
-        completionSignerName: signerName,
+        hasShopSignature: true,
+        shopSignerName: signerName,
         updatedAt: serverTimestamp(),
       });
     }
@@ -601,6 +693,93 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
 
   const pendingCount = requests.filter((r) => r.status === 'pending').length;
   const pendingSalonCount = salonBookings.filter((b) => b.status === 'pending').length;
+  const completedSalonCount = salonBookings.filter((b) => b.status === 'completed').length;
+
+  const normalizedSearch = userSearchQuery.trim().toLowerCase();
+  const filteredUsers = normalizedSearch
+    ? usersList.filter(
+        (u) =>
+          (u.displayName || '').toLowerCase().includes(normalizedSearch) ||
+          (u.email || '').toLowerCase().includes(normalizedSearch) ||
+          u.uid.toLowerCase().includes(normalizedSearch)
+      )
+    : usersList;
+
+  const filteredSalonBookings =
+    bookingStatusFilter === 'all'
+      ? salonBookings
+      : salonBookings.filter((b) => b.status === bookingStatusFilter);
+
+  const adminMenuOptions: Array<{
+    id: Exclude<AdminPanelTab, 'menu' | 'salon'>;
+    title: string;
+    meta: string;
+    highlight?: string;
+    icon: React.ReactNode;
+    accentBg: string;
+  }> = [
+    {
+      id: 'requests',
+      title: bi('Pro আপগ্রেড রিকোয়েস্ট', 'Pro Upgrade Requests'),
+      meta: bi(
+        `${pendingCount}টি পেন্ডিং · মোট ${requests.length}টি রিকোয়েস্ট`,
+        `${pendingCount} pending · ${requests.length} total requests`
+      ),
+      highlight: pendingCount > 0 ? bi(`${pendingCount} নতুন`, `${pendingCount} pending`) : undefined,
+      icon: <Receipt size={20} />,
+      accentBg: 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800',
+    },
+    {
+      id: 'users',
+      title: bi('ইউজার ও প্যাকেজ নিয়ন্ত্রণ', 'Users & Package Control'),
+      meta: bi(
+        `মোট ${usersList.length} জন নিবন্ধিত ইউজার · ক্রেডিট ও প্ল্যান`,
+        `${usersList.length} registered users · credits & plans`
+      ),
+      icon: <Users size={20} />,
+      accentBg: 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800',
+    },
+    {
+      id: 'settings',
+      title: bi('ফি, পেমেন্ট ও কোটা সেটিংস', 'Fees, Payment & Quota Settings'),
+      meta: `${monthlyFee || billingConfig.monthlyFee} · ${yearlyFee || billingConfig.yearlyFee} · ${bi(`ফ্রি ${freeDailyLimit}/দিন`, `${freeDailyLimit} free/day`)}`,
+      icon: <Settings size={20} />,
+      accentBg: 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700',
+    },
+    {
+      id: 'api',
+      title: bi('ব্যাকএন্ড সার্ভার ও API সংযোগ', 'Backend Server & API Bridge'),
+      meta: apiBaseUrl.trim()
+        ? apiBaseUrl.trim()
+        : bi('ডিফল্ট সার্ভার URL সক্রিয়', 'Using default server URL'),
+      icon: <Globe size={20} />,
+      accentBg: 'bg-sky-50 dark:bg-sky-950/60 text-sky-600 dark:text-sky-400 border-sky-200 dark:border-sky-800',
+    },
+    {
+      id: 'salon-settings',
+      title: bi('সেলুন সার্ভিস ও প্রাইস সেটিংস', 'Salon Services & Price Settings'),
+      meta: bi(
+        `${salonName || salonConfig.salonName} · বুকিং ${isBookingOpen ? 'চালু' : 'বন্ধ'}`,
+        `${salonName || salonConfig.salonName} · Booking ${isBookingOpen ? 'Open' : 'Closed'}`
+      ),
+      icon: <Scissors size={20} />,
+      accentBg: 'bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800',
+    },
+    {
+      id: 'salon-bookings',
+      title: bi('সেলুন বুকিং ও সিগনেচার তালিকা', 'Salon Bookings & Signatures'),
+      meta: bi(
+        `${pendingSalonCount} পেন্ডিং · ${completedSalonCount} সম্পন্ন · মোট ${salonBookings.length}টি`,
+        `${pendingSalonCount} pending · ${completedSalonCount} completed · ${salonBookings.length} total`
+      ),
+      highlight:
+        pendingSalonCount > 0 ? bi(`${pendingSalonCount} পেন্ডিং`, `${pendingSalonCount} pending`) : undefined,
+      icon: <CalendarDays size={20} />,
+      accentBg: 'bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-800',
+    },
+  ];
+
+  const activeOptionMeta = adminMenuOptions.find((opt) => opt.id === activeTab);
 
   return (
     <div
@@ -614,107 +793,61 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
         onClick={onClose}
       />
 
-      <div className="relative w-full max-w-3xl max-h-[90vh] flex flex-col bg-white dark:bg-zinc-900 rounded-3xl shadow-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden animate-slide-up">
+      <div className="relative w-full max-w-6xl max-h-[92vh] flex flex-col bg-white dark:bg-zinc-900 rounded-3xl shadow-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden animate-slide-up">
         {/* Header */}
-        <div className="px-6 py-5 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
-              <Shield size={18} />
-            </div>
-            <div>
+        <div className="px-6 sm:px-8 py-5 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5 min-w-0">
+            {activeTab !== 'menu' ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setActionError(null);
+                  setActiveTab('menu');
+                }}
+                className="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-100 text-xs sm:text-sm font-semibold transition-colors whitespace-nowrap shrink-0 min-h-[42px]"
+                aria-label={bi('সব অপশনে ফিরুন', 'Back to all options')}
+              >
+                <ArrowLeft size={16} />
+                <span>{bi('সব অপশন', 'All Options')}</span>
+              </button>
+            ) : (
+              <div className="w-11 h-11 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center text-indigo-600 dark:text-indigo-400 shrink-0">
+                <Shield size={20} />
+              </div>
+            )}
+            <div className="min-w-0 space-y-0.5">
               <h2
                 id="admin-panel-title"
-                className="text-lg font-serif font-medium text-zinc-900 dark:text-white"
+                className="text-xl font-serif font-medium text-zinc-900 dark:text-white leading-snug truncate"
               >
-                {bi('শ্রাবণ গো অ্যাডমিন কন্ট্রোল', 'Srabon Go Admin Control')}
+                {activeTab === 'menu'
+                  ? bi('শ্রাবণ গো অ্যাডমিন কন্ট্রোল', 'Srabon Go Admin Control')
+                  : activeOptionMeta?.title}
               </h2>
-              <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                {bi(
-                  'Pro রিকোয়েস্ট, ইউজার, পেমেন্ট ফি ও সেলুন সেটিংস পরিচালনা করুন',
-                  'Manage Pro requests, users, payment fees, and salon settings'
-                )}
+              <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 leading-relaxed truncate">
+                {activeTab === 'menu'
+                  ? bi(
+                      'যেকোনো একটি অপশনে টাচ করলে সেই বিষয়ের সম্পূর্ণ তথ্য ও নিয়ন্ত্রণ দেখতে পাবেন',
+                      'Tap any option below to view and manage all details for that topic'
+                    )
+                  : activeOptionMeta?.meta}
               </p>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="p-2 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors"
+            className="p-2.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors shrink-0 min-h-[42px] min-w-[42px] flex items-center justify-center"
             aria-label={bi('বন্ধ করুন', 'Close')}
           >
-            <X size={18} />
-          </button>
-        </div>
-
-        {/* Tabs */}
-        <div className="px-6 pt-3 border-b border-zinc-100 dark:border-zinc-800 flex gap-2 overflow-x-auto scrollbar-hide">
-          <button
-            type="button"
-            onClick={() => setActiveTab('requests')}
-            className={`inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-t-xl border-b-2 transition-colors whitespace-nowrap shrink-0 ${
-              activeTab === 'requests'
-                ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
-                : 'border-transparent text-zinc-500 hover:text-zinc-900 dark:hover:text-white'
-            }`}
-          >
-            <Receipt size={14} />
-            <span>{bi('Pro রিকোয়েস্ট', 'Pro Requests')}</span>
-            {pendingCount > 0 && (
-              <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300">
-                {pendingCount}
-              </span>
-            )}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('users')}
-            className={`inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-t-xl border-b-2 transition-colors whitespace-nowrap shrink-0 ${
-              activeTab === 'users'
-                ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
-                : 'border-transparent text-zinc-500 hover:text-zinc-900 dark:hover:text-white'
-            }`}
-          >
-            <Users size={14} />
-            <span>{bi(`ইউজার (${usersList.length})`, `Users (${usersList.length})`)}</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('settings')}
-            className={`inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-t-xl border-b-2 transition-colors whitespace-nowrap shrink-0 ${
-              activeTab === 'settings'
-                ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
-                : 'border-transparent text-zinc-500 hover:text-zinc-900 dark:hover:text-white'
-            }`}
-          >
-            <Settings size={14} />
-            <span>{bi('ফি ও কোটা সেটিংস', 'Fee & Quota Settings')}</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('salon')}
-            className={`inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-t-xl border-b-2 transition-colors whitespace-nowrap shrink-0 ${
-              activeTab === 'salon'
-                ? 'border-amber-600 text-amber-600 dark:text-amber-400'
-                : 'border-transparent text-zinc-500 hover:text-zinc-900 dark:hover:text-white'
-            }`}
-          >
-            <Scissors size={14} />
-            <span>{bi('সেলুন ও প্রাইস', 'Salon & Prices')}</span>
-            {pendingSalonCount > 0 && (
-              <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300">
-                {pendingSalonCount}
-              </span>
-            )}
+            <X size={19} />
           </button>
         </div>
 
         {/* Body */}
-        <div className="p-6 overflow-y-auto flex-1 space-y-4">
+        <div className="p-6 sm:p-8 overflow-y-auto flex-1 space-y-5">
           {actionError && (
-            <div className="p-3 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 text-xs text-red-600 dark:text-red-300 flex items-center justify-between gap-2">
+            <div className="p-4 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 text-sm text-red-600 dark:text-red-300 flex items-center justify-between gap-3 leading-relaxed">
               <span>{actionError}</span>
               <button
                 type="button"
@@ -725,76 +858,124 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
               </button>
             </div>
           )}
+
+          {/* OPTION MENU (Default clean view: Option names only, touch to open details) */}
+          {activeTab === 'menu' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {adminMenuOptions.map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  onClick={() => {
+                    setActionError(null);
+                    setActiveTab(option.id);
+                  }}
+                  className="group w-full text-left p-5 rounded-2xl bg-zinc-50/80 dark:bg-zinc-800/50 hover:bg-white dark:hover:bg-zinc-800 border border-zinc-200 dark:border-zinc-800 hover:border-indigo-400 dark:hover:border-indigo-500 transition-all flex items-center justify-between gap-4 min-h-[84px]"
+                >
+                  <div className="flex items-center gap-4 min-w-0">
+                    <div
+                      className={`w-12 h-12 rounded-xl border flex items-center justify-center shrink-0 ${option.accentBg}`}
+                    >
+                      {option.icon}
+                    </div>
+                    <div className="min-w-0 space-y-1">
+                      <div className="flex items-center gap-2.5 flex-wrap">
+                        <span className="text-base sm:text-lg font-medium text-zinc-900 dark:text-white leading-snug">
+                          {option.title}
+                        </span>
+                        {option.highlight && (
+                          <span className="text-xs font-bold text-amber-600 dark:text-amber-400 tabular-nums">
+                            · {option.highlight}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 truncate tabular-nums leading-relaxed">
+                        {option.meta}
+                      </p>
+                    </div>
+                  </div>
+                  <ChevronRight
+                    size={20}
+                    className="text-zinc-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 group-hover:translate-x-0.5 transition-all shrink-0"
+                  />
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* 1. PRO UPGRADE REQUESTS */}
           {activeTab === 'requests' && (
-            <div className="space-y-3">
+            <div className="space-y-4">
               {requests.length === 0 ? (
-                <p className="text-sm text-zinc-500 dark:text-zinc-400 text-center py-10">
+                <p className="text-base text-zinc-500 dark:text-zinc-400 text-center py-12">
                   {bi('এখনও কোনো Pro আপগ্রেড রিকোয়েস্ট আসেনি।', 'No Pro upgrade requests yet.')}
                 </p>
               ) : (
                 requests.map((req) => (
                   <div
                     key={req.id}
-                    className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200/80 dark:border-zinc-700/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                    className="p-5 rounded-2xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200/80 dark:border-zinc-700/80 flex flex-col lg:flex-row lg:items-center justify-between gap-4"
                   >
-                    <div className="space-y-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm font-semibold text-zinc-900 dark:text-white">
+                    <div className="space-y-2 min-w-0">
+                      <div className="flex items-center gap-2.5 flex-wrap leading-relaxed">
+                        <span className="text-base font-semibold text-zinc-900 dark:text-white">
                           {req.userName || req.userEmail || req.uid}
                         </span>
+                        <span className="text-xs sm:text-sm text-zinc-400">·</span>
                         <span
-                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                          className={`text-xs sm:text-sm font-bold ${
                             req.packageType === 'yearly'
-                              ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300'
-                              : 'bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300'
+                              ? 'text-amber-600 dark:text-amber-400'
+                              : 'text-indigo-600 dark:text-indigo-400'
                           }`}
                         >
                           {req.packageType === 'yearly'
                             ? bi('ইয়ারলি (৩৬৫ দিন)', 'Yearly (365d)')
                             : bi('মান্থলি (৩০ দিন)', 'Monthly (30d)')}
                         </span>
+                        <span className="text-xs sm:text-sm text-zinc-400">·</span>
                         <span
-                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                          className={`text-xs sm:text-sm font-bold ${
                             req.status === 'approved'
-                              ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300'
+                              ? 'text-emerald-600 dark:text-emerald-400'
                               : req.status === 'rejected'
-                              ? 'bg-red-100 dark:bg-red-950/60 text-red-700 dark:text-red-300'
-                              : 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300'
+                              ? 'text-rose-600 dark:text-rose-400'
+                              : 'text-amber-600 dark:text-amber-400'
                           }`}
                         >
                           {localizeUpgradeStatus(req.status, lang)}
                         </span>
                       </div>
                       {req.userEmail && (
-                        <p className="text-xs text-zinc-500 dark:text-zinc-400 truncate">
+                        <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 truncate">
                           {req.userEmail}
                         </p>
                       )}
-                      <p className="text-xs text-zinc-700 dark:text-zinc-300">
-                        <strong>{req.paymentMethod}</strong> • {req.amountText} •{' '}
+                      <p className="text-xs sm:text-sm text-zinc-700 dark:text-zinc-300 leading-relaxed">
+                        <strong>{req.paymentMethod}</strong> · {req.amountText} ·{' '}
                         {bi('প্রেরক:', 'Sender:')}{' '}
-                        <span className="font-mono">{req.senderNumber}</span> • TrxID:{' '}
+                        <span className="font-mono tabular-nums">{req.senderNumber}</span> · TrxID:{' '}
                         <span className="font-mono font-semibold">{req.transactionId}</span>
                       </p>
                       {req.note && (
-                        <p className="text-xs text-zinc-500 dark:text-zinc-400 italic">
+                        <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 italic leading-relaxed">
                           &ldquo;{req.note}&rdquo;
                         </p>
                       )}
                     </div>
 
                     {req.status === 'pending' && (
-                      <div className="flex items-center gap-2 shrink-0">
+                      <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
                         <button
                           type="button"
                           onClick={() => handleApproveRequest(req)}
                           disabled={busyId === req.id}
-                          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition-colors disabled:opacity-50"
+                          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs sm:text-sm font-semibold transition-colors disabled:opacity-50 min-h-[42px]"
                         >
                           {busyId === req.id ? (
-                            <Loader2 size={14} className="animate-spin" />
+                            <Loader2 size={15} className="animate-spin" />
                           ) : (
-                            <CheckCircle2 size={14} />
+                            <CheckCircle2 size={15} />
                           )}
                           <span>{bi('Pro অনুমোদন করুন', 'Approve Pro')}</span>
                         </button>
@@ -802,9 +983,9 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                           type="button"
                           onClick={() => handleRejectRequest(req)}
                           disabled={busyId === req.id}
-                          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-zinc-200 dark:bg-zinc-700 hover:bg-red-100 dark:hover:bg-red-950/60 text-zinc-700 dark:text-zinc-200 hover:text-red-600 dark:hover:text-red-300 text-xs font-semibold transition-colors disabled:opacity-50"
+                          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-zinc-200 dark:bg-zinc-700 hover:bg-red-100 dark:hover:bg-red-950/60 text-zinc-700 dark:text-zinc-200 hover:text-red-600 dark:hover:text-red-300 text-xs sm:text-sm font-semibold transition-colors disabled:opacity-50 min-h-[42px]"
                         >
-                          <XCircle size={14} />
+                          <XCircle size={15} />
                           <span>{bi('বাতিল', 'Reject')}</span>
                         </button>
                       </div>
@@ -815,131 +996,160 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
             </div>
           )}
 
+          {/* 2. USERS MANAGEMENT */}
           {activeTab === 'users' && (
-            <div className="space-y-2.5">
-              {usersList.length === 0 ? (
-                <p className="text-sm text-zinc-500 dark:text-zinc-400 text-center py-10">
-                  {bi('এখনও কোনো ইউজার নেই।', 'No users yet.')}
+            <div className="space-y-4">
+              {usersList.length > 0 && (
+                <div className="relative">
+                  <Search
+                    size={16}
+                    className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none"
+                  />
+                  <input
+                    type="text"
+                    value={userSearchQuery}
+                    onChange={(e) => setUserSearchQuery(e.target.value)}
+                    placeholder={bi(
+                      'নাম, ইমেইল বা UID দিয়ে ইউজার খুঁজুন...',
+                      'Search users by name, email, or UID...'
+                    )}
+                    className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-sm sm:text-base text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+                  />
+                </div>
+              )}
+
+              {filteredUsers.length === 0 ? (
+                <p className="text-base text-zinc-500 dark:text-zinc-400 text-center py-12">
+                  {usersList.length === 0
+                    ? bi('এখনও কোনো ইউজার নেই।', 'No users yet.')
+                    : bi('এই সার্চে কোনো ইউজার পাওয়া যায়নি।', 'No users match your search.')}
                 </p>
               ) : (
-                usersList.map((u) => {
-                  const expMs = typeof u.proExpiresAt?.toMillis === 'function' ? u.proExpiresAt.toMillis() : null;
-                  const isExpired = u.plan === 'pro' && expMs !== null && expMs <= Date.now();
-                  return (
-                  <div
-                    key={u.uid}
-                    className="p-3.5 rounded-2xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200/80 dark:border-zinc-700/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
-                  >
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm font-medium text-zinc-900 dark:text-white truncate">
-                          {u.displayName || u.email || u.uid}
-                        </span>
-                        <span
-                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
-                            u.plan === 'pro' && !isExpired
-                              ? u.proPackageType === 'yearly'
-                                ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300'
-                                : 'bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300'
-                              : isExpired
-                              ? 'bg-red-100 dark:bg-red-950/60 text-red-700 dark:text-red-300'
-                              : 'bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300'
-                          }`}
-                        >
-                          {isExpired
-                            ? bi(
-                                `মেয়াদোত্তীর্ণ (${u.proPackageType === 'yearly' ? 'ইয়ারলি' : 'মান্থলি'})`,
-                                `Expired (${u.proPackageType || 'pro'})`
-                              )
-                            : localizePlanLabel(u.plan, u.proPackageType, false, lang)}
-                        </span>
-                      </div>
-                      <p className="text-xs text-zinc-500 dark:text-zinc-400 truncate">
-                        {u.email || u.uid} • {bi('ব্যবহার', 'Usage')} ({u.lastUsageDate}): {u.dailyCount} •{' '}
-                        {bi('ক্রেডিট', 'Credits')}: {u.bonusCredits ?? 0} • {bi('রেফার', 'Refs')}:{' '}
-                        {u.referralCount ?? 0}
-                        {u.plan === 'pro' && expMs !== null
-                          ? ` • ${bi('মেয়াদ:', 'Exp:')} ${localizeDate(expMs, lang)}`
-                          : ''}
-                      </p>
-                    </div>
+                <div className="space-y-3.5">
+                  {filteredUsers.map((u) => {
+                    const expMs =
+                      typeof u.proExpiresAt?.toMillis === 'function'
+                        ? u.proExpiresAt.toMillis()
+                        : null;
+                    const isExpired = u.plan === 'pro' && expMs !== null && expMs <= Date.now();
+                    return (
+                      <div
+                        key={u.uid}
+                        className="p-5 rounded-2xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200/80 dark:border-zinc-700/80 flex flex-col lg:flex-row lg:items-center justify-between gap-4"
+                      >
+                        <div className="min-w-0 space-y-1.5">
+                          <div className="flex items-center gap-2.5 flex-wrap leading-relaxed">
+                            <span className="text-base font-semibold text-zinc-900 dark:text-white truncate">
+                              {u.displayName || u.email || u.uid}
+                            </span>
+                            <span className="text-xs sm:text-sm text-zinc-400">·</span>
+                            <span
+                              className={`text-xs sm:text-sm font-bold ${
+                                u.plan === 'pro' && !isExpired
+                                  ? u.proPackageType === 'yearly'
+                                    ? 'text-amber-600 dark:text-amber-400'
+                                    : 'text-indigo-600 dark:text-indigo-400'
+                                  : isExpired
+                                  ? 'text-rose-600 dark:text-rose-400'
+                                  : 'text-zinc-600 dark:text-zinc-300'
+                              }`}
+                            >
+                              {isExpired
+                                ? bi(
+                                    `মেয়াদোত্তীর্ণ (${u.proPackageType === 'yearly' ? 'ইয়ারলি' : 'মান্থলি'})`,
+                                    `Expired (${u.proPackageType || 'pro'})`
+                                  )
+                                : localizePlanLabel(u.plan, u.proPackageType, false, lang)}
+                            </span>
+                          </div>
+                          <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 leading-relaxed break-words tabular-nums">
+                            {u.email || u.uid} · {bi('ব্যবহার', 'Usage')} ({u.lastUsageDate}):{' '}
+                            {u.dailyCount} · {bi('ক্রেডিট', 'Credits')}: {u.bonusCredits ?? 0} ·{' '}
+                            {bi('রেফার', 'Refs')}: {u.referralCount ?? 0}
+                            {u.plan === 'pro' && expMs !== null
+                              ? ` · ${bi('মেয়াদ:', 'Exp:')} ${localizeDate(expMs, lang)}`
+                              : ''}
+                          </p>
+                        </div>
 
-                    <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
-                      <button
-                        type="button"
-                        onClick={() => handleGrantTenCredits(u)}
-                        disabled={Boolean(busyId)}
-                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 text-xs font-semibold transition-colors disabled:opacity-50"
-                        title={bi('+১০ বোনাস ক্রেডিট যোগ করুন', 'Add +10 Bonus Credits')}
-                      >
-                        {busyId === `cr_${u.uid}` ? (
-                          <Loader2 size={12} className="animate-spin" />
-                        ) : (
-                          <span>{bi('+১০ ক্রেডিট', '+10 Cr')}</span>
-                        )}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleSetUserPackage(u, 'pro', 'monthly')}
-                        disabled={Boolean(busyId)}
-                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-colors disabled:opacity-50 bg-indigo-600 hover:bg-indigo-500 text-white"
-                      >
-                        {busyId === `${u.uid}_monthly` ? (
-                          <Loader2 size={12} className="animate-spin" />
-                        ) : (
-                          <Crown size={12} />
-                        )}
-                        <span>
-                          {u.plan === 'pro' && u.proPackageType === 'monthly' && !isExpired
-                            ? bi('রিনিউ ৩০ দিন', 'Renew 30d')
-                            : bi('মান্থলি', 'Monthly')}
-                        </span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleSetUserPackage(u, 'pro', 'yearly')}
-                        disabled={Boolean(busyId)}
-                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-colors disabled:opacity-50 bg-amber-600 hover:bg-amber-500 text-white"
-                      >
-                        {busyId === `${u.uid}_yearly` ? (
-                          <Loader2 size={12} className="animate-spin" />
-                        ) : (
-                          <Crown size={12} />
-                        )}
-                        <span>
-                          {u.plan === 'pro' && u.proPackageType === 'yearly' && !isExpired
-                            ? bi('রিনিউ ৩৬৫ দিন', 'Renew 365d')
-                            : bi('ইয়ারলি', 'Yearly')}
-                        </span>
-                      </button>
-                      {u.plan === 'pro' && (
-                        <button
-                          type="button"
-                          onClick={() => handleSetUserPackage(u, 'free')}
-                          disabled={Boolean(busyId)}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors disabled:opacity-50 bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-300 dark:hover:bg-zinc-600"
-                        >
-                          {busyId === u.uid ? (
-                            <Loader2 size={13} className="animate-spin" />
-                          ) : (
-                            <Crown size={13} />
+                        <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                          <button
+                            type="button"
+                            onClick={() => handleGrantTenCredits(u)}
+                            disabled={Boolean(busyId)}
+                            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 text-xs sm:text-sm font-semibold transition-colors disabled:opacity-50 min-h-[40px]"
+                            title={bi('+১০ বোনাস ক্রেডিট যোগ করুন', 'Add +10 Bonus Credits')}
+                          >
+                            {busyId === `cr_${u.uid}` ? (
+                              <Loader2 size={13} className="animate-spin" />
+                            ) : (
+                              <span>{bi('+১০ ক্রেডিট', '+10 Cr')}</span>
+                            )}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleSetUserPackage(u, 'pro', 'monthly')}
+                            disabled={Boolean(busyId)}
+                            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-colors disabled:opacity-50 bg-indigo-600 hover:bg-indigo-500 text-white min-h-[40px]"
+                          >
+                            {busyId === `${u.uid}_monthly` ? (
+                              <Loader2 size={13} className="animate-spin" />
+                            ) : (
+                              <Crown size={13} />
+                            )}
+                            <span>
+                              {u.plan === 'pro' && u.proPackageType === 'monthly' && !isExpired
+                                ? bi('রিনিউ ৩০ দিন', 'Renew 30d')
+                                : bi('মান্থলি', 'Monthly')}
+                            </span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleSetUserPackage(u, 'pro', 'yearly')}
+                            disabled={Boolean(busyId)}
+                            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-colors disabled:opacity-50 bg-amber-600 hover:bg-amber-500 text-white min-h-[40px]"
+                          >
+                            {busyId === `${u.uid}_yearly` ? (
+                              <Loader2 size={13} className="animate-spin" />
+                            ) : (
+                              <Crown size={13} />
+                            )}
+                            <span>
+                              {u.plan === 'pro' && u.proPackageType === 'yearly' && !isExpired
+                                ? bi('রিনিউ ৩৬৫ দিন', 'Renew 365d')
+                                : bi('ইয়ারলি', 'Yearly')}
+                            </span>
+                          </button>
+                          {u.plan === 'pro' && (
+                            <button
+                              type="button"
+                              onClick={() => handleSetUserPackage(u, 'free')}
+                              disabled={Boolean(busyId)}
+                              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-colors disabled:opacity-50 bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-300 dark:hover:bg-zinc-600 min-h-[40px]"
+                            >
+                              {busyId === u.uid ? (
+                                <Loader2 size={14} className="animate-spin" />
+                              ) : (
+                                <Crown size={14} />
+                              )}
+                              <span>{bi('ফ্রি করুন', 'Set Free')}</span>
+                            </button>
                           )}
-                          <span>{bi('ফ্রি করুন', 'Set Free')}</span>
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                  );
-                })
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               )}
             </div>
           )}
 
+          {/* 3. FEE, PAYMENT & QUOTA SETTINGS */}
           {activeTab === 'settings' && (
-            <form onSubmit={handleSaveConfig} className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <form onSubmit={handleSaveConfig} className="space-y-5">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
                 <div>
-                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 mb-1">
+                  <label className="block text-xs sm:text-sm font-semibold text-indigo-600 dark:text-indigo-400 mb-2">
                     {bi('Monthly প্যাকেজ ফি (৩০ দিন)', 'Monthly Package Fee (30 Days)')}
                   </label>
                   <input
@@ -948,12 +1158,12 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                     onChange={(e) => setMonthlyFee(e.target.value)}
                     maxLength={40}
                     placeholder={bi('যেমন: 50 BDT', 'e.g. 50 BDT')}
-                    className="w-full rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-3 py-2 text-sm text-zinc-900 dark:text-white"
+                    className="w-full rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-3.5 py-2.5 text-sm sm:text-base text-zinc-900 dark:text-white"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400 mb-1">
+                  <label className="block text-xs sm:text-sm font-semibold text-amber-600 dark:text-amber-400 mb-2">
                     {bi('Yearly প্যাকেজ ফি (৩৬৫ দিন)', 'Yearly Package Fee (365 Days)')}
                   </label>
                   <input
@@ -962,12 +1172,12 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                     onChange={(e) => setYearlyFee(e.target.value)}
                     maxLength={40}
                     placeholder={bi('যেমন: 480 BDT', 'e.g. 480 BDT')}
-                    className="w-full rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-3 py-2 text-sm text-zinc-900 dark:text-white"
+                    className="w-full rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-3.5 py-2.5 text-sm sm:text-base text-zinc-900 dark:text-white"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1">
+                  <label className="block text-xs sm:text-sm font-semibold text-zinc-600 dark:text-zinc-300 mb-2">
                     {bi('ফ্রি দৈনিক লিমিট (১ - ১০০)', 'Free Daily Limit (1 - 100)')}
                   </label>
                   <input
@@ -976,14 +1186,14 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                     max={100}
                     value={freeDailyLimit}
                     onChange={(e) => setFreeDailyLimit(e.target.value)}
-                    className="w-full rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-3 py-2 text-sm text-zinc-900 dark:text-white"
+                    className="w-full rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-3.5 py-2.5 text-sm sm:text-base text-zinc-900 dark:text-white tabular-nums"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                 <div>
-                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1">
+                  <label className="block text-xs sm:text-sm font-semibold text-zinc-600 dark:text-zinc-300 mb-2">
                     {bi('পেমেন্ট মাধ্যম', 'Payment Method')}
                   </label>
                   <input
@@ -992,12 +1202,12 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                     onChange={(e) => setPaymentMethod(e.target.value)}
                     maxLength={60}
                     placeholder={bi('যেমন: bKash / Nagad Personal', 'e.g. bKash / Nagad Personal')}
-                    className="w-full rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-3 py-2 text-sm text-zinc-900 dark:text-white"
+                    className="w-full rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-3.5 py-2.5 text-sm sm:text-base text-zinc-900 dark:text-white"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1">
+                  <label className="block text-xs sm:text-sm font-semibold text-zinc-600 dark:text-zinc-300 mb-2">
                     {bi('আপনার পেমেন্ট নম্বর / অ্যাকাউন্ট', 'Payment Number / Account')}
                   </label>
                   <input
@@ -1006,13 +1216,13 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                     onChange={(e) => setPaymentAccount(e.target.value)}
                     maxLength={80}
                     placeholder="01XXXXXXXXX"
-                    className="w-full rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-3 py-2 text-sm text-zinc-900 dark:text-white"
+                    className="w-full rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-3.5 py-2.5 text-sm sm:text-base text-zinc-900 dark:text-white tabular-nums"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1">
+                <label className="block text-xs sm:text-sm font-semibold text-zinc-600 dark:text-zinc-300 mb-2">
                   {bi('ইউজারদের জন্য নির্দেশনা', 'Instructions for Users')}
                 </label>
                 <textarea
@@ -1020,22 +1230,43 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                   value={instructions}
                   onChange={(e) => setInstructions(e.target.value)}
                   maxLength={500}
-                  className="w-full rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-3 py-2 text-sm text-zinc-900 dark:text-white resize-none"
+                  className="w-full rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-3.5 py-2.5 text-sm sm:text-base text-zinc-900 dark:text-white resize-none leading-relaxed"
                 />
               </div>
 
-              <div className="p-4 rounded-2xl bg-indigo-50/60 dark:bg-indigo-950/25 border border-indigo-200/80 dark:border-indigo-900/60 space-y-2.5">
-                <div className="flex items-center gap-2 text-xs font-semibold text-indigo-700 dark:text-indigo-300">
-                  <Globe size={14} />
+              {savedBanner && (
+                <div className="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 text-sm text-emerald-700 dark:text-emerald-300 flex items-center gap-2">
+                  <CheckCircle2 size={16} />
+                  <span>{bi('সেটিংস সফলভাবে সেভ হয়েছে!', 'Settings saved successfully!')}</span>
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={savingConfig}
+                className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-zinc-900 dark:bg-indigo-600 hover:bg-zinc-800 dark:hover:bg-indigo-500 text-white text-sm font-semibold transition-colors disabled:opacity-50"
+              >
+                {savingConfig ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                <span>{bi('ফি ও কোটা সেভ করুন', 'Save Fee & Quota Settings')}</span>
+              </button>
+            </form>
+          )}
+
+          {/* 4. BACKEND SERVER & API BRIDGE */}
+          {activeTab === 'api' && (
+            <form onSubmit={handleSaveConfig} className="space-y-5">
+              <div className="p-5 rounded-2xl bg-sky-50/60 dark:bg-sky-950/25 border border-sky-200/80 dark:border-sky-900/60 space-y-4">
+                <div className="flex items-center gap-2 text-base font-semibold text-sky-700 dark:text-sky-300">
+                  <Globe size={18} />
                   <span>{bi('ডায়নামিক ব্যাকএন্ড API URL (GitHub Pages ব্রিজ)', 'Dynamic Backend API URL (GitHub Pages Bridge)')}</span>
                 </div>
-                <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed">
+                <p className="text-xs sm:text-sm text-zinc-600 dark:text-zinc-300 leading-relaxed">
                   {bi(
                     'GitHub Pages স্ট্যাটিক হোস্ট হলেও, এখানে আপনার লাইভ Node/Render সার্ভার URL সেভ করলে সব ইউজারের জন্য সাথে সাথে রিয়েল-টাইম Gemini ভয়েস ও AI ট্রেন্ডিং আইডিয়া ডায়নামিকভাবে চালু হয়ে যাবে (কোড রিবিল্ড ছাড়াই)।',
                     'Even on static hosting like GitHub Pages, saving your live Node/Render server URL here dynamically enables real-time Gemini voices and AI trending ideas for all users without rebuilding.'
                   )}
                 </p>
-                <div className="flex flex-col sm:flex-row gap-2">
+                <div className="flex flex-col sm:flex-row gap-3">
                   <input
                     type="url"
                     value={apiBaseUrl}
@@ -1045,27 +1276,27 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                     }}
                     maxLength={200}
                     placeholder="https://srabon-go-api.onrender.com"
-                    className="flex-1 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 px-3 py-2 text-sm text-zinc-900 dark:text-white font-mono"
+                    className="flex-1 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 px-3.5 py-2.5 text-sm sm:text-base text-zinc-900 dark:text-white font-mono"
                   />
                   <button
                     type="button"
                     onClick={handleTestApiConnection}
                     disabled={testingApi}
-                    className="px-4 py-2 rounded-xl bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-xs font-semibold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors whitespace-nowrap shrink-0"
+                    className="px-4 py-2.5 rounded-xl bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-xs sm:text-sm font-semibold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors whitespace-nowrap shrink-0"
                   >
                     {testingApi ? bi('পরীক্ষা হচ্ছে...', 'Testing...') : bi('সংযোগ পরীক্ষা করুন', 'Test Connection')}
                   </button>
                 </div>
                 {apiTestResult === 'ok' && (
-                  <p className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                  <p className="text-xs sm:text-sm font-medium text-emerald-600 dark:text-emerald-400">
                     {bi(
                       '✓ সার্ভার সফলভাবে সংযুক্ত আছে (/api/health OK)! এখন Save বাটনে চাপুন।',
-                      '✓ Server connected successfully (/api/health OK)! Click Save Settings to apply.'
+                      '✓ Server connected successfully (/api/health OK)! Click Save to apply.'
                     )}
                   </p>
                 )}
                 {apiTestResult === 'fail' && (
-                  <p className="text-xs font-medium text-red-600 dark:text-red-400">
+                  <p className="text-xs sm:text-sm font-medium text-red-600 dark:text-red-400">
                     {bi(
                       '✕ এই URL-এ /api/health পাওয়া যায়নি। Render/Node সার্ভার চালু আছে কি না ও সঠিক URL দিয়েছেন কি না যাচাই করুন।',
                       '✕ /api/health could not be reached at this URL. Verify that your server is running and the URL is correct.'
@@ -1075,367 +1306,452 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
               </div>
 
               {savedBanner && (
-                <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 text-xs text-emerald-700 dark:text-emerald-300 flex items-center gap-2">
-                  <CheckCircle2 size={15} />
-                  <span>{bi('সেটিংস সফলভাবে সেভ হয়েছে!', 'Settings saved successfully!')}</span>
+                <div className="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 text-sm text-emerald-700 dark:text-emerald-300 flex items-center gap-2">
+                  <CheckCircle2 size={16} />
+                  <span>{bi('সার্ভার URL সফলভাবে সেভ হয়েছে!', 'Server URL saved successfully!')}</span>
                 </div>
               )}
 
               <button
                 type="submit"
                 disabled={savingConfig}
-                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-zinc-900 dark:bg-indigo-600 hover:bg-zinc-800 dark:hover:bg-indigo-500 text-white text-sm font-semibold transition-colors disabled:opacity-50"
+                className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-zinc-900 dark:bg-sky-600 hover:bg-zinc-800 dark:hover:bg-sky-500 text-white text-sm font-semibold transition-colors disabled:opacity-50"
               >
-                {savingConfig ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
-                <span>{bi('সেটিংস সেভ করুন', 'Save Settings')}</span>
+                {savingConfig ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                <span>{bi('API সেটিংস সেভ করুন', 'Save API Settings')}</span>
               </button>
             </form>
           )}
 
-          {activeTab === 'salon' && (
-            <div className="space-y-6">
-              <form onSubmit={handleSaveSalonConfig} className="space-y-4">
-                <div className="flex flex-wrap items-center justify-between gap-3 pb-2 border-b border-zinc-100 dark:border-zinc-800">
-                  <div>
-                    <h3 className="text-sm font-semibold text-zinc-900 dark:text-white">
-                      {bi('সেলুন সার্ভিস ও বুকিং প্রাইস সেটিংস', 'Salon Service & Booking Price Settings')}
-                    </h3>
-                    <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                      {bi(
-                        'এখান থেকে বুকিং ফি ও প্রতিটি হেয়ারকাট/গ্রুমিং সার্ভিসের দাম পরিবর্তন করলে সাথে সাথে সব ইউজারের পেজে আপডেট হবে।',
-                        'Updating the booking fee or service prices here updates every user page in real time.'
-                      )}
-                    </p>
-                  </div>
-                  <label className="inline-flex items-center gap-2 text-xs font-semibold text-zinc-700 dark:text-zinc-200 cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={isBookingOpen}
-                      onChange={(e) => setIsBookingOpen(e.target.checked)}
-                      className="rounded border-zinc-300 dark:border-zinc-700 text-amber-600 focus:ring-amber-500"
-                    />
-                    <span>{bi('অনলাইন বুকিং চালু রাখুন', 'Keep Online Booking Open')}</span>
-                  </label>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1">
-                      {bi('সেলুনের নাম', 'Salon Name')}
-                    </label>
-                    <input
-                      type="text"
-                      value={salonName}
-                      onChange={(e) => setSalonName(e.target.value)}
-                      maxLength={100}
-                      className="w-full rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-3 py-2 text-sm text-zinc-900 dark:text-white"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1">
-                        {bi('কারেন্সি (৳ / BDT)', 'Currency (৳ / BDT)')}
-                      </label>
-                      <input
-                        type="text"
-                        value={currencySymbol}
-                        onChange={(e) => setCurrencySymbol(e.target.value)}
-                        maxLength={10}
-                        placeholder="৳"
-                        className="w-full rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-3 py-2 text-sm text-zinc-900 dark:text-white"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400 mb-1">
-                        {bi('বুকিং ফি', 'Booking Fee')}
-                      </label>
-                      <input
-                        type="number"
-                        min={0}
-                        max={50000}
-                        value={bookingFee}
-                        onChange={(e) => setBookingFee(e.target.value)}
-                        className="w-full rounded-xl bg-amber-50/50 dark:bg-amber-950/20 border border-amber-300 dark:border-amber-800 px-3 py-2 text-sm font-semibold text-zinc-900 dark:text-white tabular-nums"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Service Prices Grid */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div>
-                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1">
-                      01. {localizeSalonService(SALON_SERVICES[0].key, lang).primaryTitle}
-                    </label>
-                    <input
-                      type="number"
-                      min={0}
-                      max={50000}
-                      value={haircutPrice}
-                      onChange={(e) => setHaircutPrice(e.target.value)}
-                      className="w-full rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-3 py-2 text-sm text-zinc-900 dark:text-white tabular-nums"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1">
-                      02. {localizeSalonService(SALON_SERVICES[1].key, lang).primaryTitle}
-                    </label>
-                    <input
-                      type="number"
-                      min={0}
-                      max={50000}
-                      value={beardTrimPrice}
-                      onChange={(e) => setBeardTrimPrice(e.target.value)}
-                      className="w-full rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-3 py-2 text-sm text-zinc-900 dark:text-white tabular-nums"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1">
-                      03. {localizeSalonService(SALON_SERVICES[2].key, lang).primaryTitle}
-                    </label>
-                    <input
-                      type="number"
-                      min={0}
-                      max={50000}
-                      value={shavePrice}
-                      onChange={(e) => setShavePrice(e.target.value)}
-                      className="w-full rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-3 py-2 text-sm text-zinc-900 dark:text-white tabular-nums"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1">
-                      04. {localizeSalonService(SALON_SERVICES[3].key, lang).primaryTitle}
-                    </label>
-                    <input
-                      type="number"
-                      min={0}
-                      max={50000}
-                      value={hairColorPrice}
-                      onChange={(e) => setHairColorPrice(e.target.value)}
-                      className="w-full rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-3 py-2 text-sm text-zinc-900 dark:text-white tabular-nums"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1">
-                      05. {localizeSalonService(SALON_SERVICES[4].key, lang).primaryTitle}
-                    </label>
-                    <input
-                      type="number"
-                      min={0}
-                      max={50000}
-                      value={facialPrice}
-                      onChange={(e) => setFacialPrice(e.target.value)}
-                      className="w-full rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-3 py-2 text-sm text-zinc-900 dark:text-white tabular-nums"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1">
-                      06. {localizeSalonService(SALON_SERVICES[5].key, lang).primaryTitle}
-                    </label>
-                    <input
-                      type="number"
-                      min={0}
-                      max={50000}
-                      value={comboPrice}
-                      onChange={(e) => setComboPrice(e.target.value)}
-                      className="w-full rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-3 py-2 text-sm text-zinc-900 dark:text-white tabular-nums"
-                    />
-                  </div>
-                </div>
-
-                {/* Location / Phone / Hours */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div>
-                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1">
-                      {bi('ঠিকানা', 'Address')}
-                    </label>
-                    <input
-                      type="text"
-                      value={salonAddress}
-                      onChange={(e) => setSalonAddress(e.target.value)}
-                      maxLength={200}
-                      className="w-full rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-3 py-2 text-sm text-zinc-900 dark:text-white"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1">
-                      {bi('ফোন / WhatsApp নম্বর', 'Phone / WhatsApp Number')}
-                    </label>
-                    <input
-                      type="text"
-                      value={salonPhone}
-                      onChange={(e) => setSalonPhone(e.target.value)}
-                      maxLength={30}
-                      placeholder="017XXXXXXXX"
-                      className="w-full rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-3 py-2 text-sm text-zinc-900 dark:text-white tabular-nums"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1">
-                      {bi('খোলা থাকার সময়', 'Opening Hours')}
-                    </label>
-                    <input
-                      type="text"
-                      value={salonOpenHours}
-                      onChange={(e) => setSalonOpenHours(e.target.value)}
-                      maxLength={80}
-                      className="w-full rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-3 py-2 text-sm text-zinc-900 dark:text-white"
-                    />
-                  </div>
-                </div>
-
-                {savedSalonBanner && (
-                  <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 text-xs text-emerald-700 dark:text-emerald-300 flex items-center gap-2">
-                    <CheckCircle2 size={15} />
-                    <span>{bi('সেলুনের নতুন প্রাইস ও তথ্য সফলভাবে সেভ হয়েছে!', 'Salon prices and details saved successfully!')}</span>
-                  </div>
-                )}
-
-                <button
-                  type="submit"
-                  disabled={savingSalon}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-sm font-semibold transition-colors disabled:opacity-50"
-                >
-                  {savingSalon ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
-                  <span>{bi('সেলুন প্রাইস সেভ করুন', 'Save Salon Prices')}</span>
-                </button>
-              </form>
-
-              {/* Salon Bookings Queue */}
-              <div className="pt-4 border-t border-zinc-200 dark:border-zinc-800 space-y-3">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-sm font-semibold text-zinc-900 dark:text-white">
-                    {bi(`কাস্টমার বুকিং তালিকা (${salonBookings.length})`, `Customer Bookings (${salonBookings.length})`)}
-                  </h4>
-                </div>
-
-                {salonBookings.length === 0 ? (
-                  <p className="text-xs text-zinc-500 dark:text-zinc-400 py-6 text-center">
-                    {bi('এখনও কোনো সেলুন বুকিং আসেনি।', 'No salon bookings received yet.')}
+          {/* 5. SALON SERVICE & PRICE SETTINGS */}
+          {(activeTab === 'salon-settings' || activeTab === 'salon') && (
+            <form onSubmit={handleSaveSalonConfig} className="space-y-5">
+              <div className="flex flex-wrap items-center justify-between gap-4 pb-3 border-b border-zinc-100 dark:border-zinc-800">
+                <div className="space-y-1">
+                  <h3 className="text-base font-semibold text-zinc-900 dark:text-white">
+                    {bi('সেলুন সার্ভিস নাম ও বুকিং প্রাইস সেটিংস', 'Salon Service Names & Price Settings')}
+                  </h3>
+                  <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 leading-relaxed">
+                    {bi(
+                      'এখান থেকে বুকিং ফি ও প্রতিটি সার্ভিসের নাম এবং দাম পরিবর্তন করলে সাথে সাথে সব ইউজারের পেজে আপডেট হবে।',
+                      'Updating the booking fee or any service name and price here updates every user page in real time.'
+                    )}
                   </p>
-                ) : (
-                  <div className="space-y-2.5">
-                    {salonBookings.map((b) => (
-                      <div
-                        key={b.id}
-                        className="p-3.5 rounded-2xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200/80 dark:border-zinc-700/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
-                      >
-                        <div className="space-y-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            {typeof b.serialNumber === 'number' && (
-                              <span className="text-xs font-bold text-amber-600 dark:text-amber-400 tabular-nums">
-                                #{b.serialNumber} ·
-                              </span>
-                            )}
-                            <span className="text-sm font-semibold text-zinc-900 dark:text-white">
-                              {b.customerName}
-                            </span>
-                            <span className="text-xs text-zinc-500 dark:text-zinc-400 tabular-nums">
-                              ({b.customerPhone})
-                            </span>
-                            <span
-                              className={`text-[11px] font-bold uppercase ${
-                                b.status === 'confirmed'
-                                  ? 'text-emerald-600 dark:text-emerald-400'
-                                  : b.status === 'completed'
-                                  ? 'text-indigo-600 dark:text-indigo-400'
-                                  : b.status === 'cancelled'
-                                  ? 'text-rose-600 dark:text-rose-400'
-                                  : 'text-amber-600 dark:text-amber-400'
-                              }`}
-                            >
-                              · {localizeBookingStatus(b.status, lang)}
-                            </span>
-                            {b.autoCancelledReason === 'time_expired' && (
-                              <span className="text-[11px] font-semibold text-rose-600 dark:text-rose-400">
-                                · {bi('সময় পার হওয়ায় অটো-ক্যানসেল', 'Auto-cancelled (Expired)')}
-                              </span>
-                            )}
-                            {b.couponCode && (
-                              <span className="text-[11px] font-mono font-semibold text-emerald-700 dark:text-emerald-300">
-                                · {bi('AI কুপন:', 'AI Coupon:')} {b.couponCode}
-                                {typeof b.discountPercent === 'number' ? ` (-${b.discountPercent}%)` : ''}
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-xs text-zinc-700 dark:text-zinc-300 tabular-nums">
-                            <strong>{b.serviceKey ? localizeSalonService(b.serviceKey, lang).primaryTitle : b.serviceTitle}</strong> · {b.bookingDate} ({b.timeSlot}) · {bi('বিল:', 'Bill:')}{' '}
-                            {formatSalonPrice(b.totalPrice, currencySymbol || salonConfig.currencySymbol)}
-                            {typeof b.discountAmount === 'number' && b.discountAmount > 0 && (
-                              <span className="text-emerald-600 dark:text-emerald-400">
-                                {' '}({bi('ছাড়:', 'Discount:')} -{formatSalonPrice(b.discountAmount, currencySymbol || salonConfig.currencySymbol)})
-                              </span>
-                            )}
-                          </p>
-                          {b.notes && (
-                            <p className="text-xs text-zinc-500 dark:text-zinc-400 italic">
-                              {bi('নোট:', 'Note:')} {b.notes}
-                            </p>
-                          )}
-                          {b.completionSignaturePath && (
-                            <div className="pt-1 flex items-center gap-2.5 flex-wrap">
-                              <div className="rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 px-2 py-0.5">
-                                <svg
-                                  viewBox="0 0 480 170"
-                                  className="w-24 h-7 text-amber-600 dark:text-amber-400"
-                                  aria-label={bi('কমপ্লিট সিগনেচার', 'Completion signature')}
-                                >
-                                  <path
-                                    d={b.completionSignaturePath}
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="6"
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                  />
-                                </svg>
-                              </div>
-                              <span className="text-[11px] font-medium text-emerald-700 dark:text-emerald-300">
-                                {bi('স্বাক্ষরিত:', 'Signed by:')} {b.completionSignerName || b.customerName}
-                              </span>
-                            </div>
-                          )}
-                        </div>
+                </div>
+                <label className="inline-flex items-center gap-2.5 text-sm font-semibold text-zinc-700 dark:text-zinc-200 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={isBookingOpen}
+                    onChange={(e) => setIsBookingOpen(e.target.checked)}
+                    className="rounded border-zinc-300 dark:border-zinc-700 text-amber-600 focus:ring-amber-500 w-4 h-4"
+                  />
+                  <span>{bi('অনলাইন বুকিং চালু রাখুন', 'Keep Online Booking Open')}</span>
+                </label>
+              </div>
 
-                        <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
-                          {b.status === 'pending' && (
-                            <button
-                              type="button"
-                              disabled={busyId === `bk_${b.id}`}
-                              onClick={() => handleUpdateBookingStatus(b, 'confirmed')}
-                              className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition-colors disabled:opacity-50 min-h-[38px]"
-                            >
-                              {bi('নিশ্চিত করুন', 'Confirm')}
-                            </button>
-                          )}
-                          {(b.status === 'pending' || b.status === 'confirmed' || (b.status === 'completed' && !b.completionSignaturePath)) && (
-                            <button
-                              type="button"
-                              disabled={busyId === `bk_${b.id}`}
-                              onClick={() => setSigningTargetBooking(b)}
-                              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold transition-colors disabled:opacity-50 min-h-[38px]"
-                            >
-                              <PenTool size={12} />
-                              <span>{bi('সম্পন্ন ও সিগনেচার', 'Complete & Sign')}</span>
-                            </button>
-                          )}
-                          {(b.status === 'pending' || b.status === 'confirmed') && (
-                            <button
-                              type="button"
-                              disabled={busyId === `bk_${b.id}`}
-                              onClick={() => handleUpdateBookingStatus(b, 'cancelled')}
-                              className="px-3 py-2 rounded-xl bg-zinc-200 dark:bg-zinc-700 hover:bg-red-100 dark:hover:bg-red-950/60 text-zinc-700 dark:text-zinc-200 hover:text-red-600 dark:hover:text-red-300 text-xs font-semibold transition-colors disabled:opacity-50 min-h-[38px]"
-                            >
-                              {bi('বাতিল', 'Cancel')}
-                            </button>
-                          )}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs sm:text-sm font-semibold text-zinc-600 dark:text-zinc-300 mb-2">
+                    {bi('সেলুনের নাম', 'Salon Name')}
+                  </label>
+                  <input
+                    type="text"
+                    value={salonName}
+                    onChange={(e) => setSalonName(e.target.value)}
+                    maxLength={100}
+                    className="w-full rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-3.5 py-2.5 text-sm sm:text-base text-zinc-900 dark:text-white"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3.5">
+                  <div>
+                    <label className="block text-xs sm:text-sm font-semibold text-zinc-600 dark:text-zinc-300 mb-2">
+                      {bi('কারেন্সি (৳ / BDT)', 'Currency (৳ / BDT)')}
+                    </label>
+                    <input
+                      type="text"
+                      value={currencySymbol}
+                      onChange={(e) => setCurrencySymbol(e.target.value)}
+                      maxLength={10}
+                      placeholder="৳"
+                      className="w-full rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-3.5 py-2.5 text-sm sm:text-base text-zinc-900 dark:text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs sm:text-sm font-semibold text-amber-600 dark:text-amber-400 mb-2">
+                      {bi('বুকিং ফি', 'Booking Fee')}
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={50000}
+                      value={bookingFee}
+                      onChange={(e) => setBookingFee(e.target.value)}
+                      className="w-full rounded-xl bg-amber-50/50 dark:bg-amber-950/20 border border-amber-300 dark:border-amber-800 px-3.5 py-2.5 text-sm sm:text-base font-semibold text-zinc-900 dark:text-white tabular-nums"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Editable Service Names & Prices Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {(
+                  [
+                    {
+                      meta: SALON_SERVICES[0],
+                      titleVal: haircutTitle,
+                      setTitleVal: setHaircutTitle,
+                      priceVal: haircutPrice,
+                      setPriceVal: setHaircutPrice,
+                    },
+                    {
+                      meta: SALON_SERVICES[1],
+                      titleVal: beardTrimTitle,
+                      setTitleVal: setBeardTrimTitle,
+                      priceVal: beardTrimPrice,
+                      setPriceVal: setBeardTrimPrice,
+                    },
+                    {
+                      meta: SALON_SERVICES[2],
+                      titleVal: shaveTitle,
+                      setTitleVal: setShaveTitle,
+                      priceVal: shavePrice,
+                      setPriceVal: setShavePrice,
+                    },
+                    {
+                      meta: SALON_SERVICES[3],
+                      titleVal: hairColorTitle,
+                      setTitleVal: setHairColorTitle,
+                      priceVal: hairColorPrice,
+                      setPriceVal: setHairColorPrice,
+                    },
+                    {
+                      meta: SALON_SERVICES[4],
+                      titleVal: facialTitle,
+                      setTitleVal: setFacialTitle,
+                      priceVal: facialPrice,
+                      setPriceVal: setFacialPrice,
+                    },
+                    {
+                      meta: SALON_SERVICES[5],
+                      titleVal: comboTitle,
+                      setTitleVal: setComboTitle,
+                      priceVal: comboPrice,
+                      setPriceVal: setComboPrice,
+                    },
+                  ] as const
+                ).map((item) => {
+                  const defaultTitle = localizeSalonService(item.meta.key, lang).primaryTitle;
+                  const isModified = isCustomSalonServiceTitle(item.meta.key, item.titleVal);
+                  return (
+                    <div
+                      key={item.meta.key}
+                      className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700/80 space-y-3"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs sm:text-sm font-bold text-amber-700 dark:text-amber-400 tabular-nums">
+                          {item.meta.number}. {bi('সার্ভিসের নাম ও মূল্য', 'Service Name & Price')}
+                        </span>
+                        {isModified && (
+                          <button
+                            type="button"
+                            onClick={() => item.setTitleVal(defaultTitle)}
+                            className="text-xs font-semibold text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white underline-offset-2 hover:underline transition-colors"
+                          >
+                            {bi('ডিফল্ট নাম', 'Reset Name')}
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+                        <div className="sm:col-span-8">
+                          <label className="block text-xs font-semibold text-zinc-600 dark:text-zinc-300 mb-1.5">
+                            {bi('সার্ভিসের নাম', 'Service Name')}
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            minLength={2}
+                            maxLength={100}
+                            value={item.titleVal}
+                            onChange={(e) => item.setTitleVal(e.target.value)}
+                            placeholder={defaultTitle}
+                            className="w-full rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 px-3.5 py-2.5 text-sm sm:text-base text-zinc-900 dark:text-white min-h-[42px]"
+                          />
+                        </div>
+                        <div className="sm:col-span-4">
+                          <label className="block text-xs font-semibold text-zinc-600 dark:text-zinc-300 mb-1.5">
+                            {bi('মূল্য', 'Price')} ({currencySymbol || salonConfig.currencySymbol})
+                          </label>
+                          <input
+                            type="number"
+                            min={0}
+                            max={50000}
+                            value={item.priceVal}
+                            onChange={(e) => item.setPriceVal(e.target.value)}
+                            className="w-full rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 px-3.5 py-2.5 text-sm sm:text-base font-semibold text-zinc-900 dark:text-white tabular-nums min-h-[42px]"
+                          />
                         </div>
                       </div>
-                    ))}
-                  </div>
-                )}
+                    </div>
+                  );
+                })}
               </div>
+
+              {/* Location / Phone / Hours */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs sm:text-sm font-semibold text-zinc-600 dark:text-zinc-300 mb-2">
+                    {bi('ঠিকানা', 'Address')}
+                  </label>
+                  <input
+                    type="text"
+                    value={salonAddress}
+                    onChange={(e) => setSalonAddress(e.target.value)}
+                    maxLength={200}
+                    className="w-full rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-3.5 py-2.5 text-sm sm:text-base text-zinc-900 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs sm:text-sm font-semibold text-zinc-600 dark:text-zinc-300 mb-2">
+                    {bi('ফোন / WhatsApp নম্বর', 'Phone / WhatsApp Number')}
+                  </label>
+                  <input
+                    type="text"
+                    value={salonPhone}
+                    onChange={(e) => setSalonPhone(e.target.value)}
+                    maxLength={30}
+                    placeholder="017XXXXXXXX"
+                    className="w-full rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-3.5 py-2.5 text-sm sm:text-base text-zinc-900 dark:text-white tabular-nums"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs sm:text-sm font-semibold text-zinc-600 dark:text-zinc-300 mb-2">
+                    {bi('খোলা থাকার সময়', 'Opening Hours')}
+                  </label>
+                  <input
+                    type="text"
+                    value={salonOpenHours}
+                    onChange={(e) => setSalonOpenHours(e.target.value)}
+                    maxLength={80}
+                    className="w-full rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-3.5 py-2.5 text-sm sm:text-base text-zinc-900 dark:text-white"
+                  />
+                </div>
+              </div>
+
+              {savedSalonBanner && (
+                <div className="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 text-sm text-emerald-700 dark:text-emerald-300 flex items-center gap-2">
+                  <CheckCircle2 size={16} />
+                  <span>{bi('সেলুনের সার্ভিস নাম, প্রাইস ও তথ্য সফলভাবে সেভ হয়েছে!', 'Salon service names, prices, and details saved successfully!')}</span>
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={savingSalon}
+                className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-sm font-semibold transition-colors disabled:opacity-50"
+              >
+                {savingSalon ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                <span>{bi('সেলুন সেটিংস সেভ করুন', 'Save Salon Settings')}</span>
+              </button>
+            </form>
+          )}
+
+          {/* 6. SALON BOOKINGS & COMPLETION SIGNATURES */}
+          {activeTab === 'salon-bookings' && (
+            <div className="space-y-4">
+              {salonBookings.length > 0 && (
+                <div className="flex flex-wrap items-center gap-2 p-1.5 rounded-xl bg-zinc-100 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700/80 w-fit">
+                  {(
+                    [
+                      { id: 'all', labelBn: 'সবগুলো', labelEn: 'All' },
+                      { id: 'pending', labelBn: 'পেন্ডিং', labelEn: 'Pending' },
+                      { id: 'confirmed', labelBn: 'নিশ্চিত', labelEn: 'Confirmed' },
+                      { id: 'completed', labelBn: 'সম্পন্ন', labelEn: 'Completed' },
+                      { id: 'cancelled', labelBn: 'বাতিল', labelEn: 'Cancelled' },
+                    ] as const
+                  ).map((f) => (
+                    <button
+                      key={f.id}
+                      type="button"
+                      onClick={() => setBookingStatusFilter(f.id)}
+                      className={`px-3.5 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-colors whitespace-nowrap shrink-0 ${
+                        bookingStatusFilter === f.id
+                          ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white shadow-sm'
+                          : 'text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white'
+                      }`}
+                    >
+                      {bi(f.labelBn, f.labelEn)}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {filteredSalonBookings.length === 0 ? (
+                <p className="text-base text-zinc-500 dark:text-zinc-400 py-12 text-center">
+                  {salonBookings.length === 0
+                    ? bi('এখনও কোনো সেলুন বুকিং আসেনি।', 'No salon bookings received yet.')
+                    : bi('এই ফিল্টারে কোনো বুকিং নেই।', 'No bookings match this filter.')}
+                </p>
+              ) : (
+                <div className="space-y-3.5">
+                  {filteredSalonBookings.map((b) => (
+                    <div
+                      key={b.id}
+                      className="p-5 rounded-2xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200/80 dark:border-zinc-700/80 flex flex-col lg:flex-row lg:items-center justify-between gap-4"
+                    >
+                      <div className="space-y-2 min-w-0">
+                        <div className="flex items-center gap-2.5 flex-wrap leading-relaxed">
+                          {typeof b.serialNumber === 'number' && (
+                            <span className="text-sm font-bold text-amber-600 dark:text-amber-400 tabular-nums">
+                              #{b.serialNumber} ·
+                            </span>
+                          )}
+                          <span className="text-base font-semibold text-zinc-900 dark:text-white">
+                            {b.customerName}
+                          </span>
+                          <span className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 tabular-nums">
+                            ({b.customerPhone})
+                          </span>
+                          <span
+                            className={`text-xs sm:text-sm font-bold ${
+                              b.status === 'confirmed'
+                                ? 'text-emerald-600 dark:text-emerald-400'
+                                : b.status === 'completed'
+                                ? 'text-indigo-600 dark:text-indigo-400'
+                                : b.status === 'cancelled'
+                                ? 'text-rose-600 dark:text-rose-400'
+                                : 'text-amber-600 dark:text-amber-400'
+                            }`}
+                          >
+                            · {localizeBookingStatus(b.status, lang)}
+                          </span>
+                          {b.autoCancelledReason === 'time_expired' && (
+                            <span className="text-xs sm:text-sm font-semibold text-rose-600 dark:text-rose-400">
+                              · {bi('সময় পার হওয়ায় অটো-ক্যানসেল', 'Auto-cancelled (Expired)')}
+                            </span>
+                          )}
+                          {b.couponCode && (
+                            <span className="text-xs sm:text-sm font-mono font-semibold text-emerald-700 dark:text-emerald-300">
+                              · {bi('AI কুপন:', 'AI Coupon:')} {b.couponCode}
+                              {typeof b.discountPercent === 'number' ? ` (-${b.discountPercent}%)` : ''}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs sm:text-sm text-zinc-700 dark:text-zinc-300 tabular-nums leading-relaxed">
+                          <strong>
+                            {b.serviceKey
+                              ? localizeSalonService(b.serviceKey, lang, salonConfig, b.serviceTitle).primaryTitle
+                              : b.serviceTitle}
+                          </strong>{' '}
+                          · {b.bookingDate} ({b.timeSlot}) · {bi('বিল:', 'Bill:')}{' '}
+                          {formatSalonPrice(b.totalPrice, currencySymbol || salonConfig.currencySymbol)}
+                          {typeof b.discountAmount === 'number' && b.discountAmount > 0 && (
+                            <span className="text-emerald-600 dark:text-emerald-400">
+                              {' '}
+                              ({bi('ছাড়:', 'Discount:')} -
+                              {formatSalonPrice(
+                                b.discountAmount,
+                                currencySymbol || salonConfig.currencySymbol
+                              )}
+                              )
+                            </span>
+                          )}
+                        </p>
+                        {b.notes && (
+                          <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 italic leading-relaxed">
+                            {bi('নোট:', 'Note:')} {b.notes}
+                          </p>
+                        )}
+                        {(b.completionSignaturePath || b.shopSignaturePath) && (
+                          <div className="pt-2 flex flex-wrap items-center gap-4">
+                            {b.completionSignaturePath && (
+                              <div className="flex items-center gap-2.5">
+                                <div className="rounded-xl bg-white dark:bg-zinc-900 border border-amber-200 dark:border-amber-800 px-2.5 py-1">
+                                  <svg
+                                    viewBox="0 0 480 170"
+                                    className="w-24 h-8 text-amber-600 dark:text-amber-400"
+                                    aria-label={bi('কাস্টমারের কমপ্লিট সিগনেচার', 'Customer completion signature')}
+                                  >
+                                    <path
+                                      d={b.completionSignaturePath}
+                                      fill="none"
+                                      stroke="currentColor"
+                                      strokeWidth="6"
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                    />
+                                  </svg>
+                                </div>
+                                <span className="text-xs font-medium text-amber-700 dark:text-amber-300 leading-snug">
+                                  {bi('কাস্টমার:', 'Customer:')} {b.completionSignerName || b.customerName}
+                                </span>
+                              </div>
+                            )}
+                            {b.shopSignaturePath && (
+                              <div className="flex items-center gap-2.5">
+                                <div className="rounded-xl bg-white dark:bg-zinc-900 border border-emerald-200 dark:border-emerald-800 px-2.5 py-1">
+                                  <svg
+                                    viewBox="0 0 480 170"
+                                    className="w-24 h-8 text-emerald-600 dark:text-emerald-400"
+                                    aria-label={bi('দোকানদারের কমপ্লিট সিগনেচার', 'Shopkeeper completion signature')}
+                                  >
+                                    <path
+                                      d={b.shopSignaturePath}
+                                      fill="none"
+                                      stroke="currentColor"
+                                      strokeWidth="6"
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                    />
+                                  </svg>
+                                </div>
+                                <span className="text-xs font-medium text-emerald-700 dark:text-emerald-300 leading-snug">
+                                  {bi('দোকানদার:', 'Shopkeeper:')} {b.shopSignerName || salonConfig.salonName}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                        {b.status === 'pending' && (
+                          <button
+                            type="button"
+                            disabled={busyId === `bk_${b.id}`}
+                            onClick={() => handleUpdateBookingStatus(b, 'confirmed')}
+                            className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs sm:text-sm font-semibold transition-colors disabled:opacity-50 min-h-[40px]"
+                          >
+                            {bi('নিশ্চিত করুন', 'Confirm')}
+                          </button>
+                        )}
+                        {b.status !== 'cancelled' && !b.shopSignaturePath && (
+                          <button
+                            type="button"
+                            disabled={busyId === `bk_${b.id}`}
+                            onClick={() => setSigningTargetBooking(b)}
+                            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs sm:text-sm font-semibold transition-colors disabled:opacity-50 min-h-[40px]"
+                          >
+                            <PenTool size={13} />
+                            <span>{bi('দোকানদার সিগনেচারে সম্পন্ন করুন', 'Shop Sign & Complete')}</span>
+                          </button>
+                        )}
+                        {(b.status === 'pending' || b.status === 'confirmed') && (
+                          <button
+                            type="button"
+                            disabled={busyId === `bk_${b.id}`}
+                            onClick={() => handleUpdateBookingStatus(b, 'cancelled')}
+                            className="px-4 py-2 rounded-xl bg-zinc-200 dark:bg-zinc-700 hover:bg-red-100 dark:hover:bg-red-950/60 text-zinc-700 dark:text-zinc-200 hover:text-red-600 dark:hover:text-red-300 text-xs sm:text-sm font-semibold transition-colors disabled:opacity-50 min-h-[40px]"
+                          >
+                            {bi('বাতিল', 'Cancel')}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -1443,13 +1759,16 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
 
       {signingTargetBooking && (
         <CompletionSignatureModal
-          title={bi('বুকিং সম্পন্ন ও কমপ্লিট সিগনেচার', 'Complete Booking & Sign')}
+          title={bi('দোকানদারের কমপ্লিট সিগনেচার', 'Shopkeeper Completion Signature')}
           subtitle={`${
             typeof signingTargetBooking.serialNumber === 'number'
               ? `#${signingTargetBooking.serialNumber} · `
               : ''
           }${signingTargetBooking.customerName} · ${signingTargetBooking.timeSlot}`}
-          defaultSignerName={signingTargetBooking.customerName}
+          defaultSignerName={salonName.trim() || salonConfig.salonName}
+          signerLabel={bi('দোকানদার / প্রতিষ্ঠানের নাম', 'Shopkeeper / Salon Name')}
+          namePlaceholder={bi('দোকানদার বা সেলুনের নাম লিখুন', 'Enter shopkeeper or salon name')}
+          submitLabel={bi('দোকানদারের সিগনেচারে সম্পন্ন করুন', 'Confirm with Shopkeeper Signature')}
           onClose={() => setSigningTargetBooking(null)}
           onSubmit={handleAdminSubmitSignature}
         />

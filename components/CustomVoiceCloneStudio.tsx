@@ -1179,7 +1179,7 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
 
   return (
     <div className="w-full h-full overflow-y-auto custom-scrollbar">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6">
+      <div className="max-w-7xl mx-auto px-4 sm:px-8 lg:px-10 py-6 sm:py-10 space-y-8">
         {/* Top Dedicated Premium Tool Header Card */}
         <section className="rounded-3xl bg-gradient-to-br from-white via-[#f8faff] to-amber-50/60 dark:from-[#0f172a] dark:via-[#111936] dark:to-[#1d1712] border border-indigo-200/80 dark:border-indigo-900/70 shadow-xl overflow-hidden">
           <div className="p-6 sm:p-8 flex flex-col lg:flex-row lg:items-center justify-between gap-6 border-b border-indigo-100/80 dark:border-slate-800">
@@ -1259,7 +1259,7 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
                         );
                         setShowMicModal(true);
                       }}
-                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-colors ${
+                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
                         micPermissionState === 'granted'
                           ? 'bg-emerald-50 dark:bg-emerald-950/50 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300'
                           : micPermissionState === 'denied' || micPermissionState === 'unsupported'
@@ -1295,14 +1295,14 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
                 </div>
 
                 {/* Guided Sample Script */}
-                <div className="p-3.5 rounded-xl bg-white dark:bg-slate-950/70 border border-indigo-100/80 dark:border-slate-800 space-y-1">
-                  <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                <div className="p-4 rounded-xl bg-white dark:bg-slate-950/70 border border-indigo-100/80 dark:border-slate-800 space-y-2">
+                  <p className="text-xs font-semibold text-slate-600 dark:text-slate-300 leading-relaxed">
                     {bi(
                       'রেকর্ডিংয়ের সময় চাইলে এই লাইনটি দেখে স্বাভাবিকভাবে পড়তে পারেন:',
                       'Read this prompt naturally while recording for best calibration:'
                     )}
                   </p>
-                  <p className="text-xs text-slate-800 dark:text-slate-200 leading-relaxed italic">
+                  <p className="text-xs sm:text-sm text-slate-800 dark:text-slate-200 leading-relaxed italic">
                     &ldquo;{lang === 'bn' ? SAMPLE_READING_SCRIPT_BN : SAMPLE_READING_SCRIPT_EN}&rdquo;
                   </p>
                 </div>
@@ -1430,10 +1430,10 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
                       </button>
                     </div>
 
-                    <div className="space-y-1.5">
+                    <div className="space-y-2">
                       <label
                         htmlFor="voice-clone-name-input"
-                        className="block text-[11px] font-semibold text-slate-500 dark:text-slate-400"
+                        className="block text-xs font-semibold text-slate-600 dark:text-slate-300"
                       >
                         {bi('ভয়েস প্রোফাইলের নাম (ঐচ্ছিক)', 'Voice Profile Name (Optional)')}
                       </label>
@@ -1447,7 +1447,7 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
                           'যেমন: আমার উপস্থাপনা ভয়েস / আমার অ্যালার্ম',
                           'e.g., My Presentation Voice / My Alarm'
                         )}
-                        className="w-full rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+                        className="w-full rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3.5 py-2.5 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
                       />
                     </div>
 
@@ -1509,7 +1509,7 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
                       onClick={() =>
                         onOpenUpgradePackage(studioTier === 'monthly' ? 'yearly' : 'monthly')
                       }
-                      className="text-[11px] font-semibold text-amber-600 dark:text-amber-400 hover:underline"
+                      className="text-xs font-semibold text-amber-600 dark:text-amber-400 hover:underline"
                     >
                       {bi('আরও প্রোফাইল আপগ্রেড', 'Upgrade for more profiles')}
                     </button>
@@ -1517,12 +1517,12 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
                 </div>
 
                 {profiles.length === 0 ? (
-                  <div className="p-5 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 text-center space-y-1.5">
-                    <FileAudio size={24} className="mx-auto text-slate-400" />
-                    <p className="text-xs font-medium text-slate-600 dark:text-slate-300">
+                  <div className="p-6 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 text-center space-y-2">
+                    <FileAudio size={26} className="mx-auto text-slate-400" />
+                    <p className="text-sm font-medium text-slate-600 dark:text-slate-300">
                       {bi('এখনও কোনো নিজস্ব ভয়েস প্রোফাইল সেভ করা হয়নি', 'No personal voice profiles saved yet')}
                     </p>
-                    <p className="text-[11px] text-slate-400 dark:text-slate-500">
+                    <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
                       {bi(
                         'উপরের ধাপ ১ থেকে আপনার কণ্ঠ রেকর্ড করে এনালাইসিস করুন।',
                         'Record and analyze your voice in Step 1 above.'
@@ -1580,7 +1580,7 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
                                   <p className="text-sm font-semibold text-slate-900 dark:text-white truncate group-hover:text-indigo-600 dark:group-hover:text-amber-300">
                                     {prof.name}
                                   </p>
-                                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
                                     {localizeGender(prof.gender, lang)} · {localizePitch(prof.pitchLabel, lang)} ·{' '}
                                     {bi('বেস:', 'Base:')} {prof.matchedBaseVoice} ({prof.durationSec}s)
                                   </p>
@@ -1629,11 +1629,11 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
                             </div>
                           </div>
 
-                          <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-100 dark:border-slate-800/80">
+                          <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100 dark:border-slate-800/80">
                             <button
                               type="button"
                               onClick={() => onSelectProfile(prof.id)}
-                              className={`text-[11px] font-semibold ${
+                              className={`text-xs font-semibold ${
                                 isSelected
                                   ? 'text-indigo-700 dark:text-amber-300'
                                   : 'text-slate-600 dark:text-slate-400 hover:text-indigo-600'
@@ -1646,10 +1646,10 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
                             <button
                               type="button"
                               onClick={() => onUseProfileInStudio(prof.id)}
-                              className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
+                              className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
                             >
                               <span>{bi('Voice Studio-তে খুলুন', 'Open in Voice Studio')}</span>
-                              <ArrowRight size={11} />
+                              <ArrowRight size={12} />
                             </button>
                           </div>
                         </div>
@@ -1688,7 +1688,7 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
                   <div className="rounded-2xl bg-gradient-to-br from-indigo-50/80 via-white to-teal-50/50 dark:from-[#131d3b] dark:via-slate-900 dark:to-[#0f2224] border border-indigo-200/80 dark:border-indigo-800/70 p-5 space-y-4">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div>
-                        <p className="text-[11px] font-bold uppercase tracking-wider text-indigo-600 dark:text-amber-400">
+                        <p className="text-xs font-bold uppercase tracking-wider text-indigo-600 dark:text-amber-400">
                           {bi('Voice DNA বিশ্লেষণ', 'Voice DNA Analysis')} · {activeProfile.name}
                         </p>
                         <h3 className="text-lg font-serif font-medium text-slate-900 dark:text-white mt-0.5">
@@ -1706,42 +1706,42 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
                       </button>
                     </div>
 
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
-                      <div className="p-2.5 rounded-xl bg-white/90 dark:bg-slate-950/70 border border-indigo-100 dark:border-slate-800">
-                        <p className="text-[10px] uppercase tracking-wider text-slate-400">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs sm:text-sm">
+                      <div className="p-3 rounded-xl bg-white/90 dark:bg-slate-950/70 border border-indigo-100 dark:border-slate-800 space-y-1">
+                        <p className="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">
                           {bi('কণ্ঠের ধরন', 'Voice Gender')}
                         </p>
-                        <p className="font-semibold text-slate-900 dark:text-white mt-0.5">
+                        <p className="font-semibold text-slate-900 dark:text-white">
                           {localizeGender(activeProfile.gender, lang)}
                         </p>
                       </div>
-                      <div className="p-2.5 rounded-xl bg-white/90 dark:bg-slate-950/70 border border-indigo-100 dark:border-slate-800">
-                        <p className="text-[10px] uppercase tracking-wider text-slate-400">
+                      <div className="p-3 rounded-xl bg-white/90 dark:bg-slate-950/70 border border-indigo-100 dark:border-slate-800 space-y-1">
+                        <p className="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">
                           {bi('পিচ রেজিস্টার', 'Pitch Register')}
                         </p>
-                        <p className="font-semibold text-slate-900 dark:text-white mt-0.5">
+                        <p className="font-semibold text-slate-900 dark:text-white">
                           {localizePitch(activeProfile.pitchLabel, lang)}
                         </p>
                       </div>
-                      <div className="p-2.5 rounded-xl bg-white/90 dark:bg-slate-950/70 border border-indigo-100 dark:border-slate-800">
-                        <p className="text-[10px] uppercase tracking-wider text-slate-400">
+                      <div className="p-3 rounded-xl bg-white/90 dark:bg-slate-950/70 border border-indigo-100 dark:border-slate-800 space-y-1">
+                        <p className="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">
                           {bi('কথা বলার গতি', 'Speaking Pace')}
                         </p>
-                        <p className="font-semibold text-slate-900 dark:text-white mt-0.5 truncate">
+                        <p className="font-semibold text-slate-900 dark:text-white truncate">
                           {activeProfile.speakingRateLabel}
                         </p>
                       </div>
-                      <div className="p-2.5 rounded-xl bg-white/90 dark:bg-slate-950/70 border border-indigo-100 dark:border-slate-800">
-                        <p className="text-[10px] uppercase tracking-wider text-slate-400">
+                      <div className="p-3 rounded-xl bg-white/90 dark:bg-slate-950/70 border border-indigo-100 dark:border-slate-800 space-y-1">
+                        <p className="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">
                           {bi('ম্যাচড বেস ভয়েস', 'Matched Base Voice')}
                         </p>
-                        <p className="font-semibold text-indigo-700 dark:text-amber-300 mt-0.5">
+                        <p className="font-semibold text-indigo-700 dark:text-amber-300">
                           {activeProfile.matchedBaseVoice}
                         </p>
                       </div>
                     </div>
 
-                    <div className="text-xs text-slate-700 dark:text-slate-300 space-y-1 leading-relaxed">
+                    <div className="text-xs sm:text-sm text-slate-700 dark:text-slate-300 space-y-1.5 leading-relaxed">
                       <p>
                         <strong className="text-slate-900 dark:text-white">
                           {bi('টোন ও উষ্ণতা:', 'Tone & Warmth:')}
@@ -1763,7 +1763,7 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
                     </div>
 
                     {showDnaPrompt && (
-                      <div className="p-3 rounded-xl bg-slate-900 text-slate-100 text-[11px] font-mono leading-relaxed">
+                      <div className="p-3.5 rounded-xl bg-slate-900 text-slate-100 text-xs font-mono leading-relaxed">
                         {activeProfile.synthesizedStylePrompt}
                       </div>
                     )}
@@ -1781,16 +1781,16 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
                           <button
                             type="button"
                             onClick={() => onOpenUpgradePackage('yearly')}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-[11px] font-semibold transition-colors"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold transition-colors"
                           >
-                            <Lock size={10} />
+                            <Lock size={12} />
                             <span>{bi('Yearly দিয়ে ফাইন-টিউন', 'Fine-tune with Yearly')}</span>
                           </button>
                         ) : (
                           <button
                             type="button"
                             onClick={handleSaveCalibrationToProfile}
-                            className="text-[11px] font-semibold text-indigo-700 dark:text-amber-300 hover:underline"
+                            className="text-xs font-semibold text-indigo-700 dark:text-amber-300 hover:underline"
                           >
                             {bi('সেটিংস প্রোফাইলে সেভ করুন', 'Save Settings to Profile')}
                           </button>
@@ -2089,7 +2089,7 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
             className="absolute inset-0 bg-slate-950/70 backdrop-blur-sm animate-fade-in"
             onClick={() => setShowMicModal(false)}
           />
-          <div className="relative w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 border border-indigo-200 dark:border-slate-700 shadow-2xl p-6 space-y-4 animate-slide-up">
+          <div className="relative w-full max-w-lg rounded-3xl bg-white dark:bg-slate-900 border border-indigo-200 dark:border-slate-700 shadow-2xl p-6 sm:p-7 space-y-5 animate-slide-up">
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-center gap-3">
                 <div
@@ -2107,10 +2107,10 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
                     <Mic size={20} />
                   )}
                 </div>
-                <div>
+                <div className="space-y-1">
                   <h3
                     id="mic-permission-modal-title"
-                    className="text-base sm:text-lg font-serif font-semibold text-slate-900 dark:text-white"
+                    className="text-lg sm:text-xl font-serif font-semibold text-slate-900 dark:text-white leading-snug"
                   >
                     {micIssueReason === 'no-device'
                       ? bi('মাইক্রোফোন পাওয়া যায়নি', 'No Microphone Detected')
@@ -2122,7 +2122,7 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
                       ? bi('মাইক্রোফোন পপআপ ব্লক বা ডিনাইড', 'Microphone Popup Blocked or Denied')
                       : bi('মাইক্রোফোন অনুমতি ও রেকর্ডিং গাইড', 'Microphone Permission & Setup')}
                   </h3>
-                  <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                  <p className="text-xs sm:text-sm font-medium text-slate-500 dark:text-slate-400 leading-relaxed">
                     {bi('ভয়েস রেকর্ডিং চালু করতে নিচের অপশন দেখুন', 'Follow these options to enable live recording')}
                   </p>
                 </div>
@@ -2137,7 +2137,7 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
               </button>
             </div>
 
-            <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 text-xs text-slate-700 dark:text-slate-300 space-y-2 leading-relaxed">
+            <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 text-xs sm:text-sm text-slate-700 dark:text-slate-300 space-y-2.5 leading-relaxed">
               {isEmbeddedIframe && (
                 <p className="font-medium text-indigo-700 dark:text-amber-300">
                   {bi(

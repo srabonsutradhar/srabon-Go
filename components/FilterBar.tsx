@@ -318,7 +318,7 @@ const FilterBar: React.FC<FilterBarProps> = ({
           >
             {isMenuOpen ? <X size={18} /> : <MoreVertical size={18} />}
             {!isMenuOpen && totalAlerts > 0 && (
-              <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-rose-600 text-white text-[10px] font-bold flex items-center justify-center tabular-nums">
+              <span className="absolute -top-1 -right-1 min-w-[20px] h-[20px] px-1.5 rounded-full bg-rose-600 text-white text-xs font-bold flex items-center justify-center tabular-nums">
                 {totalAlerts > 99 ? '99+' : totalAlerts}
               </span>
             )}
@@ -329,7 +329,7 @@ const FilterBar: React.FC<FilterBarProps> = ({
             <div
               role="menu"
               aria-label={bi('অ্যাপ্লিকেশন অপশন মেনু', 'Application options menu')}
-              className="absolute right-0 top-[calc(100%+10px)] w-[min(92vw,360px)] max-h-[calc(100vh-5.5rem)] overflow-y-auto rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-2xl divide-y divide-zinc-100 dark:divide-zinc-800 animate-fade-in z-[90]"
+              className="absolute right-0 top-[calc(100%+10px)] w-[min(92vw,390px)] max-h-[calc(100vh-5.5rem)] overflow-y-auto rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-2xl divide-y divide-zinc-100 dark:divide-zinc-800 animate-fade-in z-[90]"
             >
               {/* User Account Summary */}
               {user && (
@@ -348,14 +348,14 @@ const FilterBar: React.FC<FilterBarProps> = ({
                         .toUpperCase()}
                     </div>
                   )}
-                  <div className="min-w-0 flex-1">
+                  <div className="min-w-0 flex-1 space-y-0.5">
                     <p className="text-sm font-semibold text-zinc-900 dark:text-white truncate">
                       {user.displayName || bi('শ্রাবণ গো ব্যবহারকারী', 'Srabon Go User')}
                     </p>
                     <p className="text-xs text-zinc-500 dark:text-zinc-400 truncate">
                       {user.email}
                     </p>
-                    <p className="text-[11px] font-medium text-indigo-600 dark:text-indigo-400 mt-0.5 tabular-nums">
+                    <p className="text-xs font-medium text-indigo-600 dark:text-indigo-400 tabular-nums leading-relaxed">
                       {isAdmin
                         ? bi('অ্যাডমিন অ্যাক্সেস', 'Admin Access')
                         : userPlan === 'pro'
@@ -371,7 +371,7 @@ const FilterBar: React.FC<FilterBarProps> = ({
 
               {/* Search & Voice Filters */}
               <div className="p-4 space-y-2.5">
-                <p className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400">
+                <p className="text-xs font-semibold text-zinc-500 dark:text-zinc-400">
                   {bi('ভয়েস খুঁজুন ও ফিল্টার', 'Search & Filter Voices')}
                 </p>
                 <div className="relative">
@@ -417,11 +417,11 @@ const FilterBar: React.FC<FilterBarProps> = ({
               </div>
 
               {/* Pages & Views Navigation */}
-              <div className="p-4 space-y-2">
-                <p className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400">
+              <div className="p-4 space-y-2.5">
+                <p className="text-xs font-semibold text-zinc-500 dark:text-zinc-400">
                   {bi('পেজ ও ভিউ', 'Pages & Views')}
                 </p>
-                <div className="grid grid-cols-2 gap-1.5">
+                <div className="grid grid-cols-2 gap-2">
                   {allMenuViews.map((item) => {
                     const active = viewMode === item.mode;
                     return (
@@ -429,7 +429,7 @@ const FilterBar: React.FC<FilterBarProps> = ({
                         key={item.mode}
                         type="button"
                         onClick={() => handleNavigate(item.mode)}
-                        className={`min-h-[42px] px-3 py-2 rounded-xl text-xs font-medium flex items-center justify-between gap-2 transition-colors text-left ${
+                        className={`min-h-[44px] px-3 py-2.5 rounded-xl text-xs font-medium flex items-center justify-between gap-2 transition-colors text-left leading-snug ${
                           active
                             ? 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white shadow-sm'
                             : 'bg-slate-50 dark:bg-slate-800/80 text-slate-700 dark:text-slate-200 hover:bg-indigo-50 dark:hover:bg-slate-800'
@@ -441,7 +441,7 @@ const FilterBar: React.FC<FilterBarProps> = ({
                         </span>
                         {item.badge !== undefined && (
                           <span
-                            className={`px-1.5 py-0.5 rounded-md text-[10px] font-bold tabular-nums shrink-0 ${
+                            className={`px-2 py-0.5 rounded-md text-xs font-bold tabular-nums shrink-0 ${
                               active
                                 ? 'bg-white/20 text-white'
                                 : 'bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-300'
@@ -531,7 +531,7 @@ const FilterBar: React.FC<FilterBarProps> = ({
                       <span>{bi('চ্যাট লিস্ট ও মতামত', 'Chat List & Feedback')}</span>
                     </span>
                     {unreadChatCount > 0 && (
-                      <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-rose-600 text-white tabular-nums">
+                      <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-rose-600 text-white tabular-nums">
                         {unreadChatCount > 99 ? '99+' : unreadChatCount}
                       </span>
                     )}
@@ -551,7 +551,7 @@ const FilterBar: React.FC<FilterBarProps> = ({
                         setIsMenuOpen(false);
                         onOpenProModal('refer');
                       }}
-                      className="w-full min-h-[44px] px-3 py-2 rounded-xl flex items-center justify-between gap-3 text-sm font-medium text-zinc-800 dark:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                      className="w-full min-h-[44px] px-3 py-2.5 rounded-xl flex items-center justify-between gap-3 text-sm font-medium text-zinc-800 dark:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
                     >
                       <span className="flex items-center gap-3">
                         <Gift size={16} className="text-indigo-500 shrink-0" />
@@ -570,7 +570,7 @@ const FilterBar: React.FC<FilterBarProps> = ({
                         setIsMenuOpen(false);
                         onOpenProModal('pro');
                       }}
-                      className="w-full min-h-[44px] px-3 py-2 rounded-xl flex items-center justify-between gap-3 text-sm font-medium text-zinc-800 dark:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                      className="w-full min-h-[44px] px-3 py-2.5 rounded-xl flex items-center justify-between gap-3 text-sm font-medium text-zinc-800 dark:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
                     >
                       <span className="flex items-center gap-3">
                         <Crown size={16} className="text-amber-500 shrink-0" />
@@ -596,14 +596,14 @@ const FilterBar: React.FC<FilterBarProps> = ({
                       setIsMenuOpen(false);
                       onOpenNotifications();
                     }}
-                    className="w-full min-h-[44px] px-3 py-2 rounded-xl flex items-center justify-between gap-3 text-sm font-medium text-zinc-800 dark:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                    className="w-full min-h-[44px] px-3 py-2.5 rounded-xl flex items-center justify-between gap-3 text-sm font-medium text-zinc-800 dark:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
                   >
                     <span className="flex items-center gap-3">
                       <Bell size={16} className="text-rose-500 shrink-0" />
                       <span>{bi('অ্যাডমিন নোটিফিকেশন', 'Admin Notifications')}</span>
                     </span>
                     {unreadIssuesCount > 0 && (
-                      <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-rose-600 text-white tabular-nums">
+                      <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-rose-600 text-white tabular-nums">
                         {unreadIssuesCount > 99 ? '99+' : unreadIssuesCount}
                       </span>
                     )}
@@ -617,7 +617,7 @@ const FilterBar: React.FC<FilterBarProps> = ({
                       setIsMenuOpen(false);
                       onOpenAdminPanel();
                     }}
-                    className="w-full min-h-[44px] px-3 py-2 rounded-xl flex items-center justify-between gap-3 text-sm font-medium text-zinc-800 dark:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                    className="w-full min-h-[44px] px-3 py-2.5 rounded-xl flex items-center justify-between gap-3 text-sm font-medium text-zinc-800 dark:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
                   >
                     <span className="flex items-center gap-3">
                       <Shield size={16} className="text-indigo-500 shrink-0" />

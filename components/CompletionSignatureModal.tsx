@@ -15,6 +15,9 @@ interface CompletionSignatureModalProps {
   title: string;
   subtitle?: string;
   defaultSignerName?: string;
+  signerLabel?: string;
+  namePlaceholder?: string;
+  submitLabel?: string;
   onClose: () => void;
   onSubmit: (data: { signaturePath: string; signerName: string }) => Promise<void>;
 }
@@ -76,6 +79,9 @@ const CompletionSignatureModal: React.FC<CompletionSignatureModalProps> = ({
   title,
   subtitle,
   defaultSignerName = '',
+  signerLabel,
+  namePlaceholder,
+  submitLabel,
   onClose,
   onSubmit,
 }) => {
@@ -277,22 +283,22 @@ const CompletionSignatureModal: React.FC<CompletionSignatureModalProps> = ({
       <form
         ref={modalRef}
         onSubmit={handleSave}
-        className="relative w-full max-w-lg rounded-3xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-2xl overflow-hidden animate-slide-up"
+        className="relative w-full max-w-xl rounded-3xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-2xl overflow-hidden animate-slide-up"
       >
-        <div className="px-6 py-4 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-9 h-9 rounded-xl bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800 flex items-center justify-center text-amber-600 dark:text-amber-400 shrink-0">
-              <PenTool size={17} />
+        <div className="px-6 py-5 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800 flex items-center justify-center text-amber-600 dark:text-amber-400 shrink-0">
+              <PenTool size={18} />
             </div>
-            <div className="min-w-0">
+            <div className="min-w-0 space-y-0.5">
               <h3
                 id="completion-signature-title"
-                className="text-base font-serif font-medium text-zinc-900 dark:text-white truncate"
+                className="text-lg font-serif font-medium text-zinc-900 dark:text-white leading-snug"
               >
                 {title}
               </h3>
               {subtitle && (
-                <p className="text-xs text-zinc-500 dark:text-zinc-400 truncate">{subtitle}</p>
+                <p className="text-sm text-zinc-500 dark:text-zinc-400 leading-snug">{subtitle}</p>
               )}
             </div>
           </div>
@@ -301,23 +307,23 @@ const CompletionSignatureModal: React.FC<CompletionSignatureModalProps> = ({
             type="button"
             disabled={submitting}
             onClick={onClose}
-            className="p-2 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors shrink-0 min-h-[40px] min-w-[40px] flex items-center justify-center"
+            className="p-2 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors shrink-0 min-h-[42px] min-w-[42px] flex items-center justify-center"
             aria-label={bi('বন্ধ করুন', 'Close')}
           >
-            <X size={17} />
+            <X size={18} />
           </button>
         </div>
 
-        <div className="p-6 space-y-4">
+        <div className="p-6 sm:p-7 space-y-5">
           {error && (
-            <div className="p-3 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 text-xs text-red-600 dark:text-red-300">
+            <div className="p-3.5 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 text-sm text-red-600 dark:text-red-300 leading-relaxed">
               {error}
             </div>
           )}
 
           <div>
-            <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1.5">
-              {bi('স্বাক্ষরকারীর নাম', 'Signer Name')}
+            <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-600 dark:text-zinc-300 mb-2">
+              {signerLabel || bi('স্বাক্ষরকারীর নাম', 'Signer Name')}
             </label>
             <input
               type="text"
@@ -326,23 +332,23 @@ const CompletionSignatureModal: React.FC<CompletionSignatureModalProps> = ({
               maxLength={80}
               value={signerName}
               onChange={(e) => setSignerName(e.target.value)}
-              placeholder={bi('আপনার বা স্টাইলিস্টের নাম লিখুন', 'Enter customer or stylist name')}
-              className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-sm text-zinc-900 dark:text-white"
+              placeholder={namePlaceholder || bi('আপনার বা দোকানদারের নাম লিখুন', 'Enter customer or shopkeeper name')}
+              className="w-full px-4 py-3 rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-base text-zinc-900 dark:text-white"
             />
           </div>
 
           <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-xs font-semibold uppercase tracking-wider text-zinc-600 dark:text-zinc-300">
                 {bi('কমপ্লিট সিগনেচার প্যাড (এখানে সাইন করুন)', 'Completion Signature Pad (Sign Here)')}
               </label>
               <button
                 type="button"
                 onClick={handleClear}
                 disabled={submitting || strokes.length === 0}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-40 transition-colors"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-40 transition-colors"
               >
-                <Eraser size={13} />
+                <Eraser size={14} />
                 <span>{bi('মুছুন', 'Clear')}</span>
               </button>
             </div>
@@ -356,39 +362,39 @@ const CompletionSignatureModal: React.FC<CompletionSignatureModalProps> = ({
                 onPointerMove={handlePointerMove}
                 onPointerUp={finishStroke}
                 onPointerCancel={finishStroke}
-                className="w-full h-[170px] block touch-none cursor-crosshair"
+                className="w-full h-[180px] block touch-none cursor-crosshair"
               />
               {strokes.length === 0 && (
-                <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-xs text-zinc-400 dark:text-zinc-500">
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-zinc-400 dark:text-zinc-500 px-4 text-center">
                   {bi('আঙুল বা মাউস দিয়ে এখানে সিগনেচার করুন', 'Draw signature here with finger or mouse')}
                 </div>
               )}
             </div>
           </div>
 
-          <div className="flex items-center justify-end gap-2.5 pt-2">
+          <div className="flex items-center justify-end gap-3 pt-2">
             <button
               type="button"
               disabled={submitting}
               onClick={onClose}
-              className="px-4 py-2.5 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 text-xs sm:text-sm font-semibold hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors min-h-[42px]"
+              className="px-4 py-2.5 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 text-sm font-semibold hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors min-h-[44px]"
             >
               {bi('বাতিল', 'Cancel')}
             </button>
             <button
               type="submit"
               disabled={submitting}
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs sm:text-sm font-semibold transition-colors disabled:opacity-60 min-h-[42px]"
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold transition-colors disabled:opacity-60 min-h-[44px]"
             >
               {submitting ? (
-                <Loader2 size={15} className="animate-spin" />
+                <Loader2 size={16} className="animate-spin" />
               ) : (
-                <CheckCircle2 size={15} />
+                <CheckCircle2 size={16} />
               )}
               <span>
                 {submitting
                   ? bi('সেভ হচ্ছে...', 'Saving...')
-                  : bi('কমপ্লিট সিগনেচার জমা দিন', 'Confirm Completion Signature')}
+                  : submitLabel || bi('কমপ্লিট সিগনেচার জমা দিন', 'Confirm Completion Signature')}
               </span>
             </button>
           </div>

@@ -790,7 +790,7 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
 
   return (
     <div className="w-full h-full overflow-y-auto custom-scrollbar">
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10">
+      <div className="max-w-7xl mx-auto px-4 sm:px-8 lg:px-10 py-6 sm:py-10">
         <div className="bg-white/95 dark:bg-[#0f172a]/95 backdrop-blur-xl rounded-3xl border border-indigo-100/90 dark:border-indigo-900/60 shadow-xl overflow-hidden">
           {/* Top Studio Banner */}
           <div className="px-6 sm:px-8 py-5 border-b border-indigo-100 dark:border-slate-800 bg-gradient-to-r from-indigo-50/90 via-white to-amber-50/70 dark:from-[#131c38] dark:via-[#0f172a] dark:to-[#1a1510] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -828,7 +828,7 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
                       )}
                 </span>
                 {expiryDateLabel && userPlan === 'pro' && !isAdmin && (
-                  <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                  <span className="text-xs text-slate-500 dark:text-slate-400">
                     · {bi('মেয়াদ:', 'Expires:')} {expiryDateLabel}
                   </span>
                 )}
@@ -886,7 +886,7 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
               {/* Quick Presets */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
+                  <span className="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
                     {bi('দ্রুত স্ক্রিপ্ট', 'Quick Scripts')}
                   </span>
                   {onOpenIdeas && (
@@ -1024,7 +1024,7 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
                       <button
                         type="button"
                         onClick={() => onOpenUpgradePackage('yearly')}
-                        className="text-[11px] font-semibold text-amber-600 dark:text-amber-400 hover:underline"
+                        className="text-xs font-semibold text-amber-600 dark:text-amber-400 hover:underline"
                       >
                         {bi('৫,০০০ অক্ষর (Yearly)', '5,000 chars (Yearly)')}
                       </button>
@@ -1035,8 +1035,8 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
 
               {/* Saved Custom Scripts Shelf */}
               {savedScripts.length > 0 && (
-                <div className="space-y-1.5">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
+                <div className="space-y-2">
+                  <span className="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
                     {bi('আমার সংরক্ষিত স্ক্রিপ্ট', 'My Saved Scripts')} ({savedScripts.length}/{caps.maxSavedScripts})
                   </span>
                   <div className="flex flex-wrap gap-2">
@@ -1081,7 +1081,7 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
                   >
                     {bi('ডেলিভারি টোন ও স্টাইল', 'Delivery Tone & Style')}
                   </label>
-                  <span className="text-[11px] text-zinc-400 dark:text-zinc-500">
+                  <span className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">
                     {caps.allowExtraStyles
                       ? bi('৮টি স্টুডিও স্টাইল আনলকড', '8 Studio styles unlocked')
                       : bi('৪ স্ট্যান্ডার্ড · +৪ Yearly প্রো', '4 Standard · +4 Yearly Pro')}
@@ -1152,22 +1152,22 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
                     <button
                       type="button"
                       onClick={() => onOpenUpgradePackage('yearly')}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-[11px] font-semibold transition-colors"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold transition-colors"
                     >
-                      <Lock size={10} />
+                      <Lock size={12} />
                       <span>{bi('Yearly দিয়ে আনলক', 'Unlock with Yearly')}</span>
                     </button>
                   )}
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
                   {/* Speed Control */}
-                  <div className="space-y-1.5">
-                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-zinc-600 dark:text-zinc-300">
-                      <Gauge size={12} />
+                  <div className="space-y-2">
+                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-zinc-600 dark:text-zinc-300">
+                      <Gauge size={13} />
                       <span>{bi('প্লেব্যাক গতি', 'Playback Speed')}</span>
                     </span>
-                    <div className="grid grid-cols-4 gap-1">
+                    <div className="grid grid-cols-4 gap-1.5">
                       {STUDIO_PLAYBACK_SPEEDS.map((spd) => {
                         const active = effectiveSpeed === spd;
                         const disabledByTier = !caps.allowPlaybackSpeed && spd !== 1.0;
@@ -1182,7 +1182,7 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
                               }
                               setPlaybackSpeed(spd);
                             }}
-                            className={`py-1.5 rounded-lg text-[11px] font-semibold tabular-nums border transition-colors ${
+                            className={`py-2 rounded-lg text-xs font-semibold tabular-nums border transition-colors ${
                               active
                                 ? 'bg-zinc-900 dark:bg-amber-500 text-white dark:text-zinc-950 border-zinc-900 dark:border-amber-500'
                                 : disabledByTier
@@ -1198,9 +1198,9 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
                   </div>
 
                   {/* Loudness Gain Boost */}
-                  <div className="space-y-1.5">
-                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-zinc-600 dark:text-zinc-300">
-                      <Zap size={12} />
+                  <div className="space-y-2">
+                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-zinc-600 dark:text-zinc-300">
+                      <Zap size={13} />
                       <span>{bi('অ্যালার্ম সাউন্ড বুস্ট', 'Alarm Sound Boost')}</span>
                     </span>
                     <button
@@ -1213,13 +1213,13 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
                         if (isPlaying) stopPlayback();
                         setLoudnessBoost((prev) => !prev);
                       }}
-                      className={`w-full py-1.5 px-2.5 rounded-lg text-[11px] font-semibold border transition-colors flex items-center justify-center gap-1.5 ${
+                      className={`w-full py-2 px-3 rounded-lg text-xs font-semibold border transition-colors flex items-center justify-center gap-1.5 leading-relaxed ${
                         effectiveBoost
                           ? 'bg-amber-600 text-white border-amber-600'
                           : 'bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-200 border-zinc-200 dark:border-zinc-700'
                       }`}
                     >
-                      {!caps.allowLoudnessBoost && <Lock size={11} className="text-amber-600 dark:text-amber-400" />}
+                      {!caps.allowLoudnessBoost && <Lock size={12} className="text-amber-600 dark:text-amber-400 shrink-0" />}
                       <span>
                         {effectiveBoost
                           ? bi('লাউড বুস্ট +৪০% চালু', 'Loud Boost +40% ON')
@@ -1229,12 +1229,12 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
                   </div>
 
                   {/* Alarm Repeat Delay */}
-                  <div className="space-y-1.5">
-                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-zinc-600 dark:text-zinc-300">
-                      <Timer size={12} />
+                  <div className="space-y-2">
+                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-zinc-600 dark:text-zinc-300">
+                      <Timer size={13} />
                       <span>{bi('লুপ বিরতি', 'Loop Delay')}</span>
                     </span>
-                    <div className="grid grid-cols-4 gap-1">
+                    <div className="grid grid-cols-4 gap-1.5">
                       {STUDIO_ALARM_DELAYS_MS.map((ms) => {
                         const active = effectiveAlarmDelayMs === ms;
                         const disabledByTier = !caps.allowCustomLoopDelay && ms !== 1200;
@@ -1249,7 +1249,7 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
                               }
                               setAlarmDelayMs(ms);
                             }}
-                            className={`py-1.5 rounded-lg text-[11px] font-semibold tabular-nums border transition-colors ${
+                            className={`py-2 rounded-lg text-xs font-semibold tabular-nums border transition-colors ${
                               active
                                 ? 'bg-zinc-900 dark:bg-amber-500 text-white dark:text-zinc-950 border-zinc-900 dark:border-amber-500'
                                 : disabledByTier
@@ -1280,9 +1280,9 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
                       <button
                         type="button"
                         onClick={onOpenVoiceCompare}
-                        className="inline-flex items-center gap-1 text-[11px] font-semibold text-zinc-600 dark:text-zinc-300 hover:text-indigo-600 dark:hover:text-amber-400"
+                        className="inline-flex items-center gap-1.5 text-xs font-semibold text-zinc-600 dark:text-zinc-300 hover:text-indigo-600 dark:hover:text-amber-400"
                       >
-                        <ArrowLeftRight size={12} />
+                        <ArrowLeftRight size={13} />
                         <span>{bi('তুলনা A vs B', 'Compare A vs B')}</span>
                       </button>
                     )}
@@ -1290,11 +1290,11 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
                       <button
                         type="button"
                         onClick={onOpenVoiceCloneTool}
-                        className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-600 dark:text-amber-400 hover:underline"
+                        className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 dark:text-amber-400 hover:underline"
                       >
-                        <Mic size={12} />
+                        <Mic size={13} />
                         <span>{bi('নতুন ভয়েস রেকর্ড', 'Record New Voice')}</span>
-                        <ArrowRight size={11} />
+                        <ArrowRight size={12} />
                       </button>
                     )}
                   </div>
@@ -1547,7 +1547,7 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
                   </div>
                 )}
 
-                <div className="flex items-center justify-center gap-1.5 text-[11px] text-zinc-400 dark:text-zinc-500 pt-1">
+                <div className="flex items-center justify-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400 pt-1">
                   <Sparkles size={12} className="text-indigo-500" />
                   <span>
                     {isUsingDeviceSpeech
@@ -1621,7 +1621,7 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
                     <CalendarDays size={14} />
                     <span>{bi('মান্থলি প্যাকেজ', 'Monthly Package')}</span>
                   </div>
-                  <span className="px-2.5 py-0.5 rounded-md text-[11px] font-semibold bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300">
+                  <span className="px-3 py-1 rounded-md text-xs font-semibold bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300">
                     {bi(STUDIO_TIER_LIMITS.monthly.validityLabel, '30 Days Validity')}
                   </span>
                 </div>
@@ -1709,7 +1709,7 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
                     <Crown size={14} />
                     <span>{bi('ইয়ারলি স্টুডিও প্রো', 'Yearly Studio Pro')}</span>
                   </div>
-                  <span className="px-2.5 py-0.5 rounded-md text-[11px] font-bold bg-amber-500 text-zinc-950">
+                  <span className="px-3 py-1 rounded-md text-xs font-bold bg-amber-500 text-zinc-950">
                     {bi('সর্বোচ্চ সুবিধা · ৩৬৫ দিন', 'Best Value · 365 Days')}
                   </span>
                 </div>

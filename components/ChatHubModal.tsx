@@ -532,28 +532,28 @@ const ChatHubModal: React.FC<ChatHubModalProps> = ({
         onClick={onClose}
       />
 
-      <div className="relative w-full max-w-6xl h-[90vh] sm:h-[84vh] flex flex-col bg-white dark:bg-zinc-900 rounded-3xl shadow-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden animate-slide-up">
+      <div className="relative w-full max-w-7xl h-[90vh] sm:h-[86vh] flex flex-col bg-white dark:bg-zinc-900 rounded-3xl shadow-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden animate-slide-up">
         {/* Top Modal Header */}
-        <div className="px-5 py-4 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between gap-4 bg-zinc-50/70 dark:bg-zinc-950/50 shrink-0">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-sm">
-              <MessageSquare size={18} />
+        <div className="px-6 py-4 sm:py-5 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between gap-4 bg-zinc-50/70 dark:bg-zinc-950/50 shrink-0">
+          <div className="flex items-center gap-3.5 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-sm">
+              <MessageSquare size={19} />
             </div>
-            <div className="min-w-0">
+            <div className="min-w-0 space-y-0.5">
               <div className="flex items-center gap-2">
                 <h2
                   id="chat-hub-title"
-                  className="text-base sm:text-lg font-serif font-medium text-zinc-900 dark:text-white truncate"
+                  className="text-lg sm:text-xl font-serif font-medium text-zinc-900 dark:text-white truncate"
                 >
                   {bi('চ্যাট লিস্ট · মতামত ও আলোচনা', 'Chat List · Feedback & Community')}
                 </h2>
                 {totalAdminUnread > 0 && (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-600 text-white tabular-nums">
+                  <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-600 text-white tabular-nums">
                     {totalAdminUnread} {bi('নতুন', 'new')}
                   </span>
                 )}
               </div>
-              <p className="text-[11px] sm:text-xs text-zinc-500 dark:text-zinc-400 truncate">
+              <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 truncate leading-relaxed">
                 {bi(
                   'অ্যাডমিনের সাথে সরাসরি মতামত ও পাশেই ইউজারদের নিজেদের মধ্যে আলোচনা',
                   'Direct admin feedback and open user-to-user community channels'
@@ -594,7 +594,7 @@ const ChatHubModal: React.FC<ChatHubModalProps> = ({
                 <Shield size={13} />
                 <span>{bi('অ্যাডমিন চ্যাট', 'Admin Chat')}</span>
                 {totalAdminUnread > 0 && (
-                  <span className="px-1.5 rounded-full text-[10px] bg-rose-500 text-white">
+                  <span className="px-2 py-0.5 rounded-full text-xs bg-rose-500 text-white">
                     {totalAdminUnread}
                   </span>
                 )}
@@ -621,27 +621,27 @@ const ChatHubModal: React.FC<ChatHubModalProps> = ({
                   mobileListTab === 'admin' ? 'flex' : 'hidden md:flex'
                 } flex-col min-h-0 overflow-hidden`}
               >
-                <div className="px-3 py-2.5 border-b border-zinc-200/80 dark:border-zinc-800 bg-white/70 dark:bg-zinc-900/70 space-y-2 shrink-0">
-                  <div className="flex items-center justify-between gap-1">
-                    <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
-                      <Shield size={12} />
+                <div className="px-3.5 py-3 border-b border-zinc-200/80 dark:border-zinc-800 bg-white/70 dark:bg-zinc-900/70 space-y-2.5 shrink-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
+                      <Shield size={13} />
                       <span>{bi('অ্যাডমিনের সাথে', 'Direct to Admin')}</span>
                     </span>
                     {totalAdminUnread > 0 && (
-                      <span className="text-[10px] font-bold text-rose-600 dark:text-rose-400">
+                      <span className="text-xs font-bold text-rose-600 dark:text-rose-400">
                         {totalAdminUnread} {bi('অপঠিত', 'unread')}
                       </span>
                     )}
                   </div>
 
                   {isAdmin && (
-                    <div className="grid grid-cols-3 gap-1">
+                    <div className="grid grid-cols-3 gap-1.5">
                       {(['all', 'studio', 'salon'] as const).map((f) => (
                         <button
                           key={f}
                           type="button"
                           onClick={() => setAdminScopeFilter(f)}
-                          className={`py-1 rounded-lg text-[10px] font-semibold transition-colors ${
+                          className={`py-1.5 rounded-lg text-xs font-semibold transition-colors ${
                             adminScopeFilter === f
                               ? 'bg-indigo-600 text-white'
                               : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300'
@@ -658,14 +658,14 @@ const ChatHubModal: React.FC<ChatHubModalProps> = ({
                   )}
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-2 space-y-1.5">
+                <div className="flex-1 overflow-y-auto p-2.5 space-y-2">
                   {loadingThreads ? (
                     <div className="py-8 flex justify-center text-zinc-400">
                       <Loader2 size={18} className="animate-spin" />
                     </div>
                   ) : isAdmin ? (
                     filteredAdminThreads.length === 0 ? (
-                      <p className="text-[11px] text-zinc-500 dark:text-zinc-400 text-center py-6 px-2">
+                      <p className="text-xs text-zinc-500 dark:text-zinc-400 text-center py-6 px-3 leading-relaxed">
                         {bi(
                           'এখনও কোনো গ্রাহক অ্যাডমিনকে মতামত পাঠাননি।',
                           'No customer feedback messages received yet.'
@@ -682,23 +682,23 @@ const ChatHubModal: React.FC<ChatHubModalProps> = ({
                             onClick={() =>
                               handleSelectAdminChannel(t.threadId, t.pageScope, t.uid, t.userName)
                             }
-                            className={`w-full text-left p-2.5 rounded-xl border transition-all space-y-1 ${
+                            className={`w-full text-left p-3 rounded-xl border transition-all space-y-1.5 ${
                               isSelected
                                 ? 'bg-indigo-50 dark:bg-indigo-950/40 border-indigo-400 dark:border-indigo-700'
                                 : 'bg-white dark:bg-zinc-900 border-zinc-200/80 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700'
                             }`}
                           >
-                            <div className="flex items-center justify-between gap-1">
-                              <span className="text-xs font-semibold text-zinc-900 dark:text-white truncate">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-xs sm:text-sm font-semibold text-zinc-900 dark:text-white truncate">
                                 {t.userName}
                               </span>
                               {t.unreadByAdmin && (
-                                <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0" />
+                                <span className="w-2.5 h-2.5 rounded-full bg-rose-500 shrink-0" />
                               )}
                             </div>
-                            <div className="flex items-center gap-1">
+                            <div className="flex items-center gap-1.5 flex-wrap">
                               <span
-                                className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${
+                                className={`px-2 py-0.5 rounded text-xs font-bold uppercase ${
                                   t.pageScope === 'salon'
                                     ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300'
                                     : 'bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300'
@@ -708,11 +708,11 @@ const ChatHubModal: React.FC<ChatHubModalProps> = ({
                                   ? bi('সেলুন', 'Salon')
                                   : bi('ভয়েস স্টুডিও', 'Voice Studio')}
                               </span>
-                              <span className="text-[10px] text-zinc-400 truncate">
+                              <span className="text-xs text-zinc-400 truncate">
                                 {formatChatTime(t.updatedAt, lang)}
                               </span>
                             </div>
-                            <p className="text-[11px] text-zinc-500 dark:text-zinc-400 line-clamp-1">
+                            <p className="text-xs text-zinc-500 dark:text-zinc-400 line-clamp-1 leading-relaxed">
                               {t.lastMessage}
                             </p>
                           </button>
@@ -735,18 +735,18 @@ const ChatHubModal: React.FC<ChatHubModalProps> = ({
                               safeDisplayName
                             )
                           }
-                          className={`w-full text-left p-2.5 rounded-xl border transition-all space-y-1 ${
+                          className={`w-full text-left p-3 rounded-xl border transition-all space-y-1.5 ${
                             isSelected
                               ? 'bg-indigo-50 dark:bg-indigo-950/40 border-indigo-400 dark:border-indigo-700'
                               : 'bg-white dark:bg-zinc-900 border-zinc-200/80 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700'
                           }`}
                         >
-                          <div className="flex items-center justify-between gap-1">
-                            <span className="inline-flex items-center gap-1 text-xs font-semibold text-zinc-900 dark:text-white truncate">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-semibold text-zinc-900 dark:text-white truncate">
                               {item.scope === 'salon' ? (
-                                <Scissors size={12} className="text-amber-500 shrink-0" />
+                                <Scissors size={13} className="text-amber-500 shrink-0" />
                               ) : (
-                                <AudioLines size={12} className="text-indigo-500 shrink-0" />
+                                <AudioLines size={13} className="text-indigo-500 shrink-0" />
                               )}
                               <span className="truncate">
                                 {item.scope === 'salon'
@@ -755,10 +755,10 @@ const ChatHubModal: React.FC<ChatHubModalProps> = ({
                               </span>
                             </span>
                             {item.existingThread?.unreadByUser && (
-                              <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0" />
+                              <span className="w-2.5 h-2.5 rounded-full bg-rose-500 shrink-0" />
                             )}
                           </div>
-                          <p className="text-[11px] text-zinc-500 dark:text-zinc-400 line-clamp-2 leading-snug">
+                          <p className="text-xs text-zinc-500 dark:text-zinc-400 line-clamp-2 leading-relaxed">
                             {item.existingThread?.lastMessage || item.subtitle}
                           </p>
                         </button>
@@ -774,17 +774,17 @@ const ChatHubModal: React.FC<ChatHubModalProps> = ({
                   mobileListTab === 'community' ? 'flex' : 'hidden md:flex'
                 } flex-col min-h-0 overflow-hidden`}
               >
-                <div className="px-3 py-2.5 border-b border-zinc-200/80 dark:border-zinc-800 bg-white/70 dark:bg-zinc-900/70 shrink-0">
-                  <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
-                    <Users size={12} />
+                <div className="px-3.5 py-3 border-b border-zinc-200/80 dark:border-zinc-800 bg-white/70 dark:bg-zinc-900/70 shrink-0 space-y-1">
+                  <span className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                    <Users size={13} />
                     <span>{bi('ইউজারদের চ্যাট', 'Community Chat')}</span>
                   </span>
-                  <p className="text-[10px] text-zinc-500 dark:text-zinc-400 mt-0.5">
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">
                     {bi('ইউজার একে অপরের সাথে মতামত শেয়ার', 'Share feedback with other users')}
                   </p>
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-2 space-y-1.5">
+                <div className="flex-1 overflow-y-auto p-2.5 space-y-2">
                   {COMMUNITY_ROOMS.map((room) => {
                     const isSelected =
                       selectedChat.kind === 'community' && selectedChat.roomId === room.id;
@@ -793,21 +793,21 @@ const ChatHubModal: React.FC<ChatHubModalProps> = ({
                         key={room.id}
                         type="button"
                         onClick={() => handleSelectCommunityRoom(room.id)}
-                        className={`w-full text-left p-2.5 rounded-xl border transition-all space-y-1 ${
+                        className={`w-full text-left p-3 rounded-xl border transition-all space-y-1.5 ${
                           isSelected
                             ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-400 dark:border-emerald-700'
                             : 'bg-white dark:bg-zinc-900 border-zinc-200/80 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700'
                         }`}
                       >
-                        <div className="flex items-center justify-between gap-1">
-                          <span className="text-xs font-semibold text-zinc-900 dark:text-white truncate">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs sm:text-sm font-semibold text-zinc-900 dark:text-white truncate">
                             {bi(room.titleBn, room.titleEn)}
                           </span>
-                          <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 shrink-0">
+                          <span className="px-2 py-0.5 rounded text-xs font-semibold bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 shrink-0">
                             {bi(room.badgeBn, room.badgeEn)}
                           </span>
                         </div>
-                        <p className="text-[11px] text-zinc-500 dark:text-zinc-400 line-clamp-2 leading-snug">
+                        <p className="text-xs text-zinc-500 dark:text-zinc-400 line-clamp-2 leading-relaxed">
                           {bi(room.subtitleBn, room.subtitleEn)}
                         </p>
                       </button>
@@ -840,18 +840,18 @@ const ChatHubModal: React.FC<ChatHubModalProps> = ({
                   {selectedChat.kind === 'admin' ? (
                     <>
                       <div className="flex items-center gap-2 flex-wrap">
-                        <h3 className="text-sm font-semibold text-zinc-900 dark:text-white truncate">
+                        <h3 className="text-sm sm:text-base font-semibold text-zinc-900 dark:text-white truncate">
                           {isAdmin
                             ? bi(`${selectedChat.customerName} ↔ অ্যাডমিন`, `${selectedChat.customerName} ↔ Admin`)
                             : selectedChat.pageScope === 'salon'
                             ? bi(`${salonName} · অ্যাডমিন মতামত`, `${salonName} · Admin Feedback`)
                             : bi('Voice Studio · অ্যাডমিন মতামত', 'Voice Studio · Admin Feedback')}
                         </h3>
-                        <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300">
+                        <span className="px-2.5 py-0.5 rounded-md text-xs font-bold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300">
                           {bi('প্রাইভেট অ্যাডমিন চ্যাট', 'Private Admin Chat')}
                         </span>
                       </div>
-                      <p className="text-[11px] text-zinc-500 dark:text-zinc-400 truncate">
+                      <p className="text-xs text-zinc-500 dark:text-zinc-400 truncate leading-relaxed">
                         {isAdmin
                           ? bi('এই গ্রাহকের সরাসরি মতামতে উত্তর দিন', 'Reply directly to this customer’s feedback')
                           : bi('এখানে পাঠানো মতামত সরাসরি অ্যাডমিনের কাছে পৌঁছাবে', 'Messages sent here go straight to the admin')}
@@ -860,14 +860,14 @@ const ChatHubModal: React.FC<ChatHubModalProps> = ({
                   ) : (
                     <>
                       <div className="flex items-center gap-2 flex-wrap">
-                        <h3 className="text-sm font-semibold text-zinc-900 dark:text-white truncate">
+                        <h3 className="text-sm sm:text-base font-semibold text-zinc-900 dark:text-white truncate">
                           {bi(activeCommunityMeta.titleBn, activeCommunityMeta.titleEn)}
                         </h3>
-                        <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300">
+                        <span className="px-2.5 py-0.5 rounded-md text-xs font-bold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300">
                           {bi('ইউজার কমিউনিটি', 'User Community')}
                         </span>
                       </div>
-                      <p className="text-[11px] text-zinc-500 dark:text-zinc-400 truncate">
+                      <p className="text-xs text-zinc-500 dark:text-zinc-400 truncate leading-relaxed">
                         {bi(activeCommunityMeta.subtitleBn, activeCommunityMeta.subtitleEn)}
                       </p>
                     </>
@@ -909,19 +909,19 @@ const ChatHubModal: React.FC<ChatHubModalProps> = ({
                         key={msg.id}
                         className={`flex flex-col ${isMine ? 'items-end' : 'items-start'}`}
                       >
-                        <div className="flex items-center gap-1.5 mb-1 px-1">
-                          <span className="text-[11px] font-semibold text-zinc-600 dark:text-zinc-300">
+                        <div className="flex items-center gap-2 mb-1 px-1">
+                          <span className="text-xs font-semibold text-zinc-600 dark:text-zinc-300">
                             {msg.senderRole === 'admin' ? bi('অ্যাডমিন', 'Admin') : msg.senderName}
                           </span>
                           {msg.senderRole === 'admin' && (
-                            <Crown size={11} className="text-amber-500" />
+                            <Crown size={12} className="text-amber-500" />
                           )}
-                          <span className="text-[10px] text-zinc-400">
+                          <span className="text-xs text-zinc-400">
                             {formatChatTime(msg.createdAt, lang)}
                           </span>
                         </div>
                         <div
-                          className={`max-w-[82%] sm:max-w-[75%] px-3.5 py-2.5 rounded-2xl text-xs sm:text-sm leading-relaxed whitespace-pre-wrap break-words ${
+                          className={`max-w-[82%] sm:max-w-[75%] px-4 py-3 rounded-2xl text-xs sm:text-sm leading-relaxed whitespace-pre-wrap break-words ${
                             isMine
                               ? 'bg-indigo-600 text-white rounded-br-sm'
                               : 'bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100 rounded-bl-sm'
@@ -943,7 +943,7 @@ const ChatHubModal: React.FC<ChatHubModalProps> = ({
                   <p className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
                     {bi('আলোচনা শুরু করুন', 'Start the Conversation')}
                   </p>
-                  <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">
                     {bi(
                       'অন্যান্য ইউজারদের সাথে আপনার অভিজ্ঞতা ও মতামত শেয়ার করতে নিচে লিখুন।',
                       'Type below to share your experience and feedback with other users.'
@@ -958,20 +958,20 @@ const ChatHubModal: React.FC<ChatHubModalProps> = ({
                       key={msg.id}
                       className={`flex flex-col ${isMine ? 'items-end' : 'items-start'}`}
                     >
-                      <div className="flex items-center gap-1.5 mb-1 px-1 flex-wrap">
-                        <span className="text-[11px] font-semibold text-zinc-700 dark:text-zinc-200">
+                      <div className="flex items-center gap-2 mb-1 px-1 flex-wrap">
+                        <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-200">
                           {msg.senderName}
                         </span>
                         {msg.senderRole === 'admin' && (
-                          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300">
-                            <Crown size={9} />
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300">
+                            <Crown size={11} />
                             {bi('অ্যাডমিন', 'Admin')}
                           </span>
                         )}
-                        <span className="px-1.5 py-0.5 rounded text-[9px] font-medium bg-zinc-200/70 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
+                        <span className="px-2 py-0.5 rounded text-xs font-medium bg-zinc-200/70 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
                           {getOriginBadgeLabel(msg.originPage, lang)}
                         </span>
-                        <span className="text-[10px] text-zinc-400">
+                        <span className="text-xs text-zinc-400">
                           {formatChatTime(msg.createdAt, lang)}
                         </span>
                         {(isMine || isAdmin) && (
@@ -981,12 +981,12 @@ const ChatHubModal: React.FC<ChatHubModalProps> = ({
                             className="p-0.5 text-zinc-400 hover:text-red-500 transition-colors"
                             title={bi('মেসেজ মুছুন', 'Delete message')}
                           >
-                            <Trash2 size={11} />
+                            <Trash2 size={12} />
                           </button>
                         )}
                       </div>
                       <div
-                        className={`max-w-[82%] sm:max-w-[75%] px-3.5 py-2.5 rounded-2xl text-xs sm:text-sm leading-relaxed whitespace-pre-wrap break-words ${
+                        className={`max-w-[82%] sm:max-w-[75%] px-4 py-3 rounded-2xl text-xs sm:text-sm leading-relaxed whitespace-pre-wrap break-words ${
                           isMine
                             ? 'bg-emerald-600 text-white rounded-br-sm'
                             : 'bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100 rounded-bl-sm'

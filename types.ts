@@ -117,6 +117,12 @@ export interface SalonConfig {
   hairColorPrice: number;
   facialPrice: number;
   comboPrice: number;
+  haircutTitle?: string;
+  beardTrimTitle?: string;
+  shaveTitle?: string;
+  hairColorTitle?: string;
+  facialTitle?: string;
+  comboTitle?: string;
   bookingFee: number;
   address: string;
   phone: string;
@@ -148,6 +154,9 @@ export interface SalonBooking {
   completionSignaturePath?: string;
   completionSignerName?: string;
   completedAt?: any;
+  shopSignaturePath?: string;
+  shopSignerName?: string;
+  shopSignedAt?: any;
   autoCancelledReason?: SalonAutoCancelReason;
   createdAt?: any;
   updatedAt?: any;
@@ -172,6 +181,8 @@ export interface SalonQueueTicket {
   status: SalonBookingStatus;
   hasCompletionSignature: boolean;
   completionSignerName?: string;
+  hasShopSignature?: boolean;
+  shopSignerName?: string;
   createdAt?: any;
   updatedAt?: any;
 }

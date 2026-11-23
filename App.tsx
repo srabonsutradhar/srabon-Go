@@ -642,10 +642,12 @@ const App: React.FC = () => {
       const userRef = doc(db, 'users', user.uid);
       const freeLimit = Math.max(1, billingConfig.freeDailyLimit || 5);
 
+      let txWasCreate = false;
       try {
         const outcome = await runTransaction(db, async (tx) => {
           const snap = await tx.get(userRef);
           if (!snap.exists()) {
+            txWasCreate = true;
             const myCode = referralCode || buildReferralCode(user.uid);
             const payload: Record<string, any> = {
               uid: user.uid.slice(0, 128),
@@ -672,6 +674,7 @@ const App: React.FC = () => {
               nextBonus: 0,
             };
           }
+          txWasCreate = false;
 
           const data = snap.data() || {};
           const serverPlan: UserPlan = data.plan === 'pro' ? 'pro' : 'free';
@@ -746,7 +749,11 @@ const App: React.FC = () => {
         setBonusCredits(outcome.nextBonus);
 
         if (outcome.created && outcome.myCode) {
-          await ensureReferralCodeRegistered(user.uid, outcome.myCode);
+          try {
+            await ensureReferralCodeRegistered(user.uid, outcome.myCode);
+          } catch (refErr) {
+            console.error('Referral registration notice:', refErr);
+          }
         }
 
         if (!outcome.allowed) {
@@ -756,7 +763,7 @@ const App: React.FC = () => {
         }
         return true;
       } catch (error) {
-        reportFirestoreError(error, OperationType.UPDATE, userPath);
+        reportFirestoreError(error, txWasCreate ? OperationType.CREATE : OperationType.UPDATE, userPath);
         return false;
       }
     };
@@ -1055,7 +1062,7 @@ const App: React.FC = () => {
             setShowProModal(true);
           }}
           onOpenAdminPanel={() => {
-            setAdminInitialTab('requests');
+            setAdminInitialTab('menu');
             setShowAdminPanel(true);
           }}
           unreadIssuesCount={unreadIssuesCount}
@@ -1078,7 +1085,7 @@ const App: React.FC = () => {
                   onNavigate={handleViewModeChange}
                   onUseInStudio={handleUseInStudio}
                   onOpenAdminPanel={() => {
-                    setAdminInitialTab('salon');
+                    setAdminInitialTab('salon-settings');
                     setShowAdminPanel(true);
                   }}
                   onOpenLegal={setLegalTab}
@@ -1090,7 +1097,7 @@ const App: React.FC = () => {
                   salonConfig={salonConfig}
                   onBackHome={() => handleViewModeChange('home')}
                   onOpenAdminPanel={() => {
-                    setAdminInitialTab('salon');
+                    setAdminInitialTab('salon-settings');
                     setShowAdminPanel(true);
                   }}
                 />
@@ -1377,21 +1384,21 @@ const App: React.FC = () => {
       {isAdmin && unreadIssuesCount > 0 && !showAdminNotifications && !floatingNoticeHidden && (
         <aside
           aria-label={bi('অ্যাডমিন সমস্যা নোটিফিকেশন', 'Admin Issue Notification')}
-          className="fixed bottom-16 sm:bottom-4 right-4 z-[80] w-[calc(100%-2rem)] max-w-sm rounded-2xl bg-white dark:bg-zinc-900 border border-rose-200 dark:border-rose-900 shadow-2xl p-4 space-y-3 animate-slide-up"
+          className="fixed bottom-16 sm:bottom-5 right-4 sm:right-5 z-[80] w-[calc(100%-2rem)] max-w-md rounded-2xl bg-white dark:bg-zinc-900 border border-rose-200 dark:border-rose-900 shadow-2xl p-5 space-y-4 animate-slide-up"
         >
           <div className="flex items-start justify-between gap-3">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0">
-                <Bell size={15} />
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-10 h-10 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0">
+                <Bell size={18} />
               </div>
-              <div>
-                <p className="text-xs font-bold text-zinc-900 dark:text-white">
+              <div className="min-w-0 space-y-0.5">
+                <p className="text-sm font-bold text-zinc-900 dark:text-white leading-snug">
                   {bi(
                     `অ্যাডমিন নোটিফিকেশন বক্স (${unreadIssuesCount})`,
                     `Admin Notification Box (${unreadIssuesCount})`
                   )}
                 </p>
-                <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">
                   {bi(
                     'অ্যাপে নতুন সমস্যা পাওয়া গেছে (শুধু আপনি দেখছেন)',
                     'New app issue detected (visible to Admin only)'
@@ -1402,35 +1409,35 @@ const App: React.FC = () => {
             <button
               type="button"
               onClick={() => setFloatingNoticeHidden(true)}
-              className="p-1 rounded-lg text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors"
+              className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors shrink-0"
               aria-label={bi('নোটিফিকেশন প্রিভিউ লুকান', 'Hide notification preview')}
             >
-              <X size={14} />
+              <X size={16} />
             </button>
           </div>
 
-          <div className="p-2.5 rounded-xl bg-rose-50/70 dark:bg-rose-950/30 border border-rose-100 dark:border-rose-900/60 text-xs text-rose-800 dark:text-rose-200 flex items-start gap-2">
-            <AlertTriangle size={14} className="shrink-0 mt-0.5" />
-            <div className="min-w-0">
-              <p className="font-semibold text-[11px] uppercase tracking-wider opacity-80">
+          <div className="p-3.5 rounded-xl bg-rose-50/70 dark:bg-rose-950/30 border border-rose-100 dark:border-rose-900/60 text-sm text-rose-800 dark:text-rose-200 flex items-start gap-2.5">
+            <AlertTriangle size={16} className="shrink-0 mt-0.5" />
+            <div className="min-w-0 space-y-1">
+              <p className="font-semibold text-xs uppercase tracking-wider opacity-85">
                 {unreadIssues[0].source}
               </p>
-              <p className="line-clamp-2 break-words">{unreadIssues[0].message}</p>
+              <p className="text-sm leading-relaxed line-clamp-2 break-words">{unreadIssues[0].message}</p>
             </div>
           </div>
 
-          <div className="flex items-center justify-end gap-2">
+          <div className="flex items-center justify-end gap-2.5">
             <button
               type="button"
               onClick={() => setFloatingNoticeHidden(true)}
-              className="px-3 py-1.5 rounded-lg text-xs font-medium text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 transition-colors"
+              className="px-3.5 py-2 rounded-xl text-sm font-medium text-zinc-600 hover:text-zinc-900 dark:text-zinc-300 dark:hover:text-white transition-colors"
             >
               {bi('পরে দেখুন', 'Later')}
             </button>
             <button
               type="button"
               onClick={() => setShowAdminNotifications(true)}
-              className="px-3.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold transition-colors"
+              className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-sm font-semibold transition-colors"
             >
               {bi('নোটিফিকেশন বক্স খুলুন', 'Open Notification Box')}
             </button>

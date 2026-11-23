@@ -283,22 +283,79 @@ const SALON_SERVICE_LOCALE: Record<
   },
 };
 
+const SALON_TITLE_FIELD_MAP: Record<
+  SalonServiceKey,
+  'haircutTitle' | 'beardTrimTitle' | 'shaveTitle' | 'hairColorTitle' | 'facialTitle' | 'comboTitle'
+> = {
+  haircut: 'haircutTitle',
+  beard: 'beardTrimTitle',
+  shave: 'shaveTitle',
+  color: 'hairColorTitle',
+  facial: 'facialTitle',
+  combo: 'comboTitle',
+};
+
+export function isCustomSalonServiceTitle(
+  key: SalonServiceKey,
+  candidate?: string | null
+): boolean {
+  const entry = SALON_SERVICE_LOCALE[key];
+  const clean = (candidate || '').trim();
+  if (clean.length < 2) return false;
+  return clean !== entry.enTitle && clean !== entry.bnTitle;
+}
+
 export function localizeSalonService(
   key: SalonServiceKey,
-  lang: AppLanguage
+  lang: AppLanguage,
+  salonConfig?: {
+    haircutTitle?: string;
+    beardTrimTitle?: string;
+    shaveTitle?: string;
+    hairColorTitle?: string;
+    facialTitle?: string;
+    comboTitle?: string;
+  } | null,
+  bookingTitleFallback?: string | null
 ): {
   primaryTitle: string;
   secondaryTitle: string;
   duration: string;
   description: string;
+  isCustom: boolean;
 } {
   const entry = SALON_SERVICE_LOCALE[key];
+  const fieldName = SALON_TITLE_FIELD_MAP[key];
+  const configTitle = (salonConfig?.[fieldName] || '').trim();
+  const bookedTitle = (bookingTitleFallback || '').trim();
+
+  if (isCustomSalonServiceTitle(key, configTitle)) {
+    return {
+      primaryTitle: configTitle,
+      secondaryTitle: '',
+      duration: lang === 'bn' ? entry.bnDuration : entry.enDuration,
+      description: lang === 'bn' ? entry.bnDescription : entry.enDescription,
+      isCustom: true,
+    };
+  }
+
+  if (isCustomSalonServiceTitle(key, bookedTitle)) {
+    return {
+      primaryTitle: bookedTitle,
+      secondaryTitle: '',
+      duration: lang === 'bn' ? entry.bnDuration : entry.enDuration,
+      description: lang === 'bn' ? entry.bnDescription : entry.enDescription,
+      isCustom: true,
+    };
+  }
+
   if (lang === 'bn') {
     return {
       primaryTitle: entry.bnTitle,
       secondaryTitle: entry.enTitle,
       duration: entry.bnDuration,
       description: entry.bnDescription,
+      isCustom: false,
     };
   }
   return {
@@ -306,6 +363,7 @@ export function localizeSalonService(
     secondaryTitle: entry.bnTitle,
     duration: entry.enDuration,
     description: entry.enDescription,
+    isCustom: false,
   };
 }
 

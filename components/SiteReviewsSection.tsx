@@ -553,7 +553,7 @@ const SiteReviewsSection: React.FC<SiteReviewsSectionProps> = ({ user, isAdmin }
                   >
                     {bi('আপনার মতামত লিখুন', 'Your Review')}
                   </label>
-                  <span className="text-[11px] text-slate-400 dark:text-slate-500 tabular-nums">
+                  <span className="text-xs text-slate-500 dark:text-slate-400 tabular-nums">
                     {commentText.length} / 600
                   </span>
                 </div>

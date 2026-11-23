@@ -327,6 +327,42 @@
           "type": "integer",
           "description": "Price for Full Grooming Combo."
         },
+        "haircutTitle": {
+          "type": "string",
+          "description": "Admin-customizable display name for Haircut service.",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "beardTrimTitle": {
+          "type": "string",
+          "description": "Admin-customizable display name for Beard Trim service.",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "shaveTitle": {
+          "type": "string",
+          "description": "Admin-customizable display name for Shave service.",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "hairColorTitle": {
+          "type": "string",
+          "description": "Admin-customizable display name for Hair Color service.",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "facialTitle": {
+          "type": "string",
+          "description": "Admin-customizable display name for Facial service.",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "comboTitle": {
+          "type": "string",
+          "description": "Admin-customizable display name for Combo service.",
+          "minLength": 2,
+          "maxLength": 100
+        },
         "bookingFee": {
           "type": "integer",
           "description": "Slot booking fee added to service price."
@@ -483,6 +519,24 @@
           "type": "string",
           "format": "date-time",
           "description": "Server timestamp when completion signature was submitted."
+        },
+        "shopSignaturePath": {
+          "type": "string",
+          "description": "Compact SVG vector path representing handwritten shopkeeper completion signature.",
+          "minLength": 5,
+          "maxLength": 1500,
+          "pattern": "^M[ML0-9., ]+$"
+        },
+        "shopSignerName": {
+          "type": "string",
+          "description": "Name of shopkeeper/stylist who signed off booking completion.",
+          "minLength": 2,
+          "maxLength": 80
+        },
+        "shopSignedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when shopkeeper completion signature was submitted."
         },
         "autoCancelledReason": {
           "type": "string",
@@ -1010,7 +1064,17 @@
           "type": "string",
           "minLength": 2,
           "maxLength": 80,
-          "description": "Optional name shown on the signed-off serial ticket."
+          "description": "Optional name shown on the customer signed-off serial ticket."
+        },
+        "hasShopSignature": {
+          "type": "boolean",
+          "description": "Whether shopkeeper/stylist work completion has been signed off."
+        },
+        "shopSignerName": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 80,
+          "description": "Optional shopkeeper/salon name shown on the signed-off serial ticket."
         },
         "createdAt": {
           "type": "string",

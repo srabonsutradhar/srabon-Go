@@ -37,6 +37,15 @@ export interface SalonServiceMeta {
     | 'facialPrice'
     | 'comboPrice'
   >;
+  titleField: keyof Pick<
+    SalonConfig,
+    | 'haircutTitle'
+    | 'beardTrimTitle'
+    | 'shaveTitle'
+    | 'hairColorTitle'
+    | 'facialTitle'
+    | 'comboTitle'
+  >;
 }
 
 export const SALON_SERVICES: SalonServiceMeta[] = [
@@ -48,6 +57,7 @@ export const SALON_SERVICES: SalonServiceMeta[] = [
     duration: '৩০ মিনিট',
     description: 'ফেড, আন্ডারকাট, ক্রপ বা ক্লাসিক জেন্টস হেয়ারকাট সাথে ফিনিশিং সেটিং।',
     priceField: 'haircutPrice',
+    titleField: 'haircutTitle',
   },
   {
     key: 'beard',
@@ -57,6 +67,7 @@ export const SALON_SERVICES: SalonServiceMeta[] = [
     duration: '২০ মিনিট',
     description: 'নিখুঁত রেজর লাইন-আপ, শেপিং এবং বিয়ার্ড অয়েল ম্যাসাজ।',
     priceField: 'beardTrimPrice',
+    titleField: 'beardTrimTitle',
   },
   {
     key: 'shave',
@@ -66,6 +77,7 @@ export const SALON_SERVICES: SalonServiceMeta[] = [
     duration: '২৫ মিনিট',
     description: 'স্টিম টাওয়েল, ডাবল-ব্লেড স্মুথ শেভ এবং আফটার-শেভ কুলিং জেল।',
     priceField: 'shavePrice',
+    titleField: 'shaveTitle',
   },
   {
     key: 'color',
@@ -75,6 +87,7 @@ export const SALON_SERVICES: SalonServiceMeta[] = [
     duration: '৪৫ মিনিট',
     description: 'প্রাকৃতিক কালো বা স্টাইলিশ শেড হেয়ার কালার এবং কন্ডিশনিং ওয়াশ।',
     priceField: 'hairColorPrice',
+    titleField: 'hairColorTitle',
   },
   {
     key: 'facial',
@@ -84,6 +97,7 @@ export const SALON_SERVICES: SalonServiceMeta[] = [
     duration: '৪০ মিনিট',
     description: 'ডিপ পোর ক্লিনজিং, ডি-ট্যান স্ক্রাব এবং ব্রাইটেনিং ফেস মাস্ক।',
     priceField: 'facialPrice',
+    titleField: 'facialTitle',
   },
   {
     key: 'combo',
@@ -93,6 +107,7 @@ export const SALON_SERVICES: SalonServiceMeta[] = [
     duration: '৬০ মিনিট',
     description: 'হেয়ারকাট + দাড়ি ট্রিম/শেভ + শ্যাম্পু ওয়াশ + হেড ও ফেস ম্যাসাজ।',
     priceField: 'comboPrice',
+    titleField: 'comboTitle',
   },
 ];
 
@@ -125,6 +140,13 @@ export function sanitizeSalonConfig(raw: any): SalonConfig {
     }
     return fallback;
   };
+  const safeTitle = (val: unknown): string | undefined => {
+    if (typeof val === 'string') {
+      const trimmed = val.trim().slice(0, 100);
+      if (trimmed.length >= 2) return trimmed;
+    }
+    return undefined;
+  };
   return {
     salonName:
       typeof raw?.salonName === 'string' && raw.salonName.trim()
@@ -140,6 +162,12 @@ export function sanitizeSalonConfig(raw: any): SalonConfig {
     hairColorPrice: safeNum(raw?.hairColorPrice, DEFAULT_SALON_CONFIG.hairColorPrice),
     facialPrice: safeNum(raw?.facialPrice, DEFAULT_SALON_CONFIG.facialPrice),
     comboPrice: safeNum(raw?.comboPrice, DEFAULT_SALON_CONFIG.comboPrice),
+    haircutTitle: safeTitle(raw?.haircutTitle),
+    beardTrimTitle: safeTitle(raw?.beardTrimTitle),
+    shaveTitle: safeTitle(raw?.shaveTitle),
+    hairColorTitle: safeTitle(raw?.hairColorTitle),
+    facialTitle: safeTitle(raw?.facialTitle),
+    comboTitle: safeTitle(raw?.comboTitle),
     bookingFee: safeNum(raw?.bookingFee, DEFAULT_SALON_CONFIG.bookingFee),
     address:
       typeof raw?.address === 'string'
