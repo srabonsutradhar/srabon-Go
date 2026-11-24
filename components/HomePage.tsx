@@ -21,18 +21,21 @@ import {
   Smartphone,
 } from 'lucide-react';
 import type { User } from 'firebase/auth';
-import { AppViewMode, SalonConfig, UserPlan } from '../types';
+import { AppViewMode, SalonConfig, SocialLinksConfig, UserPlan } from '../types';
 import { SALON_SERVICES, formatSalonPrice } from '../utils/salon';
 import { FEATURED_VOICE_ALBUMS, STUDIO_MEDIA } from '../utils/studioAlbums';
 import { localizeSalonService, useLanguage } from '../utils/i18n';
+import { DEFAULT_SOCIAL_LINKS } from '../utils/socialLinks';
 import PWAInstallButton from './PWAInstallButton';
 import SiteReviewsSection from './SiteReviewsSection';
+import SocialLinksRow from './SocialLinksRow';
 
 interface HomePageProps {
   user: User;
   userPlan: UserPlan;
   isAdmin: boolean;
   salonConfig: SalonConfig;
+  socialLinks?: SocialLinksConfig;
   voicesCount: number;
   favoritesCount: number;
   onNavigate: (mode: AppViewMode) => void;
@@ -46,6 +49,7 @@ const HomePage: React.FC<HomePageProps> = ({
   userPlan,
   isAdmin,
   salonConfig,
+  socialLinks = DEFAULT_SOCIAL_LINKS,
   voicesCount,
   favoritesCount,
   onNavigate,
@@ -532,20 +536,25 @@ const HomePage: React.FC<HomePageProps> = ({
                 )}
               </p>
             </div>
-            <div className="shrink-0">
+            <div className="flex flex-wrap items-center gap-3 shrink-0">
               <PWAInstallButton variant="card" />
+              <PWAInstallButton variant="card" appTarget="salon" />
             </div>
           </div>
         </section>
 
-        {/* Quiet Footer */}
-        <footer className="pt-4 pb-6 border-t border-indigo-100 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500 dark:text-slate-400">
-          <div className="flex items-center gap-2">
-            <Sparkles size={13} className="text-indigo-500 dark:text-amber-400" />
-            <span>{bi('শ্রাবণ গো', 'Srabon Go')} · {salonConfig.salonName}</span>
+        {/* Quiet Scrollable Bottom Footer */}
+        <footer className="pt-4 pb-6 border-t border-indigo-100 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs sm:text-sm text-slate-500 dark:text-slate-400">
+          <div className="flex flex-wrap items-center justify-center sm:justify-start gap-3">
+            <div className="flex items-center gap-2">
+              <Sparkles size={14} className="text-indigo-500 dark:text-amber-400" />
+              <span>{bi('শ্রাবণ গো', 'Srabon Go')} · {salonConfig.salonName}</span>
+            </div>
+            <span aria-hidden="true" className="text-slate-300 dark:text-slate-700">|</span>
+            <SocialLinksRow socialLinks={socialLinks} variant="footer" />
           </div>
           {onOpenLegal && (
-            <div className="flex flex-wrap items-center gap-4">
+            <div className="flex flex-wrap items-center justify-center sm:justify-end gap-4">
               <PWAInstallButton variant="footer" />
               <button type="button" onClick={() => onOpenLegal('about')} className="hover:text-indigo-700 dark:hover:text-white">
                 {bi('পরিচিতি', 'About')}

@@ -50,16 +50,27 @@ class ErrorBoundary extends React.Component<
       const heading = isAdmin
         ? lang === 'bn'
           ? 'কিছু একটি সমস্যা হয়েছে'
+          : lang === 'pt'
+          ? 'Algo deu errado'
           : 'Something went wrong'
         : lang === 'bn'
         ? 'পেজটি পুনরায় লোড করুন'
+        : lang === 'pt'
+        ? 'Por favor, recarregue a página'
         : 'Please reload the page';
       const description = isAdmin
         ? this.state.errorMessage
         : lang === 'bn'
         ? 'অনুগ্রহ করে পেজটি রিলোড করে আবার ব্যবহার করুন।'
+        : lang === 'pt'
+        ? 'Por favor, recarregue a página e tente novamente.'
         : 'Please reload the page and try again.';
-      const reloadLabel = lang === 'bn' ? 'পেজ রিলোড করুন' : 'Reload Page';
+      const reloadLabel =
+        lang === 'bn'
+          ? 'পেজ রিলোড করুন'
+          : lang === 'pt'
+          ? 'Recarregar Página'
+          : 'Reload Page';
 
       return (
         <div className="min-h-screen w-screen bg-[#FDFDFD] dark:bg-[#09090b] text-zinc-900 dark:text-zinc-100 flex items-center justify-center p-6">

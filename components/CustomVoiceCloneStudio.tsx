@@ -91,6 +91,8 @@ const SAMPLE_READING_SCRIPT_BN =
   'হ্যালো! আমি আমার নিজের ভয়েস স্যাম্পল রেকর্ড করছি, যাতে এআই আমার কণ্ঠের সুর, গতি ও উচ্চারণ বিশ্লেষণ করে যেকোনো লেখা সুন্দরভাবে বলতে পারে।';
 const SAMPLE_READING_SCRIPT_EN =
   'Hello! I am recording my own voice sample so AI can analyze my tone, pace, and articulation and read any script naturally in my voice.';
+const SAMPLE_READING_SCRIPT_PT =
+  'Olá! Estou gravando minha própria amostra de voz para que a IA analise meu tom, ritmo e dicção e leia qualquer roteiro naturalmente com a minha voz.';
 
 const CLONE_TEXT_PRESETS = [
   {
@@ -1303,7 +1305,13 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
                     )}
                   </p>
                   <p className="text-xs sm:text-sm text-slate-800 dark:text-slate-200 leading-relaxed italic">
-                    &ldquo;{lang === 'bn' ? SAMPLE_READING_SCRIPT_BN : SAMPLE_READING_SCRIPT_EN}&rdquo;
+                    &ldquo;
+                    {lang === 'bn'
+                      ? SAMPLE_READING_SCRIPT_BN
+                      : lang === 'pt'
+                      ? SAMPLE_READING_SCRIPT_PT
+                      : SAMPLE_READING_SCRIPT_EN}
+                    &rdquo;
                   </p>
                 </div>
 
@@ -1888,7 +1896,7 @@ const CustomVoiceCloneStudio: React.FC<CustomVoiceCloneStudioProps> = ({
                               : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-50'
                           }`}
                         >
-                          {lang === 'bn' ? preset.labelBn : preset.labelEn}
+                          {bi(preset.labelBn, preset.labelEn)}
                         </button>
                       ))}
                     </div>

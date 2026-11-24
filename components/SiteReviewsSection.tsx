@@ -12,6 +12,10 @@ import {
   CheckCircle2,
   AlertCircle,
   Send,
+  Shield,
+  Crown,
+  AudioLines,
+  Scissors,
 } from 'lucide-react';
 import type { User } from 'firebase/auth';
 import {
@@ -25,26 +29,35 @@ import {
   setDoc,
   updateDoc,
   where,
+  writeBatch,
 } from 'firebase/firestore';
 import { db, OperationType, reportFirestoreError } from '../firebase';
-import { SiteReview, SiteReviewPageTag } from '../types';
+import {
+  AdminFeedbackMessage,
+  AdminFeedbackThread,
+  ChatPageScope,
+  SiteReview,
+  SiteReviewPageTag,
+} from '../types';
 import { AppLanguage, useLanguage } from '../utils/i18n';
 
 interface SiteReviewsSectionProps {
-  user: User;
+  user: User | null;
   isAdmin: boolean;
+  onRequireSignIn?: () => void;
 }
 
 const PAGE_TAG_OPTIONS: {
   id: SiteReviewPageTag;
   labelBn: string;
   labelEn: string;
+  labelPt: string;
 }[] = [
-  { id: 'overall', labelBn: 'সম্পূর্ণ ওয়েবসাইট', labelEn: 'Overall Website' },
-  { id: 'studio', labelBn: 'ভয়েস স্টুডিও', labelEn: 'Voice Studio' },
-  { id: 'voice-clone', labelBn: 'ভয়েস ক্লোন (Pro)', labelEn: 'Voice Clone' },
-  { id: 'ideas', labelBn: 'AI ট্রেন্ডিং আইডিয়া', labelEn: 'AI Ideas' },
-  { id: 'salon', labelBn: 'সেলুন বুকিং', labelEn: 'Salon Booking' },
+  { id: 'overall', labelBn: 'সম্পূর্ণ ওয়েবসাইট', labelEn: 'Overall Website', labelPt: 'Site Geral' },
+  { id: 'studio', labelBn: 'ভয়েস স্টুডিও', labelEn: 'Voice Studio', labelPt: 'Estúdio de Voz' },
+  { id: 'voice-clone', labelBn: 'ভয়েস ক্লোন (Pro)', labelEn: 'Voice Clone', labelPt: 'Clonar Voz (Pro)' },
+  { id: 'ideas', labelBn: 'AI ট্রেন্ডিং আইডিয়া', labelEn: 'AI Ideas', labelPt: 'Ideias IA' },
+  { id: 'salon', labelBn: 'সেলুন বুকিং', labelEn: 'Salon Booking', labelPt: 'Agendamento Salão' },
 ];
 
 function getStarLabel(rating: number, lang: AppLanguage): string {
@@ -62,19 +75,28 @@ function getStarLabel(rating: number, lang: AppLanguage): string {
     4: 'Great experience',
     5: 'Outstanding!',
   };
-  return (lang === 'bn' ? bn : en)[rating] || '';
+  const pt: Record<number, string> = {
+    1: 'Precisa melhorar',
+    2: 'Razoável',
+    3: 'Bom',
+    4: 'Ótima experiência',
+    5: 'Excelente!',
+  };
+  const map = lang === 'bn' ? bn : lang === 'pt' ? pt : en;
+  return map[rating] || '';
 }
 
 function getPageTagLabel(tag: SiteReviewPageTag, lang: AppLanguage): string {
   const found = PAGE_TAG_OPTIONS.find((item) => item.id === tag);
-  if (!found) return lang === 'bn' ? 'ওয়েবসাইট' : 'Website';
-  return lang === 'bn' ? found.labelBn : found.labelEn;
+  if (!found) return lang === 'bn' ? 'ওয়েবসাইট' : lang === 'pt' ? 'Site' : 'Website';
+  return lang === 'bn' ? found.labelBn : lang === 'pt' ? found.labelPt : found.labelEn;
 }
 
 function formatReviewDate(ts: any, lang: AppLanguage): string {
   const ms = typeof ts?.toMillis === 'function' ? ts.toMillis() : null;
-  if (!ms) return lang === 'bn' ? 'এইমাত্র' : 'Just now';
-  return new Date(ms).toLocaleDateString(lang === 'bn' ? 'bn-BD' : 'en-US', {
+  if (!ms) return lang === 'bn' ? 'এইমাত্র' : lang === 'pt' ? 'Agora mesmo' : 'Just now';
+  const locale = lang === 'bn' ? 'bn-BD' : lang === 'pt' ? 'pt-BR' : 'en-US';
+  return new Date(ms).toLocaleDateString(locale, {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
@@ -94,7 +116,11 @@ function sanitizeHttpsPhotoUrl(url?: string | null): string | undefined {
   return undefined;
 }
 
-const SiteReviewsSection: React.FC<SiteReviewsSectionProps> = ({ user, isAdmin }) => {
+const SiteReviewsSection: React.FC<SiteReviewsSectionProps> = ({
+  user,
+  isAdmin,
+  onRequireSignIn,
+}) => {
   const { lang, bi } = useLanguage();
   const biRef = useRef(bi);
   biRef.current = bi;
@@ -117,20 +143,33 @@ const SiteReviewsSection: React.FC<SiteReviewsSectionProps> = ({ user, isAdmin }
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [brokenAvatarIds, setBrokenAvatarIds] = useState<Record<string, boolean>>({});
 
-  const safeUid = user.uid.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 128);
+  // Unified Reviews & Direct Feedback Tab State
+  const [rightTab, setRightTab] = useState<'review' | 'feedback'>('review');
+  const [feedbackScope, setFeedbackScope] = useState<ChatPageScope>('studio');
+  const [feedbackThreads, setFeedbackThreads] = useState<AdminFeedbackThread[]>([]);
+  const [selectedAdminFeedbackThreadId, setSelectedAdminFeedbackThreadId] = useState<string>('');
+  const [feedbackMessages, setFeedbackMessages] = useState<AdminFeedbackMessage[]>([]);
+  const [loadingFeedbackMessages, setLoadingFeedbackMessages] = useState(false);
+  const [feedbackDraft, setFeedbackDraft] = useState('');
+  const [sendingFeedback, setSendingFeedback] = useState(false);
+  const [feedbackError, setFeedbackError] = useState<string | null>(null);
+  const [feedbackSuccess, setFeedbackSuccess] = useState<string | null>(null);
+
+  const safeUid = user?.uid ? user.uid.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 128) : '';
+  const safeDisplayName =
+    (user?.displayName || user?.email?.split('@')[0] || 'Srabon Go User')
+      .trim()
+      .slice(0, 80) || 'Srabon Go User';
+  const isVerifiedUser = Boolean(user?.emailVerified);
 
   useEffect(() => {
-    if (!user?.uid) {
-      setReviews([]);
-      setLoadingList(false);
-      return;
-    }
     setLoadingList(true);
     setLoadError(null);
 
     const reviewsQuery = query(
       collection(db, 'siteReviews'),
       where('rating', '>=', 1),
+      where('rating', '<=', 5),
       limit(100)
     );
     const unsubscribe = onSnapshot(
@@ -185,6 +224,13 @@ const SiteReviewsSection: React.FC<SiteReviewsSectionProps> = ({ user, isAdmin }
 
         setReviews(list);
         setLoadingList(false);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(
+            new CustomEvent('srabon:firestore-path-ok', {
+              detail: { pathPrefix: 'Path: siteReviews', verifiedAtMs: Date.now() },
+            })
+          );
+        }
       },
       (error) => {
         setLoadingList(false);
@@ -199,10 +245,100 @@ const SiteReviewsSection: React.FC<SiteReviewsSectionProps> = ({ user, isAdmin }
     );
 
     return () => unsubscribe();
-  }, [user?.uid]);
+  }, []);
+
+  // Subscribe to Direct Feedback threads when authenticated & verified
+  useEffect(() => {
+    if (!safeUid || !isVerifiedUser) {
+      setFeedbackThreads([]);
+      return;
+    }
+    const threadsQuery = isAdmin
+      ? collection(db, 'adminFeedbackThreads')
+      : query(collection(db, 'adminFeedbackThreads'), where('uid', '==', safeUid));
+
+    const unsubscribe = onSnapshot(
+      threadsQuery,
+      (snapshot) => {
+        const list: AdminFeedbackThread[] = snapshot.docs.map((d) => ({
+          ...(d.data() as AdminFeedbackThread),
+          threadId: d.id,
+        }));
+        list.sort((a, b) => (b.updatedAt?.toMillis?.() ?? 0) - (a.updatedAt?.toMillis?.() ?? 0));
+        setFeedbackThreads(list);
+      },
+      (error) => {
+        reportFirestoreError(error, OperationType.LIST, 'adminFeedbackThreads');
+      }
+    );
+
+    return () => unsubscribe();
+  }, [safeUid, isAdmin, isVerifiedUser]);
+
+  const activeFeedbackThreadId = isAdmin
+    ? selectedAdminFeedbackThreadId || feedbackThreads[0]?.threadId || ''
+    : safeUid
+    ? `${safeUid}__${feedbackScope}`
+    : '';
+
+  const activeFeedbackThread = useMemo(
+    () => feedbackThreads.find((t) => t.threadId === activeFeedbackThreadId) || null,
+    [feedbackThreads, activeFeedbackThreadId]
+  );
+
+  // Subscribe to messages for the active Feedback thread
+  useEffect(() => {
+    if (rightTab !== 'feedback' || !activeFeedbackThread || !isVerifiedUser || !safeUid) {
+      setFeedbackMessages([]);
+      setLoadingFeedbackMessages(false);
+      return;
+    }
+
+    setLoadingFeedbackMessages(true);
+    const msgRef = collection(db, 'adminFeedbackThreads', activeFeedbackThread.threadId, 'messages');
+    const msgQuery = isAdmin
+      ? msgRef
+      : query(msgRef, where('threadOwnerUid', '==', safeUid));
+    const unsubscribe = onSnapshot(
+      msgQuery,
+      (snapshot) => {
+        const list: AdminFeedbackMessage[] = snapshot.docs.map((d) => ({
+          id: d.id,
+          ...(d.data() as Omit<AdminFeedbackMessage, 'id'>),
+        }));
+        list.sort((a, b) => (a.createdAt?.toMillis?.() ?? 0) - (b.createdAt?.toMillis?.() ?? 0));
+        setFeedbackMessages(list);
+        setLoadingFeedbackMessages(false);
+      },
+      (error) => {
+        setLoadingFeedbackMessages(false);
+        reportFirestoreError(
+          error,
+          OperationType.LIST,
+          `adminFeedbackThreads/${activeFeedbackThread.threadId}/messages`
+        );
+      }
+    );
+
+    return () => unsubscribe();
+  }, [rightTab, activeFeedbackThread?.threadId, isVerifiedUser, isAdmin, safeUid]);
+
+  // Clear unread flag when viewing Feedback tab
+  useEffect(() => {
+    if (rightTab !== 'feedback' || !activeFeedbackThread || !isVerifiedUser || !safeUid) return;
+    const shouldClearAdmin = isAdmin && activeFeedbackThread.unreadByAdmin;
+    const shouldClearUser = !isAdmin && activeFeedbackThread.unreadByUser;
+    if (!shouldClearAdmin && !shouldClearUser) return;
+
+    updateDoc(doc(db, 'adminFeedbackThreads', activeFeedbackThread.threadId), {
+      ...(shouldClearAdmin ? { unreadByAdmin: false } : {}),
+      ...(shouldClearUser ? { unreadByUser: false } : {}),
+      updatedAt: serverTimestamp(),
+    }).catch(() => {});
+  }, [rightTab, activeFeedbackThread, isAdmin, isVerifiedUser, safeUid]);
 
   const myReview = useMemo(
-    () => reviews.find((r) => r.uid === safeUid || r.id === safeUid) || null,
+    () => (safeUid ? reviews.find((r) => r.uid === safeUid || r.id === safeUid) || null : null),
     [reviews, safeUid]
   );
 
@@ -250,7 +386,7 @@ const SiteReviewsSection: React.FC<SiteReviewsSectionProps> = ({ user, isAdmin }
     setFormError(null);
     setFormSuccess(null);
 
-    if (!user.emailVerified) {
+    if (!user || !user.emailVerified) {
       setFormError(
         bi(
           'রিভিউ দেওয়ার জন্য অনুগ্রহ করে ভেরিফাইড Google অ্যাকাউন্ট দিয়ে সাইন ইন করুন।',
@@ -360,8 +496,109 @@ const SiteReviewsSection: React.FC<SiteReviewsSectionProps> = ({ user, isAdmin }
     }
   };
 
+  const handleSendDirectFeedback = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (sendingFeedback) return;
+
+    setFeedbackError(null);
+    setFeedbackSuccess(null);
+
+    if (!user || !user.emailVerified) {
+      setFeedbackError(
+        bi(
+          'ফিডব্যাক পাঠাতে অনুগ্রহ করে ভেরিফাইড Google অ্যাকাউন্ট দিয়ে সাইন ইন করুন।',
+          'Please sign in with a verified Google account to send feedback.'
+        )
+      );
+      return;
+    }
+
+    const cleanText = feedbackDraft.trim();
+    if (!cleanText) return;
+
+    const targetThreadId = activeFeedbackThreadId;
+    if (!targetThreadId) {
+      setFeedbackError(
+        bi('ফিডব্যাক দেওয়ার জন্য অনুগ্রহ করে একটি থ্রেড বেছে নিন।', 'Please select a feedback thread first.')
+      );
+      return;
+    }
+
+    setSendingFeedback(true);
+    try {
+      const threadRef = doc(db, 'adminFeedbackThreads', targetThreadId);
+      const msgRef = doc(collection(db, 'adminFeedbackThreads', targetThreadId, 'messages'));
+      const senderRole = isAdmin ? 'admin' : 'user';
+      const snippet = cleanText.slice(0, 500);
+      const targetScope: ChatPageScope = activeFeedbackThread?.pageScope || feedbackScope;
+      const targetOwnerUid = activeFeedbackThread?.uid || safeUid;
+
+      if (!activeFeedbackThread && isAdmin) {
+        setFeedbackError(
+          bi('কোনো ইউজার আগে ফিডব্যাক পাঠালে এখানে রিপ্লাই দেওয়া যাবে।', 'Reply once a user sends feedback.')
+        );
+        setSendingFeedback(false);
+        return;
+      }
+
+      const batch = writeBatch(db);
+      if (!activeFeedbackThread) {
+        batch.set(threadRef, {
+          threadId: targetThreadId,
+          uid: safeUid,
+          userName: safeDisplayName,
+          pageScope: targetScope,
+          lastMessage: snippet,
+          lastSenderRole: 'user',
+          unreadByAdmin: true,
+          unreadByUser: false,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      } else {
+        batch.update(threadRef, {
+          ...(isAdmin ? {} : { userName: safeDisplayName }),
+          lastMessage: snippet,
+          lastSenderRole: senderRole,
+          unreadByAdmin: !isAdmin,
+          unreadByUser: isAdmin,
+          updatedAt: serverTimestamp(),
+        });
+      }
+
+      batch.set(msgRef, {
+        threadId: targetThreadId,
+        threadOwnerUid: targetOwnerUid,
+        uid: safeUid,
+        senderName: isAdmin ? 'Admin' : safeDisplayName,
+        senderRole,
+        pageScope: targetScope,
+        text: cleanText.slice(0, 1000),
+        createdAt: serverTimestamp(),
+      });
+
+      await batch.commit();
+      setFeedbackDraft('');
+      setFeedbackSuccess(
+        isAdmin
+          ? bi('আপনার উত্তর পাঠানো হয়েছে।', 'Your reply has been sent.')
+          : bi('আপনার ফিডব্যাক অ্যাডমিনের কাছে পাঠানো হয়েছে!', 'Your feedback has been sent to the Admin!')
+      );
+    } catch (error: any) {
+      reportFirestoreError(error, OperationType.CREATE, `adminFeedbackThreads/${targetThreadId}`);
+      setFeedbackError(
+        bi('ফিডব্যাক পাঠানো যায়নি। অনুগ্রহ করে পরে আবার চেষ্টা করুন।', 'Failed to send feedback right now.')
+      );
+    } finally {
+      setSendingFeedback(false);
+    }
+  };
+
   const activeStarPreview = hoverRating || selectedRating;
   const showForm = !myReview || isEditingExisting;
+  const unreadFeedbackCount = feedbackThreads.filter((t) =>
+    isAdmin ? t.unreadByAdmin : t.unreadByUser
+  ).length;
 
   return (
     <section
@@ -375,19 +612,19 @@ const SiteReviewsSection: React.FC<SiteReviewsSectionProps> = ({ user, isAdmin }
           <div className="space-y-1.5">
             <div className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-amber-600 dark:text-amber-400">
               <MessageSquareHeart size={15} />
-              <span>{bi('ইউজার অভিজ্ঞতা ও মতামত', 'User Experience & Ratings')}</span>
+              <span>{bi('রিভিউ ও ফিডব্যাক', 'Reviews & Feedback')}</span>
             </div>
             <h3
               id="site-reviews-heading"
               className="text-2xl sm:text-3xl font-serif font-medium tracking-tight text-slate-900 dark:text-white"
               style={{ textWrap: 'balance' }}
             >
-              {bi('পেজটি আপনার কেমন লেগেছে? স্টার ও রিভিউ দিন', 'How Did You Like the Site? Rate & Review')}
+              {bi('অভিজ্ঞতা, স্টার ও ফিডব্যাক জানান', 'Rate, Review & Send Feedback')}
             </h3>
             <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
               {bi(
-                'ভয়েস স্টুডিও, এআই আইডিয়া বা সেলুন পেজ ব্যবহার করে কেমন লেগেছে তা জানান। আপনার স্টার রেটিং ও রিভিউ সাইটের সবাই দেখতে পাবে।',
-                'Share your experience with our Voice Studio, AI Ideas, or Salon pages. Your star rating and review are visible to everyone.'
+                'ভয়েস স্টুডিও, এআই আইডিয়া বা সেলুন ব্যবহার করে কেমন লেগেছে তা পাবলিক রিভিউতে জানান অথবা সরাসরি অ্যাডমিনের কাছে প্রাইভেট ফিডব্যাক পাঠান।',
+                'Publish a public star rating and review for Voice Studio, AI Ideas, or Salon, or send private feedback directly to the Admin.'
               )}
             </p>
           </div>
@@ -454,9 +691,246 @@ const SiteReviewsSection: React.FC<SiteReviewsSectionProps> = ({ user, isAdmin }
           </div>
         </div>
 
-        {/* Submit or Manage Own Review */}
-        <div className="lg:col-span-7">
-          {showForm ? (
+        {/* Submit or Manage Own Review + Direct Feedback Tab */}
+        <div className="lg:col-span-7 space-y-4">
+          {/* Unified Reviews & Feedback Tab Switcher */}
+          <div className="inline-flex items-center gap-1.5 p-1 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200/70 dark:border-slate-700/70">
+            <button
+              type="button"
+              onClick={() => setRightTab('review')}
+              className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-colors ${
+                rightTab === 'review'
+                  ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm'
+                  : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              <Star size={14} className="text-amber-500 fill-amber-400 shrink-0" />
+              <span>{bi('পাবলিক স্টার ও রিভিউ', 'Public Rating & Review')}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setRightTab('feedback')}
+              className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-colors ${
+                rightTab === 'feedback'
+                  ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm'
+                  : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              <Shield size={14} className="text-indigo-500 shrink-0" />
+              <span>{bi('অ্যাডমিনকে ফিডব্যাক', 'Direct Feedback')}</span>
+              {unreadFeedbackCount > 0 && (
+                <span className="px-1.5 py-0.5 rounded-full text-xs font-bold bg-rose-600 text-white tabular-nums">
+                  {unreadFeedbackCount}
+                </span>
+              )}
+            </button>
+          </div>
+
+          {!user ? (
+            <div className="p-6 sm:p-7 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 space-y-5">
+              <div className="flex items-start gap-3.5">
+                <div className="w-11 h-11 rounded-2xl bg-amber-100 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800 flex items-center justify-center text-amber-600 dark:text-amber-400 shrink-0">
+                  <Star size={22} className="fill-amber-400" />
+                </div>
+                <div className="space-y-1.5">
+                  <h4 className="text-lg font-serif font-medium text-slate-900 dark:text-white">
+                    {bi(
+                      'আপনিও স্টার রেটিং, রিভিউ ও ফিডব্যাক দিন',
+                      'Share Your Star Rating, Review & Feedback',
+                      'Compartilhe Sua Avaliação por Estrelas e Feedback'
+                    )}
+                  </h4>
+                  <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+                    {bi(
+                      'সাইন-ইন করার আগেই সবার দেওয়া স্টার রেটিং ও রিভিউ দেখতে পাচ্ছেন। নিজের স্টার রেটিং, মতামত প্রকাশ করতে বা অ্যাডমিনের কাছে সরাসরি মেসেজ পাঠাতে গুগল দিয়ে সাইন ইন করুন।',
+                      'Anyone can browse live star ratings and user reviews before logging in. Sign in with Google to publish your own star rating and review or send direct feedback to Admin.',
+                      'Qualquer visitante pode ver as avaliações por estrelas e comentários antes de entrar. Entre com o Google para publicar sua avaliação ou enviar feedback direto ao Administrador.'
+                    )}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => onRequireSignIn?.()}
+                  className="inline-flex items-center justify-center gap-2.5 px-5 py-3 rounded-xl bg-gradient-to-r from-indigo-600 via-blue-600 to-violet-600 hover:from-indigo-500 hover:via-blue-500 hover:to-violet-500 text-white text-sm font-semibold shadow-md shadow-indigo-600/20 transition-all whitespace-nowrap shrink-0"
+                >
+                  <Star size={16} className="fill-amber-300 text-amber-300" />
+                  <span>
+                    {bi(
+                      'রিভিউ ও স্টার দিতে গুগলে সাইন ইন করুন',
+                      'Sign In with Google to Rate & Review',
+                      'Entrar com o Google para Avaliar'
+                    )}
+                  </span>
+                </button>
+              </div>
+            </div>
+          ) : rightTab === 'feedback' ? (
+            <div className="p-5 sm:p-6 rounded-2xl bg-slate-50 dark:bg-slate-800/55 border border-slate-200 dark:border-slate-700/80 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <h4 className="text-base sm:text-lg font-serif font-medium text-slate-900 dark:text-white">
+                    {isAdmin
+                      ? bi('গ্রাহকদের পাঠানো সরাসরি ফিডব্যাক', 'Customer Direct Feedback Inbox')
+                      : bi('অ্যাডমিনের কাছে সরাসরি ফিডব্যাক পাঠান', 'Send Private Feedback to Admin')}
+                  </h4>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    {isAdmin
+                      ? bi('গ্রাহকের ফিডব্যাক পড়ে এখানেই উত্তর দিন', 'Review customer feedback and reply here')
+                      : bi('আপনার পরামর্শ, সমস্যা বা বিশেষ অনুরোধ সরাসরি অ্যাডমিন দেখতে পাবেন।', 'Your suggestions, reports, or requests go straight to the Admin.')}
+                  </p>
+                </div>
+              </div>
+
+              {isAdmin ? (
+                feedbackThreads.length === 0 ? (
+                  <p className="py-6 text-center text-xs text-slate-500 dark:text-slate-400">
+                    {bi('এখনও কোনো ইউজার ফিডব্যাক পাঠাননি।', 'No user feedback threads yet.')}
+                  </p>
+                ) : (
+                  <div className="flex flex-wrap gap-1.5">
+                    {feedbackThreads.map((t) => {
+                      const active = t.threadId === activeFeedbackThreadId;
+                      return (
+                        <button
+                          key={t.threadId}
+                          type="button"
+                          onClick={() => setSelectedAdminFeedbackThreadId(t.threadId)}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-medium border flex items-center gap-1.5 transition-colors ${
+                            active
+                              ? 'bg-indigo-600 text-white border-indigo-600'
+                              : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700'
+                          }`}
+                        >
+                          <span>{t.userName}</span>
+                          <span className="opacity-75">
+                            ({t.pageScope === 'salon' ? bi('সেলুন', 'Salon') : bi('স্টুডিও', 'Studio')})
+                          </span>
+                          {t.unreadByAdmin && (
+                            <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0" />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setFeedbackScope('studio')}
+                    className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold border transition-colors ${
+                      feedbackScope === 'studio'
+                        ? 'bg-indigo-600 text-white border-indigo-600'
+                        : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700'
+                    }`}
+                  >
+                    <AudioLines size={14} />
+                    <span>{bi('ভয়েস স্টুডিও ফিডব্যাক', 'Voice Studio Feedback')}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFeedbackScope('salon')}
+                    className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold border transition-colors ${
+                      feedbackScope === 'salon'
+                        ? 'bg-indigo-600 text-white border-indigo-600'
+                        : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700'
+                    }`}
+                  >
+                    <Scissors size={14} />
+                    <span>{bi('সেলুন বুকিং ফিডব্যাক', 'Salon Booking Feedback')}</span>
+                  </button>
+                </div>
+              )}
+
+              {/* Feedback Message History */}
+              <div className="max-h-56 overflow-y-auto rounded-xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-700/80 p-3.5 space-y-2.5">
+                {loadingFeedbackMessages ? (
+                  <div className="py-6 flex justify-center text-slate-400">
+                    <Loader2 size={18} className="animate-spin" />
+                  </div>
+                ) : feedbackMessages.length === 0 ? (
+                  <p className="py-6 text-center text-xs text-slate-500 dark:text-slate-400">
+                    {bi(
+                      'এখনও কোনো ফিডব্যাক মেসেজ নেই। নিচে লিখে পাঠান।',
+                      'No feedback messages yet. Type below to send.'
+                    )}
+                  </p>
+                ) : (
+                  feedbackMessages.map((msg) => {
+                    const isMine = msg.uid === safeUid;
+                    return (
+                      <div
+                        key={msg.id}
+                        className={`flex flex-col ${isMine ? 'items-end' : 'items-start'}`}
+                      >
+                        <div className="flex items-center gap-1.5 mb-0.5 px-1 text-xs text-slate-500 dark:text-slate-400">
+                          <span className="font-semibold">
+                            {msg.senderRole === 'admin' ? bi('অ্যাডমিন', 'Admin') : msg.senderName}
+                          </span>
+                          {msg.senderRole === 'admin' && (
+                            <Crown size={11} className="text-amber-500" />
+                          )}
+                        </div>
+                        <div
+                          className={`max-w-[85%] px-3.5 py-2 rounded-2xl text-xs sm:text-sm leading-relaxed whitespace-pre-wrap break-words ${
+                            isMine
+                              ? 'bg-indigo-600 text-white rounded-br-sm'
+                              : 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded-bl-sm'
+                          }`}
+                        >
+                          {msg.text}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {feedbackError && (
+                <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900 text-xs text-rose-700 dark:text-rose-300 flex items-start gap-2">
+                  <AlertCircle size={15} className="shrink-0 mt-0.5" />
+                  <span>{feedbackError}</span>
+                </div>
+              )}
+
+              {feedbackSuccess && (
+                <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900 text-xs text-emerald-700 dark:text-emerald-300 flex items-start gap-2">
+                  <CheckCircle2 size={15} className="shrink-0 mt-0.5" />
+                  <span>{feedbackSuccess}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleSendDirectFeedback} className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={feedbackDraft}
+                  onChange={(e) => setFeedbackDraft(e.target.value)}
+                  maxLength={1000}
+                  placeholder={
+                    isAdmin
+                      ? bi('গ্রাহকের ফিডব্যাকের উত্তর লিখুন...', 'Reply to customer feedback...')
+                      : bi('অ্যাডমিনের কাছে আপনার ফিডব্যাক লিখুন...', 'Write your feedback for the Admin...')
+                  }
+                  className="flex-1 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3.5 py-2.5 text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500"
+                />
+                <button
+                  type="submit"
+                  disabled={sendingFeedback || !feedbackDraft.trim()}
+                  className="inline-flex items-center gap-2 px-4 sm:px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs sm:text-sm font-semibold transition-colors whitespace-nowrap shrink-0"
+                >
+                  {sendingFeedback ? (
+                    <Loader2 size={15} className="animate-spin" />
+                  ) : (
+                    <Send size={15} />
+                  )}
+                  <span>{bi('পাঠান', 'Send')}</span>
+                </button>
+              </form>
+            </div>
+          ) : showForm ? (
             <form
               onSubmit={handleSubmitReview}
               className="p-5 sm:p-6 rounded-2xl bg-slate-50 dark:bg-slate-800/55 border border-slate-200 dark:border-slate-700/80 space-y-5"
@@ -537,7 +1011,7 @@ const SiteReviewsSection: React.FC<SiteReviewsSectionProps> = ({ user, isAdmin }
                             : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800'
                         }`}
                       >
-                        {bi(tag.labelBn, tag.labelEn)}
+                        {lang === 'bn' ? tag.labelBn : lang === 'pt' ? tag.labelPt : tag.labelEn}
                       </button>
                     );
                   })}
@@ -551,7 +1025,7 @@ const SiteReviewsSection: React.FC<SiteReviewsSectionProps> = ({ user, isAdmin }
                     htmlFor="site-review-comment"
                     className="text-xs font-semibold text-slate-600 dark:text-slate-300"
                   >
-                    {bi('আপনার মতামত লিখুন', 'Your Review')}
+                    {bi('আপনার রিভিউ লিখুন', 'Your Review')}
                   </label>
                   <span className="text-xs text-slate-500 dark:text-slate-400 tabular-nums">
                     {commentText.length} / 600
@@ -589,7 +1063,7 @@ const SiteReviewsSection: React.FC<SiteReviewsSectionProps> = ({ user, isAdmin }
                 <span className="text-xs text-slate-500 dark:text-slate-400 truncate">
                   {bi('প্রকাশিত হবে:', 'Posting as:')}{' '}
                   <strong className="text-slate-700 dark:text-slate-200">
-                    {user.displayName || user.email?.split('@')[0] || 'User'}
+                    {user?.displayName || user?.email?.split('@')[0] || 'User'}
                   </strong>
                 </span>
                 <button
@@ -702,10 +1176,10 @@ const SiteReviewsSection: React.FC<SiteReviewsSectionProps> = ({ user, isAdmin }
           <div className="inline-flex items-center gap-1 p-1 rounded-xl bg-slate-100 dark:bg-slate-800 self-start sm:self-auto">
             {(
               [
-                { id: 'all', bn: 'সবগুলো', en: 'All' },
-                { id: '5', bn: '৫ ★', en: '5 ★' },
-                { id: '4', bn: '৪ ★', en: '4 ★' },
-                { id: 'low', bn: '৩ ★ বা কম', en: '≤ 3 ★' },
+                { id: 'all', bn: 'সবগুলো', en: 'All', pt: 'Todos' },
+                { id: '5', bn: '৫ ★', en: '5 ★', pt: '5 ★' },
+                { id: '4', bn: '৪ ★', en: '4 ★', pt: '4 ★' },
+                { id: 'low', bn: '৩ ★ বা কম', en: '≤ 3 ★', pt: '≤ 3 ★' },
               ] as const
             ).map((f) => (
               <button
@@ -718,7 +1192,7 @@ const SiteReviewsSection: React.FC<SiteReviewsSectionProps> = ({ user, isAdmin }
                     : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
-                {bi(f.bn, f.en)}
+                {bi(f.bn, f.en, f.pt)}
               </button>
             ))}
           </div>
@@ -751,7 +1225,7 @@ const SiteReviewsSection: React.FC<SiteReviewsSectionProps> = ({ user, isAdmin }
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {filteredReviews.map((item) => {
-              const isMine = item.uid === safeUid;
+              const isMine = Boolean(safeUid && item.uid === safeUid);
               const canDelete = isMine || isAdmin;
               const showPhoto = Boolean(item.authorPhotoUrl && !brokenAvatarIds[item.id]);
               const initialLetter = item.authorName.trim().charAt(0).toUpperCase() || 'U';

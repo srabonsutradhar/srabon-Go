@@ -124,7 +124,7 @@ const AiResultCard: React.FC<AiResultCardProps> = ({ result, voices, onClose, on
 
                 <div className="bg-white/60 dark:bg-zinc-800/50 rounded-xl border border-zinc-200/50 dark:border-zinc-700/50 shadow-sm relative group/code flex-1 flex flex-col min-h-[300px] md:min-h-0 overflow-hidden">
                     <div className="flex justify-between items-center p-4 pb-2 border-b border-zinc-100/50 dark:border-zinc-700/50 flex-shrink-0">
-                        <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest flex items-center gap-1">
+                        <span className="text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest flex items-center gap-1">
                             {bi('সিস্টেম প্রম্পট', 'System Prompt')}
                         </span>
                         <button 

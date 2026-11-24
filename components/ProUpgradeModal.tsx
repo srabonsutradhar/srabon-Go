@@ -671,7 +671,10 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
                       </div>
                       <ul className="space-y-1.5 text-xs text-zinc-600 dark:text-zinc-300 leading-relaxed">
                         <li>
-                          • {STUDIO_TIER_LIMITS.monthly.maxScriptChars.toLocaleString(lang === 'bn' ? 'bn-BD' : 'en-US')}{' '}
+                          •{' '}
+                          {STUDIO_TIER_LIMITS.monthly.maxScriptChars.toLocaleString(
+                            lang === 'bn' ? 'bn-BD' : lang === 'pt' ? 'pt-BR' : 'en-US'
+                          )}{' '}
                           {bi('অক্ষর / স্ক্রিপ্ট', 'chars / script')}
                         </li>
                         <li>• {bi('৪টি স্ট্যান্ডার্ড ভয়েস স্টাইল', '4 standard voice styles')}</li>
@@ -711,7 +714,9 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
                         <li>
                           •{' '}
                           <strong>
-                            {STUDIO_TIER_LIMITS.yearly.maxScriptChars.toLocaleString(lang === 'bn' ? 'bn-BD' : 'en-US')}{' '}
+                            {STUDIO_TIER_LIMITS.yearly.maxScriptChars.toLocaleString(
+                              lang === 'bn' ? 'bn-BD' : lang === 'pt' ? 'pt-BR' : 'en-US'
+                            )}{' '}
                             {bi('অক্ষর', 'chars')}
                           </strong>{' '}
                           {bi('/ স্ক্রিপ্ট (২× বড়)', '/ script (2× larger)')}
@@ -788,11 +793,15 @@ const ProUpgradeModal: React.FC<ProUpgradeModalProps> = ({
                       </div>
                     )}
 
-                    <p className="text-xs text-zinc-600 dark:text-zinc-300 leading-relaxed">
-                      {lang === 'en' &&
-                      billingConfig.instructions ===
-                        'উপরের নম্বরে সেন্ড মানি / পেমেন্ট করে নিচের ফর্মে আপনার Transaction ID (TrxID) জমা দিন।'
-                        ? 'Send Money / Pay to the account above and submit your Transaction ID (TrxID) in the form below.'
+                    <p className="text-xs sm:text-sm text-zinc-600 dark:text-zinc-300 leading-relaxed">
+                      {(lang === 'en' || lang === 'pt') &&
+                      (billingConfig.instructions ===
+                        'উপরের নম্বরে সেন্ড মানি / পেমেন্ট করে নিচের ফর্মে আপনার Transaction ID (TrxID) জমা দিন।' ||
+                        billingConfig.instructions ===
+                          'উপরের নম্বরে নির্বাচিত প্যাকেজ অনুযায়ী ফি পাঠিয়ে নিচের ফর্মে আপনার নম্বর ও Transaction ID (TrxID) জমা দিন। অ্যাডমিন যাচাই করেই প্যাকেজ চালু করে দেবেন।')
+                        ? lang === 'pt'
+                          ? 'Envie o valor ou pague para a conta acima e informe seu número e Transaction ID (TrxID) no formulário abaixo.'
+                          : 'Send Money / Pay to the account above and submit your Transaction ID (TrxID) in the form below.'
                         : billingConfig.instructions}
                     </p>
                   </div>

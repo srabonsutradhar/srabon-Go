@@ -23,7 +23,7 @@ import SiteLegalModal, { LegalTab } from './components/SiteLegalModal';
 import CustomVoiceCloneStudio from './components/CustomVoiceCloneStudio';
 import VoiceComparisonModal from './components/VoiceComparisonModal';
 import OfflineIndicator from './components/OfflineIndicator';
-import { AppIssueRecord, AppViewMode, CustomVoiceProfile, FilterState, AiRecommendation, BillingConfig, ProPackageType, SalonConfig, UserPlan } from './types';
+import { AppIssueRecord, AppViewMode, CustomVoiceProfile, FilterState, AiRecommendation, BillingConfig, ProPackageType, SalonConfig, SocialLinksConfig, UserPlan } from './types';
 import { Info, Heart, Loader2, Bell, AlertTriangle, X, MessageSquare, ArrowLeftRight } from 'lucide-react';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { collection, deleteDoc, doc, onSnapshot, query, runTransaction, setDoc, updateDoc, where, serverTimestamp } from 'firebase/firestore';
@@ -32,6 +32,7 @@ import { initGoogleAdsTag } from './utils/googleAds';
 import { setDynamicApiBaseUrl } from './utils/audio';
 import { isBenignAppIssueNoise, reportAppIssue, subscribeSessionIssues } from './utils/appIssues';
 import { DEFAULT_SALON_CONFIG, sanitizeSalonConfig } from './utils/salon';
+import { DEFAULT_SOCIAL_LINKS, sanitizeSocialLinksConfig } from './utils/socialLinks';
 import {
   buildReferralCode,
   capturePendingReferralFromUrl,
@@ -88,6 +89,22 @@ function sanitizeFavorites(list: unknown): string[] {
   return out;
 }
 
+function isSalonEntryUrl(): boolean {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return false;
+  const path = window.location.pathname.toLowerCase();
+  const params = new URLSearchParams(window.location.search);
+  const entry = document.getElementById('root')?.getAttribute('data-entry');
+  return (
+    entry === 'salon' ||
+    path === '/salon' ||
+    path === '/salon/' ||
+    path === '/salon.html' ||
+    params.get('app') === 'salon' ||
+    params.get('page') === 'salon' ||
+    window.location.hash === '#salon'
+  );
+}
+
 const App: React.FC = () => {
   const { lang, bi } = useLanguage();
   const [user, setUser] = useState<User | null>(null);
@@ -96,7 +113,9 @@ const App: React.FC = () => {
   const [aiResult, setAiResult] = useState<AiRecommendation | null>(null);
   const [isAiCardVisible, setIsAiCardVisible] = useState(false);
   const [showVoiceFinder, setShowVoiceFinder] = useState(false);
-  const [viewMode, setViewMode] = useState<AppViewMode>('home');
+  const [viewMode, setViewMode] = useState<AppViewMode>(() =>
+    isSalonEntryUrl() ? 'salon' : 'home'
+  );
   const [studioVoiceName, setStudioVoiceName] = useState<string>('Kore');
   const [studioDraft, setStudioDraft] = useState<{ text: string; style: string; revision: number } | null>(null);
   const [customVoiceProfiles, setCustomVoiceProfiles] = useState<CustomVoiceProfile[]>([]);
@@ -111,6 +130,7 @@ const App: React.FC = () => {
   const [lastUsageDate, setLastUsageDate] = useState<string>(getTodayUtcDate());
   const [billingConfig, setBillingConfig] = useState<BillingConfig>(DEFAULT_BILLING_CONFIG);
   const [salonConfig, setSalonConfig] = useState<SalonConfig>(DEFAULT_SALON_CONFIG);
+  const [socialLinks, setSocialLinks] = useState<SocialLinksConfig>(DEFAULT_SOCIAL_LINKS);
   const [showProModal, setShowProModal] = useState(false);
   const [proModalTab, setProModalTab] = useState<'refer' | 'pro'>('refer');
   const [proSelectedPackage, setProSelectedPackage] = useState<ProPackageType>('monthly');
@@ -123,6 +143,7 @@ const App: React.FC = () => {
   const [sessionIssues, setSessionIssues] = useState<AppIssueRecord[]>([]);
   const [firestoreIssues, setFirestoreIssues] = useState<AppIssueRecord[]>([]);
   const cleanedObsoleteIssueIdsRef = useRef<Set<string>>(new Set());
+  const verifiedPathsRef = useRef<Map<string, number>>(new Map());
   const quotaLockRef = useRef<Promise<unknown>>(Promise.resolve());
   const [referralCode, setReferralCode] = useState<string>('');
   const [bonusCredits, setBonusCredits] = useState<number>(0);
@@ -168,6 +189,25 @@ const App: React.FC = () => {
       setAuthReady(true);
     });
     return () => unsubscribe();
+  }, []);
+
+  // Public real-time listener for Social Links (available both before and after login)
+  useEffect(() => {
+    const socialRef = doc(db, 'publicConfig', 'socialLinks');
+    const unsubSocial = onSnapshot(
+      socialRef,
+      (snap) => {
+        if (snap.exists()) {
+          setSocialLinks(sanitizeSocialLinksConfig(snap.data()));
+        } else {
+          setSocialLinks(DEFAULT_SOCIAL_LINKS);
+        }
+      },
+      (error) => {
+        reportFirestoreError(error, OperationType.GET, 'publicConfig/socialLinks');
+      }
+    );
+    return () => unsubSocial();
   }, []);
 
   // Global silent error/issue collector -> sends all app problems exclusively to Admin Notification Box
@@ -230,13 +270,23 @@ const App: React.FC = () => {
       });
     };
 
+    const onPathVerifiedOk = (event: Event) => {
+      const detail = (event as CustomEvent)?.detail;
+      if (!detail || typeof detail.pathPrefix !== 'string') return;
+      const verifiedAtMs =
+        typeof detail.verifiedAtMs === 'number' ? detail.verifiedAtMs : Date.now();
+      verifiedPathsRef.current.set(detail.pathPrefix, verifiedAtMs);
+    };
+
     window.addEventListener('srabon:app-issue', onCustomIssue);
+    window.addEventListener('srabon:firestore-path-ok', onPathVerifiedOk);
     window.addEventListener('error', onWindowError);
     window.addEventListener('unhandledrejection', onUnhandledRejection);
 
     return () => {
       unsubSession();
       window.removeEventListener('srabon:app-issue', onCustomIssue);
+      window.removeEventListener('srabon:firestore-path-ok', onPathVerifiedOk);
       window.removeEventListener('error', onWindowError);
       window.removeEventListener('unhandledrejection', onUnhandledRejection);
     };
@@ -249,13 +299,55 @@ const App: React.FC = () => {
       return;
     }
 
+    const isStaleVerifiedPermissionIssue = (data: Omit<AppIssueRecord, 'id'>): boolean => {
+      const msg = (data?.message || '').toLowerCase();
+      if (!msg.includes('missing or insufficient permissions')) return false;
+      const details = data?.details || '';
+      const createdMs = typeof data?.createdAt?.toMillis === 'function' ? data.createdAt.toMillis() : 0;
+      if (!createdMs) return false;
+      for (const [prefix, verifiedAtMs] of verifiedPathsRef.current.entries()) {
+        if (details.startsWith(prefix) && createdMs <= verifiedAtMs) {
+          return true;
+        }
+      }
+      return false;
+    };
+
+    const syncVerifiedCleanup = () => {
+      setFirestoreIssues((prev) => {
+        const next: AppIssueRecord[] = [];
+        for (const item of prev) {
+          if (isStaleVerifiedPermissionIssue(item)) {
+            if (!cleanedObsoleteIssueIdsRef.current.has(item.id)) {
+              cleanedObsoleteIssueIdsRef.current.add(item.id);
+              deleteDoc(doc(db, 'appIssues', item.id)).catch(() => {});
+            }
+            continue;
+          }
+          next.push(item);
+        }
+        return next.length === prev.length ? prev : next;
+      });
+    };
+
+    const onPathVerifiedOk = (event: Event) => {
+      const detail = (event as CustomEvent)?.detail;
+      if (!detail || typeof detail.pathPrefix !== 'string') return;
+      const verifiedAtMs =
+        typeof detail.verifiedAtMs === 'number' ? detail.verifiedAtMs : Date.now();
+      verifiedPathsRef.current.set(detail.pathPrefix, verifiedAtMs);
+      syncVerifiedCleanup();
+    };
+
+    window.addEventListener('srabon:firestore-path-ok', onPathVerifiedOk);
+
     const unsubIssues = onSnapshot(
       collection(db, 'appIssues'),
       (snapshot) => {
         const items: AppIssueRecord[] = [];
         for (const d of snapshot.docs) {
           const data = d.data() as Omit<AppIssueRecord, 'id'>;
-          if (isBenignAppIssueNoise(data?.message)) {
+          if (isBenignAppIssueNoise(data?.message) || isStaleVerifiedPermissionIssue(data)) {
             if (!cleanedObsoleteIssueIdsRef.current.has(d.id)) {
               cleanedObsoleteIssueIdsRef.current.add(d.id);
               deleteDoc(doc(db, 'appIssues', d.id)).catch(() => {});
@@ -275,7 +367,10 @@ const App: React.FC = () => {
       }
     );
 
-    return () => unsubIssues();
+    return () => {
+      window.removeEventListener('srabon:firestore-path-ok', onPathVerifiedOk);
+      unsubIssues();
+    };
   }, [authReady, user, isAdmin]);
 
   // Real-time unread count listener for Global Chat Hub (admin feedback threads)
@@ -303,6 +398,13 @@ const App: React.FC = () => {
           }
         });
         setUnreadChatCount(unread);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(
+            new CustomEvent('srabon:firestore-path-ok', {
+              detail: { pathPrefix: 'Path: adminFeedbackThreads', verifiedAtMs: Date.now() },
+            })
+          );
+        }
       },
       (error) => {
         reportFirestoreError(error, OperationType.LIST, 'adminFeedbackThreads');
@@ -587,7 +689,7 @@ const App: React.FC = () => {
     );
     setFavorites(nextFavorites);
 
-    if (user) {
+    if (user && user.emailVerified) {
       const userPath = `users/${user.uid}`;
       const userRef = doc(db, 'users', user.uid);
       const today = getTodayUtcDate();
@@ -869,16 +971,32 @@ const App: React.FC = () => {
       const bnGender = localizeGender(voice.analysis.gender, 'bn').toLowerCase();
       const bnPitch = localizePitch(voice.pitch, 'bn').toLowerCase();
       const bnAnalysisPitch = localizePitch(voice.analysis.pitch, 'bn').toLowerCase();
+      const ptGender = localizeGender(voice.analysis.gender, 'pt').toLowerCase();
+      const ptPitch = localizePitch(voice.pitch, 'pt').toLowerCase();
+      const ptAnalysisPitch = localizePitch(voice.analysis.pitch, 'pt').toLowerCase();
       const matchSearch = searchLower === '' || 
         voice.name.toLowerCase().includes(searchLower) || 
-        voice.characteristics.some(c => c.toLowerCase().includes(searchLower) || localizeTrait(c, 'bn').toLowerCase().includes(searchLower)) ||
-        voice.analysis.characteristics.some(c => c.toLowerCase().includes(searchLower) || localizeTrait(c, 'bn').toLowerCase().includes(searchLower)) ||
+        voice.characteristics.some(
+          (c) =>
+            c.toLowerCase().includes(searchLower) ||
+            localizeTrait(c, 'bn').toLowerCase().includes(searchLower) ||
+            localizeTrait(c, 'pt').toLowerCase().includes(searchLower)
+        ) ||
+        voice.analysis.characteristics.some(
+          (c) =>
+            c.toLowerCase().includes(searchLower) ||
+            localizeTrait(c, 'bn').toLowerCase().includes(searchLower) ||
+            localizeTrait(c, 'pt').toLowerCase().includes(searchLower)
+        ) ||
         voice.analysis.gender.toLowerCase().startsWith(searchLower) ||
         bnGender.includes(searchLower) ||
+        ptGender.includes(searchLower) ||
         voice.pitch.toLowerCase().includes(searchLower) ||
         voice.analysis.pitch.toLowerCase().includes(searchLower) ||
         bnPitch.includes(searchLower) ||
-        bnAnalysisPitch.includes(searchLower);
+        bnAnalysisPitch.includes(searchLower) ||
+        ptPitch.includes(searchLower) ||
+        ptAnalysisPitch.includes(searchLower);
 
       return matchGender && matchPitch && matchSearch;
     });
@@ -1014,7 +1132,13 @@ const App: React.FC = () => {
   }
 
   if (!user) {
-    return <GoogleLoginGate isDarkMode={isDarkMode} toggleTheme={toggleTheme} />;
+    return (
+      <GoogleLoginGate
+        isDarkMode={isDarkMode}
+        toggleTheme={toggleTheme}
+        socialLinks={socialLinks}
+      />
+    );
   }
 
   return (
@@ -1071,6 +1195,7 @@ const App: React.FC = () => {
           onOpenChat={() => setShowChatHub(true)}
           onOpenVoiceCompare={handleOpenCompareModal}
           compareCount={compareVoices.length}
+          socialLinks={socialLinks}
         />
 
         <main className="flex-1 relative flex flex-col overflow-hidden">
@@ -1080,6 +1205,7 @@ const App: React.FC = () => {
                   userPlan={effectiveUserPlan}
                   isAdmin={isAdmin}
                   salonConfig={salonConfig}
+                  socialLinks={socialLinks}
                   voicesCount={VOICE_DATA.length}
                   favoritesCount={favorites.length}
                   onNavigate={handleViewModeChange}
@@ -1348,6 +1474,7 @@ const App: React.FC = () => {
         <AdminPanelModal
           billingConfig={billingConfig}
           salonConfig={salonConfig}
+          socialLinks={socialLinks}
           initialTab={adminInitialTab}
           onClose={() => setShowAdminPanel(false)}
         />
@@ -1452,21 +1579,21 @@ const App: React.FC = () => {
         />
       )}
 
-      {/* App-wide Floating Chat List Hub Launcher */}
+      {/* App-wide Floating Chat Launcher */}
       {!showChatHub && (
         <button
           type="button"
           onClick={() => setShowChatHub(true)}
           className="fixed bottom-4 left-4 z-[70] inline-flex items-center gap-2 px-4 py-2.5 rounded-full bg-gradient-to-r from-indigo-600 via-blue-600 to-violet-600 hover:from-indigo-500 hover:via-blue-500 hover:to-violet-500 text-white shadow-xl shadow-indigo-600/25 border border-white/20 transition-all hover:scale-105 active:scale-95"
-          aria-label={bi('চ্যাট লিস্ট খুলুন', 'Open Chat List')}
-          title={bi('চ্যাট লিস্ট · মতামত ও আলোচনা', 'Chat List · Feedback & Support')}
+          aria-label={bi('চ্যাট খুলুন', 'Open Chat')}
+          title={bi('চ্যাট', 'Chat')}
         >
           <MessageSquare size={16} />
           <span className="text-xs font-semibold tracking-wide">
-            {bi('চ্যাট ও মতামত', 'Chat & Feedback')}
+            {bi('চ্যাট', 'Chat')}
           </span>
           {unreadChatCount > 0 && (
-            <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-500 text-white tabular-nums">
+            <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-rose-500 text-white tabular-nums">
               {unreadChatCount > 99 ? '99+' : unreadChatCount}
             </span>
           )}

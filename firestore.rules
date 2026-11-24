@@ -179,6 +179,8 @@ service cloud.firestore {
           'hairColorPrice', 'facialPrice', 'comboPrice', 'bookingFee',
           'haircutTitle', 'beardTrimTitle', 'shaveTitle',
           'hairColorTitle', 'facialTitle', 'comboTitle',
+          'haircutTitleBn', 'beardTrimTitleBn', 'shaveTitleBn',
+          'hairColorTitleBn', 'facialTitleBn', 'comboTitleBn',
           'address', 'phone', 'openHours', 'isBookingOpen', 'updatedAt'
         ])
         && data.salonName is string
@@ -199,6 +201,12 @@ service cloud.firestore {
         && (!('hairColorTitle' in data) || isValidSalonTitle(data.hairColorTitle))
         && (!('facialTitle' in data) || isValidSalonTitle(data.facialTitle))
         && (!('comboTitle' in data) || isValidSalonTitle(data.comboTitle))
+        && (!('haircutTitleBn' in data) || isValidSalonTitle(data.haircutTitleBn))
+        && (!('beardTrimTitleBn' in data) || isValidSalonTitle(data.beardTrimTitleBn))
+        && (!('shaveTitleBn' in data) || isValidSalonTitle(data.shaveTitleBn))
+        && (!('hairColorTitleBn' in data) || isValidSalonTitle(data.hairColorTitleBn))
+        && (!('facialTitleBn' in data) || isValidSalonTitle(data.facialTitleBn))
+        && (!('comboTitleBn' in data) || isValidSalonTitle(data.comboTitleBn))
         && isValidSalonPrice(data.bookingFee)
         && data.address is string
         && data.address.size() <= 200
@@ -499,6 +507,22 @@ service cloud.firestore {
         && data.updatedAt is timestamp;
     }
 
+    function isValidSocialUrl(url) {
+      return url is string
+        && url.size() <= 300
+        && (url.size() == 0 || url.matches('^https://[a-zA-Z0-9._~:/?#@!$&()*+,;=%-]+$'));
+    }
+
+    function isValidSocialLinksConfig(data) {
+      return data.keys().hasAll(['facebookUrl', 'instagramUrl', 'linkedinUrl', 'youtubeUrl', 'updatedAt'])
+        && data.keys().hasOnly(['facebookUrl', 'instagramUrl', 'linkedinUrl', 'youtubeUrl', 'updatedAt'])
+        && isValidSocialUrl(data.facebookUrl)
+        && isValidSocialUrl(data.instagramUrl)
+        && isValidSocialUrl(data.linkedinUrl)
+        && isValidSocialUrl(data.youtubeUrl)
+        && data.updatedAt is timestamp;
+    }
+
     match /users/{userId} {
       allow get: if isSignedIn() && isValidId(userId) && (isOwner(userId) || isBootstrappedAdmin());
       allow list: if isBootstrappedAdmin();
@@ -643,6 +667,23 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    match /publicConfig/{configId} {
+      allow get: if isValidId(configId);
+      allow list: if false;
+      allow create: if isBootstrappedAdmin()
+        && isValidId(configId)
+        && configId == 'socialLinks'
+        && isValidSocialLinksConfig(incoming())
+        && incoming().updatedAt == request.time;
+      allow update: if isBootstrappedAdmin()
+        && isValidId(configId)
+        && configId == 'socialLinks'
+        && isValidSocialLinksConfig(incoming())
+        && incoming().diff(existing()).affectedKeys().hasOnly(['facebookUrl', 'instagramUrl', 'linkedinUrl', 'youtubeUrl', 'updatedAt'])
+        && incoming().updatedAt == request.time;
+      allow delete: if false;
+    }
+
     match /salonConfig/{configId} {
       allow get: if isSignedIn() && isValidId(configId);
       allow list: if false;
@@ -659,6 +700,8 @@ service cloud.firestore {
           'hairColorPrice', 'facialPrice', 'comboPrice', 'bookingFee',
           'haircutTitle', 'beardTrimTitle', 'shaveTitle',
           'hairColorTitle', 'facialTitle', 'comboTitle',
+          'haircutTitleBn', 'beardTrimTitleBn', 'shaveTitleBn',
+          'hairColorTitleBn', 'facialTitleBn', 'comboTitleBn',
           'address', 'phone', 'openHours', 'isBookingOpen', 'updatedAt'
         ])
         && incoming().updatedAt == request.time;
@@ -872,8 +915,8 @@ service cloud.firestore {
     }
 
     match /siteReviews/{userId} {
-      allow get: if isSignedIn() && isValidId(userId);
-      allow list: if isSignedIn() && existing().rating >= 1;
+      allow get: if isValidId(userId);
+      allow list: if existing().rating >= 1;
       allow create: if isVerifiedUser()
         && isValidId(userId)
         && isOwner(userId)

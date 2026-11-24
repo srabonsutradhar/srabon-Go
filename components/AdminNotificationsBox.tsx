@@ -34,8 +34,11 @@ function formatIssueTime(createdAt: any, lang: AppLanguage): string {
       : typeof createdAt === 'number'
       ? createdAt
       : null;
-  if (!ms) return lang === 'bn' ? 'এইমাত্র' : 'Just now';
-  return localizeDateTime(ms, lang) || (lang === 'bn' ? 'সাম্প্রতিক' : 'Recent');
+  if (!ms) return lang === 'bn' ? 'এইমাত্র' : lang === 'pt' ? 'Agora mesmo' : 'Just now';
+  return (
+    localizeDateTime(ms, lang) ||
+    (lang === 'bn' ? 'সাম্প্রতিক' : lang === 'pt' ? 'Recente' : 'Recent')
+  );
 }
 
 const AdminNotificationsBox: React.FC<AdminNotificationsBoxProps> = ({

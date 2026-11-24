@@ -27,11 +27,16 @@ import AdBanner from './AdBanner';
 import SiteLegalModal, { LegalTab } from './SiteLegalModal';
 import { FEATURED_VOICE_ALBUMS, STUDIO_MEDIA, getVoiceAlbumVisual } from '../utils/studioAlbums';
 import { localizeGender, localizePitch, localizeTrait, useLanguage } from '../utils/i18n';
-import PWAInstallButton from './PWAInstallButton';
+import PWAInstallButton, { isOnSalonAppEntry } from './PWAInstallButton';
+import SiteReviewsSection from './SiteReviewsSection';
+import SocialLinksRow from './SocialLinksRow';
+import { SocialLinksConfig } from '../types';
+import { DEFAULT_SOCIAL_LINKS } from '../utils/socialLinks';
 
 interface GoogleLoginGateProps {
   isDarkMode: boolean;
   toggleTheme: () => void;
+  socialLinks?: SocialLinksConfig;
 }
 
 const FEATURED_VOICE_NAMES = ['Kore', 'Zephyr', 'Fenrir', 'Aoede', 'Puck', 'Charon'];
@@ -74,8 +79,37 @@ const FAQ_ITEMS_EN = [
   },
 ];
 
-const GoogleLoginGate: React.FC<GoogleLoginGateProps> = ({ isDarkMode, toggleTheme }) => {
+const FAQ_ITEMS_PT = [
+  {
+    q: 'Quais idiomas são suportados para geração de voz?',
+    a: 'O Srabon Go cria narrações naturais em bengali, inglês, português e outros idiomas globais com direcionamento vocal personalizado, como alarme matinal, âncora de notícias ou narração de histórias.',
+  },
+  {
+    q: 'Como ganho +10 créditos bônus por cada amigo indicado?',
+    a: 'Após fazer login, abra a opção Indicar Amigos no menu para copiar seu código ou link pessoal. Sempre que um novo amigo entrar com o Google pelo seu link, você recebe +10 créditos bônus automaticamente.',
+  },
+  {
+    q: 'O que acontece quando minha cota diária gratuita acaba?',
+    a: 'Quando o limite diário gratuito é atingido, seus créditos bônus de indicação são ativados automaticamente (1 por geração). Você também pode assinar o plano Pro Mensal ou Anual a qualquer momento.',
+  },
+  {
+    q: 'Posso baixar as vozes geradas em formato WAV?',
+    a: 'Sim! Cada áudio gerado no Estúdio de Voz, Clone de Voz Pessoal e Casting IA pode ser exportado diretamente em arquivo WAV nítido de 24 kHz ou reproduzido no modo Loop de Alarme.',
+  },
+];
+
+const GoogleLoginGate: React.FC<GoogleLoginGateProps> = ({
+  isDarkMode,
+  toggleTheme,
+  socialLinks = DEFAULT_SOCIAL_LINKS,
+}) => {
   const { lang, setLang, bi } = useLanguage();
+  const isSalonEntry =
+    isOnSalonAppEntry() ||
+    (typeof window !== 'undefined' &&
+      (new URLSearchParams(window.location.search).get('app') === 'salon' ||
+        new URLSearchParams(window.location.search).get('page') === 'salon' ||
+        window.location.hash === '#salon'));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [playingVoice, setPlayingVoice] = useState<string | null>(null);
@@ -215,7 +249,8 @@ const GoogleLoginGate: React.FC<GoogleLoginGateProps> = ({ isDarkMode, toggleThe
     }
   };
 
-  const faqItems = lang === 'bn' ? FAQ_ITEMS_BN : FAQ_ITEMS_EN;
+  const faqItems =
+    lang === 'bn' ? FAQ_ITEMS_BN : lang === 'pt' ? FAQ_ITEMS_PT : FAQ_ITEMS_EN;
 
   return (
     <div className="min-h-screen w-full bg-gradient-to-br from-[#f4f6fb] via-[#f8fafc] to-[#eef2ff] dark:from-[#070b14] dark:via-[#0b1120] dark:to-[#11152b] text-slate-900 dark:text-slate-100 font-sans relative transition-colors duration-300">
@@ -233,13 +268,15 @@ const GoogleLoginGate: React.FC<GoogleLoginGateProps> = ({ isDarkMode, toggleThe
             href="#top"
             className="text-lg font-bold tracking-tight bg-gradient-to-r from-indigo-700 via-blue-700 to-amber-600 dark:from-indigo-300 dark:via-sky-300 dark:to-amber-300 bg-clip-text text-transparent whitespace-nowrap shrink-0"
           >
-            {bi('শ্রাবণ গো', 'Srabon Go')}
+            {isSalonEntry
+              ? bi('জগন্নাথ সেলুন · শ্রাবণ গো', 'Jagannath Salon · Srabon Go')
+              : bi('শ্রাবণ গো', 'Srabon Go')}
           </a>
 
           {/* Zone 2: Clean Single-Line Nav Links */}
           <nav
             aria-label={bi('প্রধান নেভিগেশন', 'Primary')}
-            className="hidden md:flex items-center gap-7 text-sm font-medium text-zinc-600 dark:text-zinc-400"
+            className="hidden md:flex items-center gap-5 lg:gap-7 text-sm font-medium text-zinc-600 dark:text-zinc-400"
           >
             <a
               href="#features"
@@ -258,6 +295,12 @@ const GoogleLoginGate: React.FC<GoogleLoginGateProps> = ({ isDarkMode, toggleThe
               className="hover:text-zinc-900 dark:hover:text-white hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0"
             >
               {bi('প্ল্যান ও রেফার', 'Plans & Refer')}
+            </a>
+            <a
+              href="#site-reviews-section"
+              className="hover:text-zinc-900 dark:hover:text-white hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0"
+            >
+              {bi('রিভিউ', 'Reviews', 'Avaliações')}
             </a>
             <a
               href="#faq"
@@ -299,6 +342,19 @@ const GoogleLoginGate: React.FC<GoogleLoginGateProps> = ({ isDarkMode, toggleThe
                 }`}
               >
                 EN
+              </button>
+              <button
+                type="button"
+                onClick={() => setLang('pt')}
+                aria-pressed={lang === 'pt'}
+                aria-label="Mudar idioma para Português"
+                className={`min-h-[36px] px-2.5 rounded-md text-xs font-semibold transition-all whitespace-nowrap shrink-0 ${
+                  lang === 'pt'
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : 'text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white'
+                }`}
+              >
+                PT
               </button>
             </div>
 
@@ -351,6 +407,13 @@ const GoogleLoginGate: React.FC<GoogleLoginGateProps> = ({ isDarkMode, toggleThe
                     {bi('প্ল্যান ও রেফার', 'Plans & Refer')}
                   </a>
                   <a
+                    href="#site-reviews-section"
+                    onClick={() => setShowHeaderMenu(false)}
+                    className="block px-3 py-2.5 rounded-xl text-sm font-medium text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                  >
+                    {bi('রিভিউ', 'Reviews', 'Avaliações')}
+                  </a>
+                  <a
                     href="#faq"
                     onClick={() => setShowHeaderMenu(false)}
                     className="block px-3 py-2.5 rounded-xl text-sm font-medium text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800"
@@ -396,28 +459,50 @@ const GoogleLoginGate: React.FC<GoogleLoginGateProps> = ({ isDarkMode, toggleThe
             {/* Left: Proposition & Google Sign-In CTA */}
             <div className="lg:col-span-6 flex flex-col justify-center space-y-6">
               <div className="flex items-center gap-2 text-xs font-medium text-zinc-500 dark:text-zinc-400">
-                <span>{bi('এআই ভয়েস স্টুডিও', 'AI Voice Studio')}</span>
-                <span aria-hidden="true">·</span>
-                <span>{bi('৩০টি স্টুডিও ভয়েস', '30 Studio Voices')}</span>
-                <span aria-hidden="true">·</span>
-                <span>{bi('বাংলা ও বিশ্বমানের TTS', 'Bengali & Global TTS')}</span>
+                {isSalonEntry ? (
+                  <>
+                    <span>{bi('জগন্নাথ মেনজ সেলুন', "Jagannath Men's Salon")}</span>
+                    <span aria-hidden="true">·</span>
+                    <span>{bi('লাইভ সিরিয়াল ও কিউ', 'Live Serial & Queue')}</span>
+                    <span aria-hidden="true">·</span>
+                    <span>{bi('সরাসরি বুকিং', 'Direct Booking')}</span>
+                  </>
+                ) : (
+                  <>
+                    <span>{bi('এআই ভয়েস স্টুডিও', 'AI Voice Studio')}</span>
+                    <span aria-hidden="true">·</span>
+                    <span>{bi('৩০টি স্টুডিও ভয়েস', '30 Studio Voices')}</span>
+                    <span aria-hidden="true">·</span>
+                    <span>{bi('বাংলা ও বিশ্বমানের TTS', 'Bengali & Global TTS')}</span>
+                  </>
+                )}
               </div>
 
               <h1
                 className="text-4xl sm:text-5xl lg:text-[52px] font-serif font-medium tracking-tight text-zinc-900 dark:text-white leading-[1.12]"
                 style={{ textWrap: 'balance' }}
               >
-                {bi(
-                  'প্রাকৃতিক বাংলা ও ইংরেজি কণ্ঠে যেকোনো লেখা শোনান।',
-                  'Speak any script in natural Bengali and global voices.'
-                )}
+                {isSalonEntry
+                  ? bi(
+                      'সেলুন বুকিং ও লাইভ সিরিয়াল অ্যাপে স্বাগতম।',
+                      'Welcome to the Salon Booking & Live Serial App.'
+                    )
+                  : bi(
+                      'প্রাকৃতিক বাংলা ও ইংরেজি কণ্ঠে যেকোনো লেখা শোনান।',
+                      'Speak any script in natural Bengali and global voices.'
+                    )}
               </h1>
 
               <p className="text-base sm:text-lg text-zinc-600 dark:text-zinc-300 leading-relaxed max-w-xl">
-                {bi(
-                  'প্রাকৃতিক কণ্ঠে বাংলা ও ইংরেজি ভয়েসওভার তৈরি করুন, পছন্দের ভয়েস কাস্টিং করুন এবং ক্রিস্টাল-ক্লিয়ার WAV অডিও ডাউনলোড করুন। বন্ধুদের রেফার করে প্রতিদিন ফ্রি কোটার সাথে প্রতি রেফারে +১০ ক্রেডিট জিতুন।',
-                  'Generate lifelike Bengali and global voiceovers, cast the right voice with AI, and export crystal-clear WAV audio. Earn +10 bonus credits for every friend referral on top of your daily free quota.'
-                )}
+                {isSalonEntry
+                  ? bi(
+                      'গুগল দিয়ে সাইন-ইন করলেই সরাসরি সেলুন বুকিং, লাইভ সিরিয়াল নাম্বার, ৫ মিনিট আগের নোটিফিকেশন এবং ডিজিটাল কমপ্লিট সিগনেচার পেজে চলে যাবেন।',
+                      'Sign in with Google to jump straight into Jagannath Salon booking, live serial queue tracking, 5-minute turn alerts, and digital completion signatures.'
+                    )
+                  : bi(
+                      'প্রাকৃতিক কণ্ঠে বাংলা ও ইংরেজি ভয়েসওভার তৈরি করুন, পছন্দের ভয়েস কাস্টিং করুন এবং ক্রিস্টাল-ক্লিয়ার WAV অডিও ডাউনলোড করুন। বন্ধুদের রেফার করে প্রতিদিন ফ্রি কোটার সাথে প্রতি রেফারে +১০ ক্রেডিট জিতুন।',
+                      'Generate lifelike Bengali and global voiceovers, cast the right voice with AI, and export crystal-clear WAV audio. Earn +10 bonus credits for every friend referral on top of your daily free quota.'
+                    )}
               </p>
 
               {error && (
@@ -474,7 +559,7 @@ const GoogleLoginGate: React.FC<GoogleLoginGateProps> = ({ isDarkMode, toggleThe
                   <span>{bi('ভয়েস স্যাম্পল শুনুন', 'Listen to Voice Samples')}</span>
                 </a>
 
-                <PWAInstallButton variant="hero" />
+                <PWAInstallButton variant="hero" appTarget={isSalonEntry ? 'salon' : 'studio'} />
               </div>
 
               <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
@@ -759,7 +844,7 @@ const GoogleLoginGate: React.FC<GoogleLoginGateProps> = ({ isDarkMode, toggleThe
                         />
                         <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-slate-950/20 to-transparent" />
                         <div className="absolute bottom-3 left-4 right-4 text-white">
-                          <p className="text-[11px] font-medium text-amber-200">
+                          <p className="text-xs font-medium text-amber-200">
                             {bi(album.titleEn, album.titleBn)}
                           </p>
                           <h3 className="text-lg font-serif font-medium">
@@ -829,7 +914,7 @@ const GoogleLoginGate: React.FC<GoogleLoginGateProps> = ({ isDarkMode, toggleThe
                       <h3 className="text-base font-serif font-medium text-slate-900 dark:text-white truncate">
                         {voice.name}
                       </h3>
-                      <span className="text-[11px] font-medium text-indigo-600 dark:text-amber-300 shrink-0">
+                      <span className="text-xs font-medium text-indigo-600 dark:text-amber-300 shrink-0">
                         {localizeGender(voice.analysis.gender, lang)} · {localizePitch(voice.pitch, lang)}
                       </span>
                     </div>
@@ -936,6 +1021,15 @@ const GoogleLoginGate: React.FC<GoogleLoginGateProps> = ({ isDarkMode, toggleThe
           </div>
         </section>
 
+        {/* Public Star Ratings & Customer Reviews Section (Visible Before Login) */}
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14 sm:py-20 border-t border-zinc-200/70 dark:border-zinc-800/70">
+          <SiteReviewsSection
+            user={null}
+            isAdmin={false}
+            onRequireSignIn={handleGoogleSignIn}
+          />
+        </div>
+
         {/* FAQ Accordion */}
         <section id="faq" className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-14 sm:py-20 border-t border-zinc-200/70 dark:border-zinc-800/70">
           <div className="mb-8 space-y-2">
@@ -988,10 +1082,10 @@ const GoogleLoginGate: React.FC<GoogleLoginGateProps> = ({ isDarkMode, toggleThe
       <footer className="border-t border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
           <div className="space-y-1">
-            <span className="text-base font-bold text-zinc-900 dark:text-white">
+            <span className="text-base sm:text-lg font-bold text-zinc-900 dark:text-white">
               {bi('শ্রাবণ গো', 'Srabon Go')}
             </span>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+            <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400">
               {bi(
                 'বহুভাষিক এআই ভয়েস স্টুডিও ও কাস্টিং লাইব্রেরি · © ২০২৬ শ্রাবণ গো — সর্বস্বত্ব সংরক্ষিত',
                 'Multilingual AI Voice Studio & Casting Library · © 2026 Srabon Go — All Rights Reserved'
@@ -999,7 +1093,9 @@ const GoogleLoginGate: React.FC<GoogleLoginGateProps> = ({ isDarkMode, toggleThe
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-5 text-xs font-medium text-zinc-600 dark:text-zinc-400">
+          <div className="flex flex-wrap items-center gap-5 text-xs sm:text-sm font-medium text-zinc-600 dark:text-zinc-400">
+            <SocialLinksRow socialLinks={socialLinks} variant="footer" />
+            <span aria-hidden="true" className="text-zinc-300 dark:text-zinc-700">|</span>
             <button
               type="button"
               onClick={() => setLegalTab('about')}

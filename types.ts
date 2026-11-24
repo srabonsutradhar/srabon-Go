@@ -123,6 +123,12 @@ export interface SalonConfig {
   hairColorTitle?: string;
   facialTitle?: string;
   comboTitle?: string;
+  haircutTitleBn?: string;
+  beardTrimTitleBn?: string;
+  shaveTitleBn?: string;
+  hairColorTitleBn?: string;
+  facialTitleBn?: string;
+  comboTitleBn?: string;
   bookingFee: number;
   address: string;
   phone: string;
@@ -293,5 +299,13 @@ export interface SiteReview {
   pageTag: SiteReviewPageTag;
   comment: string;
   createdAt?: any;
+  updatedAt?: any;
+}
+
+export interface SocialLinksConfig {
+  facebookUrl: string;
+  instagramUrl: string;
+  linkedinUrl: string;
+  youtubeUrl: string;
   updatedAt?: any;
 }

@@ -13,6 +13,12 @@ export default defineConfig(() => {
     },
     build: {
       target: 'esnext',
+      rollupOptions: {
+        input: {
+          main: path.resolve(__dirname, 'index.html'),
+          salon: path.resolve(__dirname, 'salon.html'),
+        },
+      },
     },
     plugins: [
       react(),
@@ -24,6 +30,12 @@ export default defineConfig(() => {
           'pwa-192x192.png',
           'pwa-512x512.png',
           'pwa-maskable-512x512.png',
+          'salon-icon.svg',
+          'salon-apple-touch-icon.png',
+          'salon-192x192.png',
+          'salon-512x512.png',
+          'salon-maskable-512x512.png',
+          'salon-manifest.webmanifest',
         ],
         manifest: {
           id: '/',
@@ -60,8 +72,8 @@ export default defineConfig(() => {
           ],
         },
         workbox: {
-          globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
-          navigateFallbackDenylist: [/^\/api\//, /^\/__\//],
+          globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2,webmanifest}'],
+          navigateFallbackDenylist: [/^\/api\//, /^\/__\//, /^\/salon/],
           runtimeCaching: [
             {
               urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
@@ -98,6 +110,16 @@ export default defineConfig(() => {
           type: 'module',
         },
       }),
+      {
+        name: 'preserve-salon-manifest',
+        enforce: 'post' as const,
+        transformIndexHtml(html: string, ctx: { filename?: string }) {
+          if (ctx?.filename?.endsWith('salon.html')) {
+            return html.replace(/<link rel="manifest" href="\/manifest\.webmanifest"\s*\/?>/g, '');
+          }
+          return html;
+        },
+      },
     ],
     resolve: {
       alias: {

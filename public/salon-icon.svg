@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <linearGradient id="salonBg" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#1c140e" />
+      <stop offset="100%" stop-color="#0f172a" />
+    </linearGradient>
+    <linearGradient id="salonGold" x1="96" y1="96" x2="416" y2="416" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#fde68a" />
+      <stop offset="50%" stop-color="#f59e0b" />
+      <stop offset="100%" stop-color="#d97706" />
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#salonBg)" />
+  <circle cx="256" cy="256" r="196" stroke="url(#salonGold)" stroke-width="14" stroke-opacity="0.92" />
+  <circle cx="256" cy="256" r="168" stroke="#d97706" stroke-width="3" stroke-opacity="0.45" />
+  <g stroke="url(#salonGold)" stroke-width="18" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="182" cy="326" r="34" />
+    <circle cx="330" cy="326" r="34" />
+    <path d="M206 300 L342 152" />
+    <path d="M306 300 L170 152" />
+  </g>
+  <circle cx="256" cy="245" r="14" fill="#ffffff" />
+</svg>

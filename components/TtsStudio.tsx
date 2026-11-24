@@ -920,7 +920,7 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
                             : 'bg-zinc-50 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-700'
                         }`}
                       >
-                        {lang === 'bn' ? preset.labelBn : preset.labelEn}
+                        {bi(preset.labelBn, preset.labelEn)}
                       </button>
                     );
                   })}

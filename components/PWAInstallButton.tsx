@@ -2,27 +2,39 @@
  * © 2026 Srabon Go — All Rights Reserved.
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
+  Check,
   CheckCircle2,
+  Copy,
   Download,
   ExternalLink,
+  Scissors,
   ShieldCheck,
   Smartphone,
   Sparkles,
   WifiOff,
   X,
 } from 'lucide-react';
-import { useLanguage } from '../utils/i18n';
+import { copyTextSafely, useLanguage } from '../utils/i18n';
 import { usePWAInstall } from '../utils/usePWAInstall';
 
 interface PWAInstallButtonProps {
   variant?: 'menu' | 'hero' | 'card' | 'footer';
+  appTarget?: 'studio' | 'salon';
   onActionTaken?: () => void;
+}
+
+export function isOnSalonAppEntry(): boolean {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return false;
+  const path = window.location.pathname.toLowerCase();
+  const entry = document.getElementById('root')?.getAttribute('data-entry');
+  return path === '/salon' || path === '/salon/' || path === '/salon.html' || entry === 'salon';
 }
 
 export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
   variant = 'hero',
+  appTarget = 'studio',
   onActionTaken,
 }) => {
   const { bi } = useLanguage();
@@ -36,6 +48,19 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
   } = usePWAInstall();
   const [showGuideModal, setShowGuideModal] = useState(false);
   const [installing, setInstalling] = useState(false);
+  const [copiedSalonLink, setCopiedSalonLink] = useState(false);
+  const copyTimerRef = useRef<number | null>(null);
+
+  const isSalonTarget = appTarget === 'salon';
+  const onSalonEntry = isOnSalonAppEntry();
+
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current !== null) {
+        window.clearTimeout(copyTimerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!showGuideModal) return;
@@ -46,18 +71,23 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [showGuideModal]);
 
-  if (isInstalled) {
+  if (isInstalled && (!isSalonTarget || onSalonEntry)) {
     return null;
   }
 
-  const safeOpenUrl =
-    typeof window !== 'undefined'
-      ? `${window.location.origin}${window.location.pathname}${window.location.search}`
-      : '/';
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  const salonAppUrl = origin ? `${origin}/salon` : '/salon';
+  const safeOpenUrl = isSalonTarget
+    ? salonAppUrl
+    : typeof window !== 'undefined'
+    ? `${origin}${window.location.pathname}${window.location.search}`
+    : '/';
+
+  const canPromptNativeForTarget = isInstallable && (!isSalonTarget || onSalonEntry);
 
   const handleInstallClick = async () => {
     onActionTaken?.();
-    if (isInstallable) {
+    if (canPromptNativeForTarget) {
       setInstalling(true);
       try {
         const accepted = await install();
@@ -72,6 +102,19 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
     setShowGuideModal(true);
   };
 
+  const handleCopySalonUrl = async () => {
+    const ok = await copyTextSafely(salonAppUrl);
+    if (ok) {
+      setCopiedSalonLink(true);
+      if (copyTimerRef.current !== null) {
+        window.clearTimeout(copyTimerRef.current);
+      }
+      copyTimerRef.current = window.setTimeout(() => {
+        setCopiedSalonLink(false);
+      }, 2200);
+    }
+  };
+
   return (
     <>
       {variant === 'menu' ? (
@@ -84,7 +127,9 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
           <span className="flex items-center gap-3">
             <Smartphone size={16} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
             <span>
-              {isInstallable
+              {isSalonTarget
+                ? bi('সেলুন অ্যান্ড্রয়েড অ্যাপ', 'Salon Android App')
+                : canPromptNativeForTarget
                 ? bi('অ্যান্ড্রয়েড অ্যাপ ইনস্টল করুন', 'Install Android App')
                 : bi('অ্যান্ড্রয়েড মোবাইল অ্যাপ ডাউনলোড', 'Download Android App')}
             </span>
@@ -96,11 +141,19 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
           type="button"
           onClick={handleInstallClick}
           disabled={installing}
-          className="inline-flex items-center justify-center gap-2.5 px-6 py-3.5 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 hover:from-emerald-500 hover:via-teal-500 hover:to-cyan-500 text-white text-sm font-bold shadow-lg shadow-emerald-600/25 transition-all whitespace-nowrap shrink-0"
+          className={`inline-flex items-center justify-center gap-2.5 px-6 py-3.5 rounded-2xl text-white text-sm font-bold shadow-lg transition-all whitespace-nowrap shrink-0 min-h-[46px] ${
+            isSalonTarget
+              ? 'bg-gradient-to-r from-amber-600 via-orange-600 to-amber-500 hover:from-amber-500 hover:via-orange-500 hover:to-amber-400 shadow-amber-600/25'
+              : 'bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 hover:from-emerald-500 hover:via-teal-500 hover:to-cyan-500 shadow-emerald-600/25'
+          }`}
         >
           <Download size={17} />
           <span>
-            {isInstallable
+            {isSalonTarget
+              ? canPromptNativeForTarget
+                ? bi('সেলুন অ্যান্ড্রয়েড অ্যাপ ইনস্টল করুন', 'Install Salon Android App')
+                : bi('আলাদা সেলুন অ্যাপ ডাউনলোড / ইনস্টল', 'Get Standalone Salon App')
+              : canPromptNativeForTarget
               ? bi('অ্যান্ড্রয়েড অ্যাপ ইনস্টল করুন', 'Install Android App Now')
               : bi('অ্যান্ড্রয়েড অ্যাপ ডাউনলোড করুন', 'Download Android App')}
           </span>
@@ -113,7 +166,7 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
           className="inline-flex items-center gap-1.5 text-emerald-700 dark:text-emerald-400 hover:underline font-semibold"
         >
           <Smartphone size={13} />
-          <span>{bi('অ্যান্ড্রয়েড অ্যাপ', 'Android App')}</span>
+          <span>{isSalonTarget ? bi('সেলুন অ্যাপ', 'Salon App') : bi('অ্যান্ড্রয়েড অ্যাপ', 'Android App')}</span>
         </button>
       ) : (
         <button
@@ -124,7 +177,9 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
         >
           <Smartphone size={16} />
           <span>
-            {isInstallable
+            {isSalonTarget
+              ? bi('সেলুন অ্যাপ পান', 'Get Salon App')
+              : canPromptNativeForTarget
               ? bi('অ্যান্ড্রয়েড অ্যাপ ইনস্টল', 'Install Android App')
               : bi('অ্যান্ড্রয়েড অ্যাপ পান', 'Get Android App')}
           </span>
@@ -143,27 +198,43 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
             onClick={() => setShowGuideModal(false)}
           />
 
-          <div className="relative w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 border border-emerald-200 dark:border-slate-700 shadow-2xl p-6 space-y-4 animate-slide-up">
+          <div className="relative w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 border border-emerald-200 dark:border-slate-700 shadow-2xl p-6 space-y-4 animate-slide-up max-h-[90vh] overflow-y-auto">
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-600 via-blue-600 to-amber-500 text-white flex items-center justify-center shadow-lg shrink-0">
-                  <Smartphone size={22} />
+                <div
+                  className={`w-12 h-12 rounded-2xl text-white flex items-center justify-center shadow-lg shrink-0 ${
+                    isSalonTarget
+                      ? 'bg-gradient-to-br from-amber-600 via-orange-600 to-stone-900'
+                      : 'bg-gradient-to-br from-indigo-600 via-blue-600 to-amber-500'
+                  }`}
+                >
+                  {isSalonTarget ? <Scissors size={22} /> : <Smartphone size={22} />}
                 </div>
                 <div>
                   <h3
                     id="pwa-install-modal-title"
                     className="text-base sm:text-lg font-serif font-semibold text-slate-900 dark:text-white"
                   >
-                    {bi(
-                      'শ্রাবণ গো · অ্যান্ড্রয়েড মোবাইল অ্যাপ',
-                      'Srabon Go · Android Mobile App'
-                    )}
+                    {isSalonTarget
+                      ? bi(
+                          'জগন্নাথ সেলুন · আলাদা অ্যান্ড্রয়েড অ্যাপ',
+                          'Jagannath Salon · Standalone Android App'
+                        )
+                      : bi(
+                          'শ্রাবণ গো · অ্যান্ড্রয়েড মোবাইল অ্যাপ',
+                          'Srabon Go · Android Mobile App'
+                        )}
                   </h3>
-                  <p className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
-                    {bi(
-                      'ইনস্টলযোগ্য অফলাইন-রেডি মোবাইল অ্যাপ (WebAPK)',
-                      'Installable Offline-Ready Mobile App (WebAPK)'
-                    )}
+                  <p className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                    {isSalonTarget
+                      ? bi(
+                          'ওপেন করলেই সরাসরি সেলুন ও সিরিয়াল পেজে যাবে',
+                          'Opens straight to Salon Booking & Serial Queue'
+                        )
+                      : bi(
+                          'ইনস্টলযোগ্য অফলাইন-রেডি মোবাইল অ্যাপ (WebAPK)',
+                          'Installable Offline-Ready Mobile App (WebAPK)'
+                        )}
                   </p>
                 </div>
               </div>
@@ -178,7 +249,7 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
             </div>
 
             {/* App Feature Highlights */}
-            <div className="grid grid-cols-3 gap-2 text-[11px]">
+            <div className="grid grid-cols-3 gap-2 text-xs">
               <div className="p-2.5 rounded-xl bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-200/70 dark:border-emerald-900 text-center space-y-1">
                 <CheckCircle2 size={15} className="mx-auto text-emerald-600 dark:text-emerald-400" />
                 <p className="font-semibold text-slate-800 dark:text-slate-200">
@@ -188,7 +259,7 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
               <div className="p-2.5 rounded-xl bg-indigo-50/80 dark:bg-indigo-950/40 border border-indigo-200/70 dark:border-indigo-900 text-center space-y-1">
                 <WifiOff size={15} className="mx-auto text-indigo-600 dark:text-indigo-400" />
                 <p className="font-semibold text-slate-800 dark:text-slate-200">
-                  {bi('অফলাইন ক্যাশ', 'Offline Ready')}
+                  {isSalonTarget ? bi('সরাসরি সেলুন পেজ', 'Direct Salon Entry') : bi('অফলাইন ক্যাশ', 'Offline Ready')}
                 </p>
               </div>
               <div className="p-2.5 rounded-xl bg-amber-50/80 dark:bg-amber-950/40 border border-amber-200/70 dark:border-amber-900 text-center space-y-1">
@@ -199,7 +270,47 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
               </div>
             </div>
 
-            {isEmbeddedIframe && (
+            {isSalonTarget && (
+              <div className="p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-xs text-amber-900 dark:text-amber-200 space-y-2.5 leading-relaxed">
+                <p className="font-semibold">
+                  {bi(
+                    'আলাদা সেলুন অ্যাপ লিংক (/salon):',
+                    'Dedicated Salon App URL (/salon):'
+                  )}
+                </p>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-amber-200/80 dark:border-amber-800 text-xs font-mono truncate">
+                    {salonAppUrl}
+                  </code>
+                  <button
+                    type="button"
+                    onClick={handleCopySalonUrl}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-semibold shrink-0 transition-colors"
+                  >
+                    {copiedSalonLink ? <Check size={13} /> : <Copy size={13} />}
+                    <span>{copiedSalonLink ? bi('কপিড', 'Copied') : bi('কপি', 'Copy')}</span>
+                  </button>
+                </div>
+                {!onSalonEntry && (
+                  <a
+                    href={salonAppUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full inline-flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold shadow-sm transition-colors"
+                  >
+                    <ExternalLink size={15} />
+                    <span>
+                      {bi(
+                        'সেলুন অ্যাপ মোড ওপেন ও ইনস্টল করুন',
+                        'Open Standalone Salon App & Install'
+                      )}
+                    </span>
+                  </a>
+                )}
+              </div>
+            )}
+
+            {isEmbeddedIframe && (!isSalonTarget || onSalonEntry) && (
               <div className="p-3.5 rounded-2xl bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-200 dark:border-indigo-800 text-xs text-indigo-800 dark:text-indigo-200 space-y-2 leading-relaxed">
                 <p className="font-semibold flex items-center gap-1.5">
                   <Sparkles size={14} className="shrink-0" />
@@ -242,8 +353,12 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
                   </p>
                   <p>
                     {bi(
-                      '১. Safari ব্রাউজারের নিচের Share আইকনে ট্যাপ করুন।',
-                      '1. Tap the Share icon in the Safari toolbar.'
+                      isSalonTarget
+                        ? '১. উপরের সেলুন অ্যাপ লিংক (/salon) Safari ব্রাউজারে ওপেন করে নিচের Share আইকনে ট্যাপ করুন।'
+                        : '১. Safari ব্রাউজারের নিচের Share আইকনে ট্যাপ করুন।',
+                      isSalonTarget
+                        ? '1. Open the Salon App link (/salon) in Safari and tap the Share icon.'
+                        : '1. Tap the Share icon in the Safari toolbar.'
                     )}
                   </p>
                   <p>
@@ -262,8 +377,12 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
                   </p>
                   <p>
                     {bi(
-                      '১. আপনার ফোনের Chrome ব্রাউজারে এই ওয়েবসাইটটি ওপেন করুন।',
-                      '1. Open this website in Google Chrome on your Android phone.'
+                      isSalonTarget
+                        ? '১. উপরের বাটনে ট্যাপ করে আপনার ফোনের Chrome ব্রাউজারে /salon লিংকটি ওপেন করুন।'
+                        : '১. আপনার ফোনের Chrome ব্রাউজারে এই ওয়েবসাইটটি ওপেন করুন।',
+                      isSalonTarget
+                        ? '1. Tap the button above to open the /salon link in Google Chrome on your Android phone.'
+                        : '1. Open this website in Google Chrome on your Android phone.'
                     )}
                   </p>
                   <p>
@@ -274,8 +393,12 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
                   </p>
                   <p>
                     {bi(
-                      '৩. কনফার্ম করলে কয়েক সেকেন্ডেই আপনার অ্যান্ড্রয়েড ফোনে অ্যাপ আইকন ডাউনলোড ও ইনস্টল হয়ে যাবে।',
-                      '3. Confirm "Install" — the Srabon Go Android app downloads and appears on your home screen & app drawer.'
+                      isSalonTarget
+                        ? '৩. ইনস্টল করলে আপনার ফোনে আলাদা "Salon App" আইকন তৈরি হবে — ট্যাপ করলেই সরাসরি সেলুন বুকিং পেজ চালু হবে!'
+                        : '৩. কনফার্ম করলে কয়েক সেকেন্ডেই আপনার অ্যান্ড্রয়েড ফোনে অ্যাপ আইকন ডাউনলোড ও ইনস্টল হয়ে যাবে।',
+                      isSalonTarget
+                        ? '3. Confirm "Install" — a dedicated "Salon App" icon appears on your Android home screen and opens directly to the Salon Booking page!'
+                        : '3. Confirm "Install" — the Srabon Go Android app downloads and appears on your home screen & app drawer.'
                     )}
                   </p>
                 </>
@@ -283,7 +406,7 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
             </div>
 
             <div className="flex items-center gap-2 pt-1">
-              {isInstallable && (
+              {canPromptNativeForTarget && (
                 <button
                   type="button"
                   onClick={handleInstallClick}
@@ -298,7 +421,7 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
                 type="button"
                 onClick={() => setShowGuideModal(false)}
                 className={`${
-                  isInstallable ? 'px-5' : 'w-full'
+                  canPromptNativeForTarget ? 'px-5' : 'w-full'
                 } py-3 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs sm:text-sm font-semibold transition-colors`}
               >
                 {bi('বুঝেছি / বন্ধ করুন', 'Got It / Close')}

@@ -64,7 +64,7 @@ const AdBanner: React.FC<AdBannerProps> = ({
 
   return (
     <div className={`w-full flex flex-col items-center justify-center ${className}`}>
-      <span className="text-[10px] uppercase tracking-widest text-zinc-400 dark:text-zinc-600 mb-1">
+      <span className="text-xs uppercase tracking-widest text-zinc-400 dark:text-zinc-600 mb-1">
         {bi('বিজ্ঞাপন', 'Advertisement')}
       </span>
       <div className="w-full max-w-4xl overflow-hidden rounded-2xl bg-zinc-50/70 dark:bg-zinc-900/50 border border-zinc-200/60 dark:border-zinc-800/60 min-h-[90px] flex items-center justify-center">

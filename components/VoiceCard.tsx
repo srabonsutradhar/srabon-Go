@@ -101,7 +101,7 @@ const VoiceCard: React.FC<VoiceCardProps> = ({
 
   return (
     <div
-      className={`group relative bg-white/95 dark:bg-[#0f172a]/95 border transition-all duration-200 flex flex-col sm:flex-row h-auto sm:h-32 cursor-pointer rounded-2xl overflow-hidden ${
+      className={`group relative bg-white/95 dark:bg-[#0f172a]/95 border transition-all duration-200 flex flex-col sm:flex-row h-auto sm:h-36 cursor-pointer rounded-2xl overflow-hidden ${
         isPlaying
           ? `${visual.cardBorderActiveClass} shadow-lg`
           : 'border-slate-200/90 dark:border-slate-800 hover:border-indigo-300 dark:hover:border-indigo-700 shadow-sm hover:shadow-md'
@@ -192,7 +192,7 @@ const VoiceCard: React.FC<VoiceCardProps> = ({
               <h3 className="text-lg font-serif font-medium text-slate-900 dark:text-white tracking-tight truncate">
                 {voice.name}
               </h3>
-              <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 truncate">
+              <p className="text-xs font-medium text-slate-500 dark:text-slate-400 truncate">
                 {genderLabel} · {pitchLabel} · {albumLabel}
               </p>
             </div>
@@ -247,7 +247,7 @@ const VoiceCard: React.FC<VoiceCardProps> = ({
                   }
                 }}
                 aria-pressed={Boolean(compareSlot)}
-                className={`inline-flex items-center gap-1 px-2 py-1.5 rounded-lg text-[11px] font-semibold border transition-all whitespace-nowrap ${
+                className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-all whitespace-nowrap ${
                   compareSlot
                     ? 'bg-amber-500 text-slate-950 border-amber-500 shadow-sm'
                     : 'bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-indigo-400 hover:text-indigo-700 dark:hover:text-amber-300'
@@ -269,7 +269,7 @@ const VoiceCard: React.FC<VoiceCardProps> = ({
                   e.stopPropagation();
                   onUseInStudio(voice.name);
                 }}
-                className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-all whitespace-nowrap ${visual.studioButtonClass}`}
+                className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${visual.studioButtonClass}`}
                 title={bi(`${voice.name} দিয়ে স্ক্রিপ্ট বলান`, `Speak script with ${voice.name}`)}
               >
                 <AudioLines size={12} />

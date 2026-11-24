@@ -46,6 +46,15 @@ export interface SalonServiceMeta {
     | 'facialTitle'
     | 'comboTitle'
   >;
+  titleBnField: keyof Pick<
+    SalonConfig,
+    | 'haircutTitleBn'
+    | 'beardTrimTitleBn'
+    | 'shaveTitleBn'
+    | 'hairColorTitleBn'
+    | 'facialTitleBn'
+    | 'comboTitleBn'
+  >;
 }
 
 export const SALON_SERVICES: SalonServiceMeta[] = [
@@ -58,6 +67,7 @@ export const SALON_SERVICES: SalonServiceMeta[] = [
     description: 'ফেড, আন্ডারকাট, ক্রপ বা ক্লাসিক জেন্টস হেয়ারকাট সাথে ফিনিশিং সেটিং।',
     priceField: 'haircutPrice',
     titleField: 'haircutTitle',
+    titleBnField: 'haircutTitleBn',
   },
   {
     key: 'beard',
@@ -68,6 +78,7 @@ export const SALON_SERVICES: SalonServiceMeta[] = [
     description: 'নিখুঁত রেজর লাইন-আপ, শেপিং এবং বিয়ার্ড অয়েল ম্যাসাজ।',
     priceField: 'beardTrimPrice',
     titleField: 'beardTrimTitle',
+    titleBnField: 'beardTrimTitleBn',
   },
   {
     key: 'shave',
@@ -78,6 +89,7 @@ export const SALON_SERVICES: SalonServiceMeta[] = [
     description: 'স্টিম টাওয়েল, ডাবল-ব্লেড স্মুথ শেভ এবং আফটার-শেভ কুলিং জেল।',
     priceField: 'shavePrice',
     titleField: 'shaveTitle',
+    titleBnField: 'shaveTitleBn',
   },
   {
     key: 'color',
@@ -88,6 +100,7 @@ export const SALON_SERVICES: SalonServiceMeta[] = [
     description: 'প্রাকৃতিক কালো বা স্টাইলিশ শেড হেয়ার কালার এবং কন্ডিশনিং ওয়াশ।',
     priceField: 'hairColorPrice',
     titleField: 'hairColorTitle',
+    titleBnField: 'hairColorTitleBn',
   },
   {
     key: 'facial',
@@ -98,6 +111,7 @@ export const SALON_SERVICES: SalonServiceMeta[] = [
     description: 'ডিপ পোর ক্লিনজিং, ডি-ট্যান স্ক্রাব এবং ব্রাইটেনিং ফেস মাস্ক।',
     priceField: 'facialPrice',
     titleField: 'facialTitle',
+    titleBnField: 'facialTitleBn',
   },
   {
     key: 'combo',
@@ -108,6 +122,7 @@ export const SALON_SERVICES: SalonServiceMeta[] = [
     description: 'হেয়ারকাট + দাড়ি ট্রিম/শেভ + শ্যাম্পু ওয়াশ + হেড ও ফেস ম্যাসাজ।',
     priceField: 'comboPrice',
     titleField: 'comboTitle',
+    titleBnField: 'comboTitleBn',
   },
 ];
 
@@ -168,6 +183,12 @@ export function sanitizeSalonConfig(raw: any): SalonConfig {
     hairColorTitle: safeTitle(raw?.hairColorTitle),
     facialTitle: safeTitle(raw?.facialTitle),
     comboTitle: safeTitle(raw?.comboTitle),
+    haircutTitleBn: safeTitle(raw?.haircutTitleBn),
+    beardTrimTitleBn: safeTitle(raw?.beardTrimTitleBn),
+    shaveTitleBn: safeTitle(raw?.shaveTitleBn),
+    hairColorTitleBn: safeTitle(raw?.hairColorTitleBn),
+    facialTitleBn: safeTitle(raw?.facialTitleBn),
+    comboTitleBn: safeTitle(raw?.comboTitleBn),
     bookingFee: safeNum(raw?.bookingFee, DEFAULT_SALON_CONFIG.bookingFee),
     address:
       typeof raw?.address === 'string'
@@ -228,36 +249,51 @@ export function buildSalonWhatsAppUrl(payload: WhatsAppBookingPayload): string |
   const waNumber = normalizeWhatsAppNumber(payload.adminPhone);
   if (!waNumber) return null;
 
-  const isEn = payload.lang === 'en';
-  const lines = isEn
-    ? [
-        `Hello, sending a new booking request for *${payload.salonName}*:`,
-        '',
-        `• Customer Name: ${payload.customerName.trim() || 'Guest'}`,
-        ...(payload.customerPhone?.trim() ? [`• Mobile Number: ${payload.customerPhone.trim()}`] : []),
-        `• Service: ${payload.serviceTitle}`,
-        `• Date: ${payload.bookingDate}`,
-        `• Time: ${payload.timeSlot}`,
-        ...(payload.couponCode
-          ? [`• AI Coupon: ${payload.couponCode}${payload.discountLabel ? ` (${payload.discountLabel})` : ''}`]
-          : []),
-        ...(payload.totalPriceLabel ? [`• Total Bill: ${payload.totalPriceLabel}`] : []),
-        ...(payload.notes?.trim() ? [`• Notes: ${payload.notes.trim()}`] : []),
-      ]
-    : [
-        `নমস্কার, *${payload.salonName}*-এ একটি নতুন বুকিং রিকোয়েস্ট পাঠাচ্ছি:`,
-        '',
-        `• কাস্টমারের নাম: ${payload.customerName.trim() || 'Guest'}`,
-        ...(payload.customerPhone?.trim() ? [`• মোবাইল নম্বর: ${payload.customerPhone.trim()}`] : []),
-        `• সার্ভিস: ${payload.serviceTitle}`,
-        `• তারিখ: ${payload.bookingDate}`,
-        `• সময়: ${payload.timeSlot}`,
-        ...(payload.couponCode
-          ? [`• AI কুপন: ${payload.couponCode}${payload.discountLabel ? ` (${payload.discountLabel})` : ''}`]
-          : []),
-        ...(payload.totalPriceLabel ? [`• মোট বিল: ${payload.totalPriceLabel}`] : []),
-        ...(payload.notes?.trim() ? [`• নোট: ${payload.notes.trim()}`] : []),
-      ];
+  const lines =
+    payload.lang === 'pt'
+      ? [
+          `Olá, enviando uma nova solicitação de agendamento para *${payload.salonName}*:`,
+          '',
+          `• Nome do Cliente: ${payload.customerName.trim() || 'Convidado'}`,
+          ...(payload.customerPhone?.trim() ? [`• Celular: ${payload.customerPhone.trim()}`] : []),
+          `• Serviço: ${payload.serviceTitle}`,
+          `• Data: ${payload.bookingDate}`,
+          `• Horário: ${payload.timeSlot}`,
+          ...(payload.couponCode
+            ? [`• Cupom IA: ${payload.couponCode}${payload.discountLabel ? ` (${payload.discountLabel})` : ''}`]
+            : []),
+          ...(payload.totalPriceLabel ? [`• Total: ${payload.totalPriceLabel}`] : []),
+          ...(payload.notes?.trim() ? [`• Observações: ${payload.notes.trim()}`] : []),
+        ]
+      : payload.lang === 'en'
+      ? [
+          `Hello, sending a new booking request for *${payload.salonName}*:`,
+          '',
+          `• Customer Name: ${payload.customerName.trim() || 'Guest'}`,
+          ...(payload.customerPhone?.trim() ? [`• Mobile Number: ${payload.customerPhone.trim()}`] : []),
+          `• Service: ${payload.serviceTitle}`,
+          `• Date: ${payload.bookingDate}`,
+          `• Time: ${payload.timeSlot}`,
+          ...(payload.couponCode
+            ? [`• AI Coupon: ${payload.couponCode}${payload.discountLabel ? ` (${payload.discountLabel})` : ''}`]
+            : []),
+          ...(payload.totalPriceLabel ? [`• Total Bill: ${payload.totalPriceLabel}`] : []),
+          ...(payload.notes?.trim() ? [`• Notes: ${payload.notes.trim()}`] : []),
+        ]
+      : [
+          `নমস্কার, *${payload.salonName}*-এ একটি নতুন বুকিং রিকোয়েস্ট পাঠাচ্ছি:`,
+          '',
+          `• কাস্টমারের নাম: ${payload.customerName.trim() || 'Guest'}`,
+          ...(payload.customerPhone?.trim() ? [`• মোবাইল নম্বর: ${payload.customerPhone.trim()}`] : []),
+          `• সার্ভিস: ${payload.serviceTitle}`,
+          `• তারিখ: ${payload.bookingDate}`,
+          `• সময়: ${payload.timeSlot}`,
+          ...(payload.couponCode
+            ? [`• AI কুপন: ${payload.couponCode}${payload.discountLabel ? ` (${payload.discountLabel})` : ''}`]
+            : []),
+          ...(payload.totalPriceLabel ? [`• মোট বিল: ${payload.totalPriceLabel}`] : []),
+          ...(payload.notes?.trim() ? [`• নোট: ${payload.notes.trim()}`] : []),
+        ];
 
   return `https://wa.me/${waNumber}?text=${encodeURIComponent(lines.join('\n'))}`;
 }

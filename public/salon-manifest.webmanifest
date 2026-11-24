@@ -1,0 +1,33 @@
+{
+  "id": "/salon",
+  "name": "Jagannath Salon – Booking & Serial Queue",
+  "short_name": "Salon App",
+  "description": "Direct online appointment booking, live serial queue tracker, 5-minute turn alerts, and completion signature app for Jagannath gents parlour and salon.",
+  "theme_color": "#b45309",
+  "background_color": "#17110d",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "start_url": "/salon",
+  "scope": "/salon",
+  "categories": ["lifestyle", "shopping", "utilities"],
+  "icons": [
+    {
+      "src": "/salon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/salon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/salon-maskable-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

@@ -363,6 +363,42 @@
           "minLength": 2,
           "maxLength": 100
         },
+        "haircutTitleBn": {
+          "type": "string",
+          "description": "Admin-customizable Bengali display name for Haircut service.",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "beardTrimTitleBn": {
+          "type": "string",
+          "description": "Admin-customizable Bengali display name for Beard Trim service.",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "shaveTitleBn": {
+          "type": "string",
+          "description": "Admin-customizable Bengali display name for Shave service.",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "hairColorTitleBn": {
+          "type": "string",
+          "description": "Admin-customizable Bengali display name for Hair Color service.",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "facialTitleBn": {
+          "type": "string",
+          "description": "Admin-customizable Bengali display name for Facial service.",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "comboTitleBn": {
+          "type": "string",
+          "description": "Admin-customizable Bengali display name for Combo service.",
+          "minLength": 2,
+          "maxLength": 100
+        },
         "bookingFee": {
           "type": "integer",
           "description": "Slot booking fee added to service price."
@@ -1100,6 +1136,45 @@
         "createdAt",
         "updatedAt"
       ]
+    },
+    "SocialLinksConfig": {
+      "title": "SocialLinksConfig",
+      "description": "Public non-PII social media profile URLs for Srabon Go configured in Admin Panel and readable before and after sign-in.",
+      "type": "object",
+      "properties": {
+        "facebookUrl": {
+          "type": "string",
+          "description": "Public Facebook HTTPS URL (or empty if hidden).",
+          "maxLength": 300
+        },
+        "instagramUrl": {
+          "type": "string",
+          "description": "Public Instagram HTTPS URL (or empty if hidden).",
+          "maxLength": 300
+        },
+        "linkedinUrl": {
+          "type": "string",
+          "description": "Public LinkedIn HTTPS URL (or empty if hidden).",
+          "maxLength": 300
+        },
+        "youtubeUrl": {
+          "type": "string",
+          "description": "Public YouTube HTTPS URL (or empty if hidden).",
+          "maxLength": 300
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when social links were last updated by Admin."
+        }
+      },
+      "required": [
+        "facebookUrl",
+        "instagramUrl",
+        "linkedinUrl",
+        "youtubeUrl",
+        "updatedAt"
+      ]
     }
   },
   "firestore": {
@@ -1179,7 +1254,13 @@
       "schema": {
         "$ref": "#/entities/SiteReview"
       },
-      "description": "Public non-PII star ratings and written user reviews visible across all signed-in users."
+      "description": "Public non-PII star ratings and written user reviews readable both before and after sign-in."
+    },
+    "/publicConfig/{configId}": {
+      "schema": {
+        "$ref": "#/entities/SocialLinksConfig"
+      },
+      "description": "Public non-PII website configuration (such as social media URLs) readable before and after sign-in and editable only by Admin."
     },
     "/salonQueues/{dateId}": {
       "schema": {

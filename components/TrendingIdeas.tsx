@@ -158,7 +158,8 @@ const TrendingIdeas: React.FC<TrendingIdeasProps> = ({
   const { lang, bi } = useLanguage();
 
   const handleCopyScript = async (idea: StarterIdeaItem) => {
-    const scriptText = lang === 'en' && idea.scriptEn ? idea.scriptEn : idea.script;
+    const scriptText =
+      (lang === 'en' || lang === 'pt') && idea.scriptEn ? idea.scriptEn : idea.script;
     const ok = await copyTextSafely(scriptText);
     if (ok) {
       setCopiedId(idea.id);
@@ -514,11 +515,22 @@ const TrendingIdeas: React.FC<TrendingIdeasProps> = ({
         {/* Ideas List */}
         <div className="grid grid-cols-1 gap-4">
           {ideas.map((idea, index) => {
-            const displayTitle = lang === 'en' && idea.titleEn ? idea.titleEn : idea.title;
-            const displayCategory = lang === 'bn' && idea.categoryBn ? idea.categoryBn : idea.category;
-            const displayAngle = lang === 'bn' && idea.angleBn ? idea.angleBn : idea.angle;
+            const displayTitle =
+              lang === 'bn'
+                ? idea.title
+                : bi(idea.title, idea.titleEn || idea.title);
+            const displayCategory =
+              lang === 'bn' && idea.categoryBn
+                ? idea.categoryBn
+                : bi(idea.categoryBn || idea.category, idea.category);
+            const displayAngle =
+              lang === 'bn' && idea.angleBn
+                ? idea.angleBn
+                : bi(idea.angleBn || idea.angle, idea.angle);
             const displayScript =
-              !hasGeneratedLive && lang === 'en' && idea.scriptEn ? idea.scriptEn : idea.script;
+              !hasGeneratedLive && (lang === 'en' || lang === 'pt') && idea.scriptEn
+                ? idea.scriptEn
+                : idea.script;
 
             return (
             <article

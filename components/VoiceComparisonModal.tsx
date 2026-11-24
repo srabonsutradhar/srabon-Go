@@ -400,7 +400,7 @@ const VoiceComparisonModal: React.FC<VoiceComparisonModalProps> = ({
 
           {/* Interactive Timeline Scrubber */}
           <div className="space-y-1.5">
-            <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 font-mono tabular-nums">
+            <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 font-mono tabular-nums">
               <span>{formatTime(prog.currentTime)}</span>
               <span>{prog.duration > 0 ? formatTime(prog.duration) : bi('স্যাম্পল ক্লিপ', 'Sample Clip')}</span>
             </div>
@@ -630,7 +630,7 @@ const VoiceComparisonModal: React.FC<VoiceComparisonModalProps> = ({
                   <span>{bi('সরাসরি বৈশিষ্ট্য তুলনা', 'Direct Attribute Comparison')}</span>
                 </div>
                 {areEqualAttributes && (
-                  <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                  <span className="text-xs text-slate-500 dark:text-slate-400">
                     {areEqualAttributes.sameGender && areEqualAttributes.samePitch
                       ? bi('একই ধরনের ভোকাল রেঞ্জ — টোন ও বলার ভঙ্গিতে নজর দিন', 'Similar vocal range — focus on timbre & delivery')
                       : bi('ভিন্নধর্মী ভোকাল প্রোফাইল', 'Contrasting vocal profiles')}

@@ -21,6 +21,7 @@ import {
   Phone,
   Scissors,
   Shield,
+  Smartphone,
   Sparkles,
   Ticket,
   Users,
@@ -69,11 +70,13 @@ import { generateAiSalonCoupon } from '../utils/salonCoupon';
 import { STUDIO_MEDIA } from '../utils/studioAlbums';
 import {
   copyTextSafely,
+  formatBookingCreatedTimestamp,
   localizeBookingStatus,
   localizeSalonService,
   useLanguage,
 } from '../utils/i18n';
 import CompletionSignatureModal from './CompletionSignatureModal';
+import PWAInstallButton from './PWAInstallButton';
 
 interface SalonBookingPageProps {
   user: User;
@@ -175,6 +178,8 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
   const [couponFeedback, setCouponFeedback] = useState<string | null>(null);
   const [applyCoupon, setApplyCoupon] = useState(false);
   const [copiedCoupon, setCopiedCoupon] = useState(false);
+  const [copiedSalonAppLink, setCopiedSalonAppLink] = useState(false);
+  const copiedSalonAppTimerRef = useRef<number | null>(null);
 
   const isEmailVerified = Boolean(user.emailVerified);
   const canApplyCoupon =
@@ -1035,6 +1040,61 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
           </div>
         </section>
 
+        {/* Dedicated Standalone Salon Android App Card */}
+        <section className="rounded-3xl bg-white dark:bg-zinc-900 border border-amber-200/80 dark:border-amber-800/60 p-5 sm:p-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-start gap-3.5 max-w-2xl">
+            <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-amber-600 via-orange-600 to-stone-900 text-white flex items-center justify-center shadow-md shrink-0">
+              <Smartphone size={20} />
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400">
+                {bi('আলাদা অ্যান্ড্রয়েড সেলুন অ্যাপ', 'Dedicated Android Salon App')}
+              </p>
+              <h2 className="text-base sm:text-lg font-serif font-medium text-zinc-900 dark:text-white">
+                {bi(
+                  'এক ট্যাপেই সরাসরি সেলুন বুকিং ও সিরিয়াল পেজে যান',
+                  'Open Directly to the Salon Booking & Serial App'
+                )}
+              </h2>
+              <p className="text-xs sm:text-sm text-zinc-600 dark:text-zinc-300 leading-relaxed">
+                {bi(
+                  'এই আলাদা অ্যাপ বা লিংক থেকে ঢুকলে সরাসরি এই সেলুন বুকিং ও লাইভ সিরিয়াল পেজ চালু হবে—কোনো অতিরিক্ত মেনু ছাড়াই।',
+                  'Installing or opening this standalone app launches straight into this Salon booking and live serial queue page.'
+                )}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+            <PWAInstallButton variant="card" appTarget="salon" />
+            <button
+              type="button"
+              onClick={async () => {
+                const url =
+                  typeof window !== 'undefined' ? `${window.location.origin}/salon` : '/salon';
+                const ok = await copyTextSafely(url);
+                if (ok) {
+                  setCopiedSalonAppLink(true);
+                  if (copiedSalonAppTimerRef.current !== null) {
+                    window.clearTimeout(copiedSalonAppTimerRef.current);
+                  }
+                  copiedSalonAppTimerRef.current = window.setTimeout(() => {
+                    setCopiedSalonAppLink(false);
+                  }, 2200);
+                }
+              }}
+              className="inline-flex items-center gap-2 px-4 py-3.5 rounded-2xl bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-100 text-xs sm:text-sm font-semibold transition-colors min-h-[46px]"
+            >
+              {copiedSalonAppLink ? <Check size={15} className="text-emerald-600" /> : <Copy size={15} />}
+              <span>
+                {copiedSalonAppLink
+                  ? bi('অ্যাপ লিংক কপি হয়েছে ✓', 'App Link Copied ✓')
+                  : bi('ডাইরেক্ট লিংক কপি', 'Copy Direct Link')}
+              </span>
+            </button>
+          </div>
+        </section>
+
         {/* AI One-Time Welcome Coupon Card (Verified Gmail Users Only) */}
         <section className="rounded-3xl bg-gradient-to-br from-amber-50 via-white to-orange-50/70 dark:from-amber-950/30 dark:via-zinc-900 dark:to-zinc-900 border border-amber-200/90 dark:border-amber-800/60 p-6 sm:p-7 shadow-sm">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-5">
@@ -1526,7 +1586,9 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
                 {bi('অ্যাপয়েন্টমেন্ট বুক করুন', 'Book Appointment')}
               </h2>
               <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">
-                {localizedSelected.primaryTitle} ({localizedSelected.secondaryTitle})
+                {localizedSelected.secondaryTitle
+                  ? `${localizedSelected.primaryTitle} (${localizedSelected.secondaryTitle})`
+                  : localizedSelected.primaryTitle}
               </p>
             </div>
 
@@ -1845,6 +1907,17 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
                     <p className="text-xs sm:text-sm text-zinc-600 dark:text-zinc-300 tabular-nums leading-relaxed">
                       {bi('তারিখ:', 'Date:')} {b.bookingDate} · {bi('সময়:', 'Time:')} {b.timeSlot} ({bi('শেষ সীমা:', 'Cutoff:')} {cutoffLabel}) · {bi('ফোন:', 'Phone:')} {b.customerPhone}
                     </p>
+                    {(() => {
+                      const bookedStamp = formatBookingCreatedTimestamp(b.createdAt, lang);
+                      return (
+                        <p className="text-xs sm:text-sm text-amber-700 dark:text-amber-300 font-medium tabular-nums leading-relaxed">
+                          {bi('বুকিং করার সময়:', 'Booked At:')}{' '}
+                          <span className="font-semibold text-zinc-900 dark:text-white">
+                            {bookedStamp ? bookedStamp.dateTimeLabel : bi('এইমাত্র', 'Just now')}
+                          </span>
+                        </p>
+                      );
+                    })()}
                     <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 tabular-nums leading-relaxed">
                       {bi('সার্ভিস:', 'Service:')} {formatSalonPrice(b.servicePrice, salonConfig.currencySymbol)} + {bi('বুকিং ফি:', 'Booking Fee:')}{' '}
                       {formatSalonPrice(b.bookingFee, salonConfig.currencySymbol)}

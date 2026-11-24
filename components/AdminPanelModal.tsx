@@ -21,6 +21,8 @@ import {
   ChevronRight,
   Search,
   CalendarDays,
+  Share2,
+  RotateCcw,
 } from 'lucide-react';
 import { normalizeApiBaseUrl, setDynamicApiBaseUrl, testApiHealthAtUrl } from '../utils/audio';
 import {
@@ -44,17 +46,21 @@ import {
   SalonBooking,
   SalonBookingStatus,
   SalonConfig,
+  SocialLinksConfig,
   UserAccountRecord,
   UserPlan,
 } from '../types';
 import { SALON_SERVICES, formatSalonPrice, isBookingTimeExpired } from '../utils/salon';
+import { DEFAULT_SOCIAL_LINKS, normalizeSocialUrlInput } from '../utils/socialLinks';
 import {
+  formatBookingCreatedTimestamp,
   isCustomSalonServiceTitle,
   localizeBookingStatus,
   localizeDate,
   localizePlanLabel,
   localizeSalonService,
   localizeUpgradeStatus,
+  translateSalonServiceText,
   useLanguage,
 } from '../utils/i18n';
 import CompletionSignatureModal from './CompletionSignatureModal';
@@ -65,6 +71,7 @@ export type AdminPanelTab =
   | 'users'
   | 'settings'
   | 'api'
+  | 'social-links'
   | 'salon'
   | 'salon-settings'
   | 'salon-bookings';
@@ -72,6 +79,7 @@ export type AdminPanelTab =
 interface AdminPanelModalProps {
   billingConfig: BillingConfig;
   salonConfig: SalonConfig;
+  socialLinks?: SocialLinksConfig;
   initialTab?: AdminPanelTab;
   onClose: () => void;
 }
@@ -83,6 +91,7 @@ function getTodayUtcDate(): string {
 const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   billingConfig,
   salonConfig,
+  socialLinks = DEFAULT_SOCIAL_LINKS,
   initialTab = 'menu',
   onClose,
 }) => {
@@ -115,6 +124,42 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   const [actionError, setActionError] = useState<string | null>(null);
 
   // Salon config form state
+  const resolveInitialTitles = (
+    key: (typeof SALON_SERVICES)[number]['key'],
+    cfg: SalonConfig
+  ): { en: string; bn: string } => {
+    const meta = SALON_SERVICES.find((s) => s.key === key)!;
+    const rawEn = (cfg[meta.titleField] || '').trim();
+    const rawBn = (cfg[meta.titleBnField] || '').trim();
+    const defaultEn = localizeSalonService(key, 'en').primaryTitle;
+    const defaultBn = localizeSalonService(key, 'bn').primaryTitle;
+
+    const hasLegacyBnOnlyInEn =
+      !rawBn &&
+      isCustomSalonServiceTitle(key, rawEn) &&
+      /[\u0980-\u09FF]/.test(rawEn) &&
+      !/[A-Za-z]/.test(rawEn);
+
+    const enVal = hasLegacyBnOnlyInEn
+      ? translateSalonServiceText(rawEn, 'en') || defaultEn
+      : rawEn.length >= 2
+      ? rawEn
+      : isCustomSalonServiceTitle(key, rawBn)
+      ? translateSalonServiceText(rawBn, 'en') || defaultEn
+      : defaultEn;
+
+    const bnVal =
+      rawBn.length >= 2
+        ? rawBn
+        : hasLegacyBnOnlyInEn
+        ? rawEn
+        : isCustomSalonServiceTitle(key, rawEn)
+        ? translateSalonServiceText(rawEn, 'bn') || defaultBn
+        : defaultBn;
+
+    return { en: enVal, bn: bnVal };
+  };
+
   const [salonName, setSalonName] = useState(salonConfig.salonName);
   const [currencySymbol, setCurrencySymbol] = useState(salonConfig.currencySymbol);
   const [haircutPrice, setHaircutPrice] = useState(String(salonConfig.haircutPrice));
@@ -123,36 +168,21 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   const [hairColorPrice, setHairColorPrice] = useState(String(salonConfig.hairColorPrice));
   const [facialPrice, setFacialPrice] = useState(String(salonConfig.facialPrice));
   const [comboPrice, setComboPrice] = useState(String(salonConfig.comboPrice));
-  const [haircutTitle, setHaircutTitle] = useState(() =>
-    isCustomSalonServiceTitle('haircut', salonConfig.haircutTitle)
-      ? salonConfig.haircutTitle!
-      : localizeSalonService('haircut', lang).primaryTitle
-  );
-  const [beardTrimTitle, setBeardTrimTitle] = useState(() =>
-    isCustomSalonServiceTitle('beard', salonConfig.beardTrimTitle)
-      ? salonConfig.beardTrimTitle!
-      : localizeSalonService('beard', lang).primaryTitle
-  );
-  const [shaveTitle, setShaveTitle] = useState(() =>
-    isCustomSalonServiceTitle('shave', salonConfig.shaveTitle)
-      ? salonConfig.shaveTitle!
-      : localizeSalonService('shave', lang).primaryTitle
-  );
-  const [hairColorTitle, setHairColorTitle] = useState(() =>
-    isCustomSalonServiceTitle('color', salonConfig.hairColorTitle)
-      ? salonConfig.hairColorTitle!
-      : localizeSalonService('color', lang).primaryTitle
-  );
-  const [facialTitle, setFacialTitle] = useState(() =>
-    isCustomSalonServiceTitle('facial', salonConfig.facialTitle)
-      ? salonConfig.facialTitle!
-      : localizeSalonService('facial', lang).primaryTitle
-  );
-  const [comboTitle, setComboTitle] = useState(() =>
-    isCustomSalonServiceTitle('combo', salonConfig.comboTitle)
-      ? salonConfig.comboTitle!
-      : localizeSalonService('combo', lang).primaryTitle
-  );
+
+  const [haircutTitle, setHaircutTitle] = useState(() => resolveInitialTitles('haircut', salonConfig).en);
+  const [beardTrimTitle, setBeardTrimTitle] = useState(() => resolveInitialTitles('beard', salonConfig).en);
+  const [shaveTitle, setShaveTitle] = useState(() => resolveInitialTitles('shave', salonConfig).en);
+  const [hairColorTitle, setHairColorTitle] = useState(() => resolveInitialTitles('color', salonConfig).en);
+  const [facialTitle, setFacialTitle] = useState(() => resolveInitialTitles('facial', salonConfig).en);
+  const [comboTitle, setComboTitle] = useState(() => resolveInitialTitles('combo', salonConfig).en);
+
+  const [haircutTitleBn, setHaircutTitleBn] = useState(() => resolveInitialTitles('haircut', salonConfig).bn);
+  const [beardTrimTitleBn, setBeardTrimTitleBn] = useState(() => resolveInitialTitles('beard', salonConfig).bn);
+  const [shaveTitleBn, setShaveTitleBn] = useState(() => resolveInitialTitles('shave', salonConfig).bn);
+  const [hairColorTitleBn, setHairColorTitleBn] = useState(() => resolveInitialTitles('color', salonConfig).bn);
+  const [facialTitleBn, setFacialTitleBn] = useState(() => resolveInitialTitles('facial', salonConfig).bn);
+  const [comboTitleBn, setComboTitleBn] = useState(() => resolveInitialTitles('combo', salonConfig).bn);
+
   const [bookingFee, setBookingFee] = useState(String(salonConfig.bookingFee));
   const [salonAddress, setSalonAddress] = useState(salonConfig.address);
   const [salonPhone, setSalonPhone] = useState(salonConfig.phone);
@@ -162,6 +192,14 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   const [savedSalonBanner, setSavedSalonBanner] = useState(false);
   const [signingTargetBooking, setSigningTargetBooking] = useState<SalonBooking | null>(null);
   const adminAutoCancelRef = useRef<Set<string>>(new Set());
+
+  // Social links config form state
+  const [facebookUrl, setFacebookUrl] = useState(socialLinks.facebookUrl);
+  const [instagramUrl, setInstagramUrl] = useState(socialLinks.instagramUrl);
+  const [linkedinUrl, setLinkedinUrl] = useState(socialLinks.linkedinUrl);
+  const [youtubeUrl, setYoutubeUrl] = useState(socialLinks.youtubeUrl);
+  const [savingSocialLinks, setSavingSocialLinks] = useState(false);
+  const [savedSocialBanner, setSavedSocialBanner] = useState(false);
 
   useEffect(() => {
     setFeeAmount(billingConfig.feeAmount);
@@ -183,42 +221,40 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
     setHairColorPrice(String(salonConfig.hairColorPrice));
     setFacialPrice(String(salonConfig.facialPrice));
     setComboPrice(String(salonConfig.comboPrice));
-    setHaircutTitle(
-      isCustomSalonServiceTitle('haircut', salonConfig.haircutTitle)
-        ? salonConfig.haircutTitle!
-        : localizeSalonService('haircut', lang).primaryTitle
-    );
-    setBeardTrimTitle(
-      isCustomSalonServiceTitle('beard', salonConfig.beardTrimTitle)
-        ? salonConfig.beardTrimTitle!
-        : localizeSalonService('beard', lang).primaryTitle
-    );
-    setShaveTitle(
-      isCustomSalonServiceTitle('shave', salonConfig.shaveTitle)
-        ? salonConfig.shaveTitle!
-        : localizeSalonService('shave', lang).primaryTitle
-    );
-    setHairColorTitle(
-      isCustomSalonServiceTitle('color', salonConfig.hairColorTitle)
-        ? salonConfig.hairColorTitle!
-        : localizeSalonService('color', lang).primaryTitle
-    );
-    setFacialTitle(
-      isCustomSalonServiceTitle('facial', salonConfig.facialTitle)
-        ? salonConfig.facialTitle!
-        : localizeSalonService('facial', lang).primaryTitle
-    );
-    setComboTitle(
-      isCustomSalonServiceTitle('combo', salonConfig.comboTitle)
-        ? salonConfig.comboTitle!
-        : localizeSalonService('combo', lang).primaryTitle
-    );
+
+    const hc = resolveInitialTitles('haircut', salonConfig);
+    const bd = resolveInitialTitles('beard', salonConfig);
+    const sh = resolveInitialTitles('shave', salonConfig);
+    const cl = resolveInitialTitles('color', salonConfig);
+    const fc = resolveInitialTitles('facial', salonConfig);
+    const cb = resolveInitialTitles('combo', salonConfig);
+
+    setHaircutTitle(hc.en);
+    setHaircutTitleBn(hc.bn);
+    setBeardTrimTitle(bd.en);
+    setBeardTrimTitleBn(bd.bn);
+    setShaveTitle(sh.en);
+    setShaveTitleBn(sh.bn);
+    setHairColorTitle(cl.en);
+    setHairColorTitleBn(cl.bn);
+    setFacialTitle(fc.en);
+    setFacialTitleBn(fc.bn);
+    setComboTitle(cb.en);
+    setComboTitleBn(cb.bn);
+
     setBookingFee(String(salonConfig.bookingFee));
     setSalonAddress(salonConfig.address);
     setSalonPhone(salonConfig.phone);
     setSalonOpenHours(salonConfig.openHours);
     setIsBookingOpen(salonConfig.isBookingOpen);
-  }, [salonConfig, lang]);
+  }, [salonConfig]);
+
+  useEffect(() => {
+    setFacebookUrl(socialLinks.facebookUrl || '');
+    setInstagramUrl(socialLinks.instagramUrl || '');
+    setLinkedinUrl(socialLinks.linkedinUrl || '');
+    setYoutubeUrl(socialLinks.youtubeUrl || '');
+  }, [socialLinks]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -566,10 +602,19 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
     return Math.min(50000, Math.max(0, n));
   };
 
-  const cleanTitleInput = (val: string, key: (typeof SALON_SERVICES)[number]['key']): string => {
+  const cleanTitleInput = (
+    val: string,
+    key: (typeof SALON_SERVICES)[number]['key'],
+    targetLang: 'en' | 'bn',
+    otherLangFallback?: string
+  ): string => {
     const trimmed = val.trim().slice(0, 100);
     if (trimmed.length >= 2) return trimmed;
-    return localizeSalonService(key, lang).primaryTitle.slice(0, 100);
+    if (otherLangFallback && otherLangFallback.trim().length >= 2) {
+      const translated = translateSalonServiceText(otherLangFallback, targetLang);
+      if (translated.length >= 2) return translated.slice(0, 100);
+    }
+    return localizeSalonService(key, targetLang).primaryTitle.slice(0, 100);
   };
 
   const handleSaveSalonConfig = async (e: React.FormEvent) => {
@@ -588,12 +633,18 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
       hairColorPrice: parsePriceInput(hairColorPrice, salonConfig.hairColorPrice),
       facialPrice: parsePriceInput(facialPrice, salonConfig.facialPrice),
       comboPrice: parsePriceInput(comboPrice, salonConfig.comboPrice),
-      haircutTitle: cleanTitleInput(haircutTitle, 'haircut'),
-      beardTrimTitle: cleanTitleInput(beardTrimTitle, 'beard'),
-      shaveTitle: cleanTitleInput(shaveTitle, 'shave'),
-      hairColorTitle: cleanTitleInput(hairColorTitle, 'color'),
-      facialTitle: cleanTitleInput(facialTitle, 'facial'),
-      comboTitle: cleanTitleInput(comboTitle, 'combo'),
+      haircutTitle: cleanTitleInput(haircutTitle, 'haircut', 'en', haircutTitleBn),
+      beardTrimTitle: cleanTitleInput(beardTrimTitle, 'beard', 'en', beardTrimTitleBn),
+      shaveTitle: cleanTitleInput(shaveTitle, 'shave', 'en', shaveTitleBn),
+      hairColorTitle: cleanTitleInput(hairColorTitle, 'color', 'en', hairColorTitleBn),
+      facialTitle: cleanTitleInput(facialTitle, 'facial', 'en', facialTitleBn),
+      comboTitle: cleanTitleInput(comboTitle, 'combo', 'en', comboTitleBn),
+      haircutTitleBn: cleanTitleInput(haircutTitleBn, 'haircut', 'bn', haircutTitle),
+      beardTrimTitleBn: cleanTitleInput(beardTrimTitleBn, 'beard', 'bn', beardTrimTitle),
+      shaveTitleBn: cleanTitleInput(shaveTitleBn, 'shave', 'bn', shaveTitle),
+      hairColorTitleBn: cleanTitleInput(hairColorTitleBn, 'color', 'bn', hairColorTitle),
+      facialTitleBn: cleanTitleInput(facialTitleBn, 'facial', 'bn', facialTitle),
+      comboTitleBn: cleanTitleInput(comboTitleBn, 'combo', 'bn', comboTitle),
       bookingFee: parsePriceInput(bookingFee, salonConfig.bookingFee),
       address: salonAddress.trim().slice(0, 200),
       phone: salonPhone.trim().slice(0, 30),
@@ -614,6 +665,52 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
       reportFirestoreError(error, OperationType.WRITE, 'salonConfig/default');
     } finally {
       setSavingSalon(false);
+    }
+  };
+
+  const handleSaveSocialLinks = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (savingSocialLinks) return;
+    setActionError(null);
+    setSavedSocialBanner(false);
+
+    const fb = normalizeSocialUrlInput(facebookUrl);
+    const ig = normalizeSocialUrlInput(instagramUrl);
+    const li = normalizeSocialUrlInput(linkedinUrl);
+    const yt = normalizeSocialUrlInput(youtubeUrl);
+
+    if (!fb.valid || !ig.valid || !li.valid || !yt.valid) {
+      setActionError(
+        bi(
+          'অনুগ্রহ করে সঠিক https:// সোশ্যাল মিডিয়া লিংক দিন (যেমন https://www.facebook.com/srabongo) অথবা খালি রাখুন।',
+          'Please enter valid https:// social links (e.g. https://www.facebook.com/srabongo) or leave them blank.'
+        )
+      );
+      return;
+    }
+
+    setSavingSocialLinks(true);
+    try {
+      await setDoc(doc(db, 'publicConfig', 'socialLinks'), {
+        facebookUrl: fb.value,
+        instagramUrl: ig.value,
+        linkedinUrl: li.value,
+        youtubeUrl: yt.value,
+        updatedAt: serverTimestamp(),
+      });
+      setFacebookUrl(fb.value);
+      setInstagramUrl(ig.value);
+      setLinkedinUrl(li.value);
+      setYoutubeUrl(yt.value);
+      setSavedSocialBanner(true);
+      window.setTimeout(() => setSavedSocialBanner(false), 2500);
+    } catch (error: any) {
+      setActionError(
+        error?.message || bi('সোশ্যাল লিংক সেভ করা যায়নি।', 'Failed to save social links.')
+      );
+      reportFirestoreError(error, OperationType.WRITE, 'publicConfig/socialLinks');
+    } finally {
+      setSavingSocialLinks(false);
     }
   };
 
@@ -776,6 +873,16 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
         pendingSalonCount > 0 ? bi(`${pendingSalonCount} পেন্ডিং`, `${pendingSalonCount} pending`) : undefined,
       icon: <CalendarDays size={20} />,
       accentBg: 'bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-800',
+    },
+    {
+      id: 'social-links',
+      title: bi('সোশ্যাল মিডিয়া লিংক', 'Social Media Links'),
+      meta: bi(
+        `${[facebookUrl, instagramUrl, linkedinUrl, youtubeUrl].filter((u) => u.trim().length > 0).length}টি সক্রিয় লিংক · Facebook, Instagram, LinkedIn, YouTube`,
+        `${[facebookUrl, instagramUrl, linkedinUrl, youtubeUrl].filter((u) => u.trim().length > 0).length} active links · Facebook, Instagram, LinkedIn, YouTube`
+      ),
+      icon: <Share2 size={20} />,
+      accentBg: 'bg-violet-50 dark:bg-violet-950/60 text-violet-600 dark:text-violet-400 border-violet-200 dark:border-violet-800',
     },
   ];
 
@@ -1323,6 +1430,114 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
             </form>
           )}
 
+          {/* 4B. SOCIAL MEDIA LINKS */}
+          {activeTab === 'social-links' && (
+            <form onSubmit={handleSaveSocialLinks} className="space-y-5">
+              <div className="p-5 rounded-2xl bg-violet-50/70 dark:bg-violet-950/25 border border-violet-200/80 dark:border-violet-900/60 space-y-2">
+                <div className="flex items-center gap-2 text-base font-semibold text-violet-700 dark:text-violet-300">
+                  <Share2 size={18} />
+                  <span>{bi('শ্রাবণ গো সোশ্যাল মিডিয়া লিংক পরিচালনা', 'Manage Srabon Go Social Media Links')}</span>
+                </div>
+                <p className="text-sm text-zinc-600 dark:text-zinc-300 leading-relaxed">
+                  {bi(
+                    'এখান থেকে Facebook, Instagram, LinkedIn এবং YouTube লিংক যোগ বা পরিবর্তন করলে লগইনের আগে, ফুটারে এবং ৩-ডট মেনুতে সাথে সাথে আপডেট হবে। কোনো প্ল্যাটফর্ম না দেখাতে চাইলে বক্স খালি রাখুন।',
+                    'Add or edit Facebook, Instagram, LinkedIn, and YouTube links here. Changes sync instantly to the pre-login page, home footer, and 3-dot menu. Leave any box blank to hide it.'
+                  )}
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-zinc-700 dark:text-zinc-200 mb-2">
+                    Facebook URL
+                  </label>
+                  <input
+                    type="text"
+                    value={facebookUrl}
+                    onChange={(e) => setFacebookUrl(e.target.value)}
+                    maxLength={300}
+                    placeholder="https://www.facebook.com/srabongo"
+                    className="w-full rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-3.5 py-2.5 text-sm sm:text-base text-zinc-900 dark:text-white font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-zinc-700 dark:text-zinc-200 mb-2">
+                    Instagram URL
+                  </label>
+                  <input
+                    type="text"
+                    value={instagramUrl}
+                    onChange={(e) => setInstagramUrl(e.target.value)}
+                    maxLength={300}
+                    placeholder="https://www.instagram.com/srabongo"
+                    className="w-full rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-3.5 py-2.5 text-sm sm:text-base text-zinc-900 dark:text-white font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-zinc-700 dark:text-zinc-200 mb-2">
+                    LinkedIn URL
+                  </label>
+                  <input
+                    type="text"
+                    value={linkedinUrl}
+                    onChange={(e) => setLinkedinUrl(e.target.value)}
+                    maxLength={300}
+                    placeholder="https://www.linkedin.com/company/srabongo"
+                    className="w-full rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-3.5 py-2.5 text-sm sm:text-base text-zinc-900 dark:text-white font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-zinc-700 dark:text-zinc-200 mb-2">
+                    YouTube URL ({bi('ঐচ্ছিক', 'Optional')})
+                  </label>
+                  <input
+                    type="text"
+                    value={youtubeUrl}
+                    onChange={(e) => setYoutubeUrl(e.target.value)}
+                    maxLength={300}
+                    placeholder="https://www.youtube.com/@srabongo"
+                    className="w-full rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-3.5 py-2.5 text-sm sm:text-base text-zinc-900 dark:text-white font-mono"
+                  />
+                </div>
+              </div>
+
+              {savedSocialBanner && (
+                <div className="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 text-sm text-emerald-700 dark:text-emerald-300 flex items-center gap-2">
+                  <CheckCircle2 size={16} />
+                  <span>{bi('সোশ্যাল মিডিয়া লিংক সফলভাবে সেভ হয়েছে!', 'Social media links saved successfully!')}</span>
+                </div>
+              )}
+
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  type="submit"
+                  disabled={savingSocialLinks}
+                  className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-sm font-semibold transition-colors disabled:opacity-50"
+                >
+                  {savingSocialLinks ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                  <span>{bi('সোশ্যাল লিংক সেভ করুন', 'Save Social Links')}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFacebookUrl(DEFAULT_SOCIAL_LINKS.facebookUrl);
+                    setInstagramUrl(DEFAULT_SOCIAL_LINKS.instagramUrl);
+                    setLinkedinUrl(DEFAULT_SOCIAL_LINKS.linkedinUrl);
+                    setYoutubeUrl(DEFAULT_SOCIAL_LINKS.youtubeUrl);
+                  }}
+                  className="inline-flex items-center gap-2 px-4 py-3 rounded-xl bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200 text-sm font-semibold transition-colors"
+                >
+                  <RotateCcw size={15} />
+                  <span>{bi('ডিফল্ট রিসেট', 'Reset Defaults')}</span>
+                </button>
+              </div>
+            </form>
+          )}
+
           {/* 5. SALON SERVICE & PRICE SETTINGS */}
           {(activeTab === 'salon-settings' || activeTab === 'salon') && (
             <form onSubmit={handleSaveSalonConfig} className="space-y-5">
@@ -1393,104 +1608,157 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                 </div>
               </div>
 
-              {/* Editable Service Names & Prices Grid */}
+              {/* Editable Bilingual Service Names & Prices Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {(
                   [
                     {
                       meta: SALON_SERVICES[0],
-                      titleVal: haircutTitle,
-                      setTitleVal: setHaircutTitle,
+                      titleEnVal: haircutTitle,
+                      setTitleEnVal: setHaircutTitle,
+                      titleBnVal: haircutTitleBn,
+                      setTitleBnVal: setHaircutTitleBn,
                       priceVal: haircutPrice,
                       setPriceVal: setHaircutPrice,
                     },
                     {
                       meta: SALON_SERVICES[1],
-                      titleVal: beardTrimTitle,
-                      setTitleVal: setBeardTrimTitle,
+                      titleEnVal: beardTrimTitle,
+                      setTitleEnVal: setBeardTrimTitle,
+                      titleBnVal: beardTrimTitleBn,
+                      setTitleBnVal: setBeardTrimTitleBn,
                       priceVal: beardTrimPrice,
                       setPriceVal: setBeardTrimPrice,
                     },
                     {
                       meta: SALON_SERVICES[2],
-                      titleVal: shaveTitle,
-                      setTitleVal: setShaveTitle,
+                      titleEnVal: shaveTitle,
+                      setTitleEnVal: setShaveTitle,
+                      titleBnVal: shaveTitleBn,
+                      setTitleBnVal: setShaveTitleBn,
                       priceVal: shavePrice,
                       setPriceVal: setShavePrice,
                     },
                     {
                       meta: SALON_SERVICES[3],
-                      titleVal: hairColorTitle,
-                      setTitleVal: setHairColorTitle,
+                      titleEnVal: hairColorTitle,
+                      setTitleEnVal: setHairColorTitle,
+                      titleBnVal: hairColorTitleBn,
+                      setTitleBnVal: setHairColorTitleBn,
                       priceVal: hairColorPrice,
                       setPriceVal: setHairColorPrice,
                     },
                     {
                       meta: SALON_SERVICES[4],
-                      titleVal: facialTitle,
-                      setTitleVal: setFacialTitle,
+                      titleEnVal: facialTitle,
+                      setTitleEnVal: setFacialTitle,
+                      titleBnVal: facialTitleBn,
+                      setTitleBnVal: setFacialTitleBn,
                       priceVal: facialPrice,
                       setPriceVal: setFacialPrice,
                     },
                     {
                       meta: SALON_SERVICES[5],
-                      titleVal: comboTitle,
-                      setTitleVal: setComboTitle,
+                      titleEnVal: comboTitle,
+                      setTitleEnVal: setComboTitle,
+                      titleBnVal: comboTitleBn,
+                      setTitleBnVal: setComboTitleBn,
                       priceVal: comboPrice,
                       setPriceVal: setComboPrice,
                     },
                   ] as const
                 ).map((item) => {
-                  const defaultTitle = localizeSalonService(item.meta.key, lang).primaryTitle;
-                  const isModified = isCustomSalonServiceTitle(item.meta.key, item.titleVal);
+                  const defaultEn = localizeSalonService(item.meta.key, 'en').primaryTitle;
+                  const defaultBn = localizeSalonService(item.meta.key, 'bn').primaryTitle;
+                  const isModified =
+                    isCustomSalonServiceTitle(item.meta.key, item.titleEnVal) ||
+                    isCustomSalonServiceTitle(item.meta.key, item.titleBnVal);
                   return (
                     <div
                       key={item.meta.key}
                       className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700/80 space-y-3"
                     >
-                      <div className="flex items-center justify-between gap-2">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
                         <span className="text-xs sm:text-sm font-bold text-amber-700 dark:text-amber-400 tabular-nums">
-                          {item.meta.number}. {bi('সার্ভিসের নাম ও মূল্য', 'Service Name & Price')}
+                          {item.meta.number}. {bi('সার্ভিসের নাম (বাংলা + EN) ও মূল্য', 'Service Name (BN + EN) & Price')}
                         </span>
-                        {isModified && (
+                        <div className="flex items-center gap-3">
                           <button
                             type="button"
-                            onClick={() => item.setTitleVal(defaultTitle)}
-                            className="text-xs font-semibold text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white underline-offset-2 hover:underline transition-colors"
+                            onClick={() => {
+                              if (lang === 'bn' && item.titleBnVal.trim()) {
+                                item.setTitleEnVal(translateSalonServiceText(item.titleBnVal, 'en'));
+                              } else if (item.titleEnVal.trim()) {
+                                item.setTitleBnVal(translateSalonServiceText(item.titleEnVal, 'bn'));
+                              } else if (item.titleBnVal.trim()) {
+                                item.setTitleEnVal(translateSalonServiceText(item.titleBnVal, 'en'));
+                              }
+                            }}
+                            className="text-xs font-semibold text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 dark:hover:text-indigo-300 underline-offset-2 hover:underline transition-colors"
                           >
-                            {bi('ডিফল্ট নাম', 'Reset Name')}
+                            {bi('অটো অনুবাদ', 'Auto-Translate')}
                           </button>
-                        )}
+                          {isModified && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                item.setTitleEnVal(defaultEn);
+                                item.setTitleBnVal(defaultBn);
+                              }}
+                              className="text-xs font-semibold text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white underline-offset-2 hover:underline transition-colors"
+                            >
+                              {bi('ডিফল্ট নাম', 'Reset Name')}
+                            </button>
+                          )}
+                        </div>
                       </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
-                        <div className="sm:col-span-8">
+                      <div className="space-y-3">
+                        <div>
                           <label className="block text-xs font-semibold text-zinc-600 dark:text-zinc-300 mb-1.5">
-                            {bi('সার্ভিসের নাম', 'Service Name')}
+                            {bi('বাংলা নাম (Bengali Name)', 'Bengali Name (বাংলা)')}
                           </label>
                           <input
                             type="text"
                             required
                             minLength={2}
                             maxLength={100}
-                            value={item.titleVal}
-                            onChange={(e) => item.setTitleVal(e.target.value)}
-                            placeholder={defaultTitle}
+                            value={item.titleBnVal}
+                            onChange={(e) => item.setTitleBnVal(e.target.value)}
+                            placeholder={defaultBn}
                             className="w-full rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 px-3.5 py-2.5 text-sm sm:text-base text-zinc-900 dark:text-white min-h-[42px]"
                           />
                         </div>
-                        <div className="sm:col-span-4">
-                          <label className="block text-xs font-semibold text-zinc-600 dark:text-zinc-300 mb-1.5">
-                            {bi('মূল্য', 'Price')} ({currencySymbol || salonConfig.currencySymbol})
-                          </label>
-                          <input
-                            type="number"
-                            min={0}
-                            max={50000}
-                            value={item.priceVal}
-                            onChange={(e) => item.setPriceVal(e.target.value)}
-                            className="w-full rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 px-3.5 py-2.5 text-sm sm:text-base font-semibold text-zinc-900 dark:text-white tabular-nums min-h-[42px]"
-                          />
+
+                        <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+                          <div className="sm:col-span-8">
+                            <label className="block text-xs font-semibold text-zinc-600 dark:text-zinc-300 mb-1.5">
+                              {bi('ইংরেজি নাম (English Name)', 'English Name')}
+                            </label>
+                            <input
+                              type="text"
+                              required
+                              minLength={2}
+                              maxLength={100}
+                              value={item.titleEnVal}
+                              onChange={(e) => item.setTitleEnVal(e.target.value)}
+                              placeholder={defaultEn}
+                              className="w-full rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 px-3.5 py-2.5 text-sm sm:text-base text-zinc-900 dark:text-white min-h-[42px]"
+                            />
+                          </div>
+                          <div className="sm:col-span-4">
+                            <label className="block text-xs font-semibold text-zinc-600 dark:text-zinc-300 mb-1.5">
+                              {bi('মূল্য', 'Price')} ({currencySymbol || salonConfig.currencySymbol})
+                            </label>
+                            <input
+                              type="number"
+                              min={0}
+                              max={50000}
+                              value={item.priceVal}
+                              onChange={(e) => item.setPriceVal(e.target.value)}
+                              className="w-full rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 px-3.5 py-2.5 text-sm sm:text-base font-semibold text-zinc-900 dark:text-white tabular-nums min-h-[42px]"
+                            />
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -1658,6 +1926,17 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                             </span>
                           )}
                         </p>
+                        {(() => {
+                          const bookedStamp = formatBookingCreatedTimestamp(b.createdAt, lang);
+                          return (
+                            <p className="text-xs sm:text-sm text-amber-700 dark:text-amber-300 font-medium tabular-nums leading-relaxed">
+                              {bi('বুকিং করার সময়:', 'Booked At:')}{' '}
+                              <span className="font-semibold text-zinc-900 dark:text-white">
+                                {bookedStamp ? bookedStamp.dateTimeLabel : bi('এইমাত্র', 'Just now')}
+                              </span>
+                            </p>
+                          );
+                        })()}
                         {b.notes && (
                           <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 italic leading-relaxed">
                             {bi('নোট:', 'Note:')} {b.notes}

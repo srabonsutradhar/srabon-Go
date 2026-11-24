@@ -995,15 +995,47 @@ async function startServer() {
     res.status(404).json({ error: "API route not found." });
   });
 
+  app.get("/salon-manifest.webmanifest", (_req, res) => {
+    const prodManifest = path.join(process.cwd(), "dist", "salon-manifest.webmanifest");
+    const pubManifest = path.join(process.cwd(), "public", "salon-manifest.webmanifest");
+    const manifestPath = fs.existsSync(prodManifest) ? prodManifest : pubManifest;
+    if (!fs.existsSync(manifestPath)) {
+      return res.status(404).end();
+    }
+    res.setHeader("Content-Type", "application/manifest+json; charset=utf-8");
+    return res.sendFile(manifestPath);
+  });
+
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
     });
+    app.get(["/salon", "/salon/", "/salon.html"], async (req, res, next) => {
+      try {
+        const salonHtmlPath = path.join(process.cwd(), "salon.html");
+        const rawHtml = fs.readFileSync(salonHtmlPath, "utf-8");
+        const transformed = await vite.transformIndexHtml(req.originalUrl, rawHtml);
+        const cleanHtml = transformed.replace(
+          /<link rel="manifest" href="\/manifest\.webmanifest"\s*\/?>/g,
+          ""
+        );
+        res.status(200).set({ "Content-Type": "text/html" }).end(cleanHtml);
+      } catch (err) {
+        next(err);
+      }
+    });
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), "dist");
     app.use(["/server.cjs", "/server.cjs.map"], (_req: any, res: any) => res.status(404).end());
+    app.get(["/salon", "/salon/", "/salon.html"], (_req, res) => {
+      const distSalon = path.join(distPath, "salon.html");
+      if (fs.existsSync(distSalon)) {
+        return res.sendFile(distSalon);
+      }
+      return res.sendFile(path.join(distPath, "index.html"));
+    });
     app.use(express.static(distPath));
     app.use((_req, res) => {
       res.sendFile(path.join(distPath, "index.html"));

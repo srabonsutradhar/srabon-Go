@@ -271,7 +271,7 @@ const Carousel3D: React.FC<Carousel3DProps> = ({
                                </div>
                           </div>
 
-                          <div className="absolute bottom-3 left-5 z-20 text-[11px] font-medium text-white/90 tracking-wide">
+                          <div className="absolute bottom-3 left-5 z-20 text-xs font-medium text-white/90 tracking-wide">
                             {localizeAlbumLabel(visual.albumLabel, lang)}
                           </div>
                       </div>

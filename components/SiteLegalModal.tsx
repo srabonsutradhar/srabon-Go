@@ -234,7 +234,7 @@ const SiteLegalModal: React.FC<SiteLegalModalProps> = ({
               </p>
               <div className="flex items-center justify-between gap-3 p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/70 border border-zinc-200 dark:border-zinc-700">
                 <div>
-                  <span className="text-[11px] uppercase tracking-wider text-zinc-400 block">
+                  <span className="text-xs uppercase tracking-wider text-zinc-400 block">
                     {bi('সাপোর্ট ইমেইল', 'Support Email')}
                   </span>
                   <a

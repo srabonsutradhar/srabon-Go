@@ -4,7 +4,7 @@
  */
 
 import React, { useEffect, useRef, useState } from 'react';
-import { AppViewMode, FilterState, UserPlan } from '../types';
+import { AppViewMode, FilterState, SocialLinksConfig, UserPlan } from '../types';
 import {
   Search,
   Sparkles,
@@ -33,7 +33,9 @@ import {
 } from 'lucide-react';
 import type { User } from 'firebase/auth';
 import { localizeGender, localizePitch, useLanguage } from '../utils/i18n';
+import { DEFAULT_SOCIAL_LINKS } from '../utils/socialLinks';
 import PWAInstallButton from './PWAInstallButton';
+import SocialLinksRow from './SocialLinksRow';
 
 interface FilterBarProps {
   filters: FilterState;
@@ -61,6 +63,7 @@ interface FilterBarProps {
   onOpenChat?: () => void;
   onOpenVoiceCompare?: () => void;
   compareCount?: number;
+  socialLinks?: SocialLinksConfig;
 }
 
 const VIEW_LABELS_BN: Record<AppViewMode, string> = {
@@ -83,6 +86,17 @@ const VIEW_LABELS_EN: Record<AppViewMode, string> = {
   carousel: '3D Voices',
   grid: 'Voices',
   favorites: 'Favorites',
+};
+
+const VIEW_LABELS_PT: Record<AppViewMode, string> = {
+  home: 'Início',
+  studio: 'Estúdio de Voz',
+  'voice-clone': 'Minha Voz Pro',
+  salon: 'Salão',
+  ideas: 'Ideias',
+  carousel: 'Vozes 3D',
+  grid: 'Vozes',
+  favorites: 'Favoritos',
 };
 
 const FilterBar: React.FC<FilterBarProps> = ({
@@ -111,13 +125,14 @@ const FilterBar: React.FC<FilterBarProps> = ({
   onOpenChat,
   onOpenVoiceCompare,
   compareCount = 0,
+  socialLinks = DEFAULT_SOCIAL_LINKS,
 }) => {
-  const { lang, setLang, bi } = useLanguage();
+  const { lang, setLang, toggleLang, bi } = useLanguage();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuContainerRef = useRef<HTMLDivElement | null>(null);
 
   const totalAlerts = unreadChatCount + (isAdmin ? unreadIssuesCount : 0);
-  const viewLabels = lang === 'bn' ? VIEW_LABELS_BN : VIEW_LABELS_EN;
+  const viewLabels = lang === 'bn' ? VIEW_LABELS_BN : lang === 'pt' ? VIEW_LABELS_PT : VIEW_LABELS_EN;
 
   useEffect(() => {
     if (!isMenuOpen) return;
@@ -280,7 +295,7 @@ const FilterBar: React.FC<FilterBarProps> = ({
               onClick={() => setLang('bn')}
               aria-pressed={lang === 'bn'}
               aria-label="বাংলা ভাষা নির্বাচন করুন"
-              className={`min-h-[38px] px-2.5 rounded-[10px] text-xs font-semibold transition-all whitespace-nowrap shrink-0 ${
+              className={`min-h-[38px] px-2 sm:px-2.5 rounded-[10px] text-xs font-semibold transition-all whitespace-nowrap shrink-0 ${
                 lang === 'bn'
                   ? 'bg-indigo-600 text-white shadow-sm'
                   : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
@@ -293,13 +308,26 @@ const FilterBar: React.FC<FilterBarProps> = ({
               onClick={() => setLang('en')}
               aria-pressed={lang === 'en'}
               aria-label="Switch language to English"
-              className={`min-h-[38px] px-2.5 rounded-[10px] text-xs font-semibold transition-all whitespace-nowrap shrink-0 ${
+              className={`min-h-[38px] px-2 sm:px-2.5 rounded-[10px] text-xs font-semibold transition-all whitespace-nowrap shrink-0 ${
                 lang === 'en'
                   ? 'bg-indigo-600 text-white shadow-sm'
                   : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
               EN
+            </button>
+            <button
+              type="button"
+              onClick={() => setLang('pt')}
+              aria-pressed={lang === 'pt'}
+              aria-label="Mudar idioma para Português"
+              className={`min-h-[38px] px-2 sm:px-2.5 rounded-[10px] text-xs font-semibold transition-all whitespace-nowrap shrink-0 ${
+                lang === 'pt'
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              PT
             </button>
           </div>
 
@@ -510,7 +538,7 @@ const FilterBar: React.FC<FilterBarProps> = ({
                 >
                   <span className="flex items-center gap-3">
                     <Star size={16} className="text-amber-500 fill-amber-400 shrink-0" />
-                    <span>{bi('ইউজার রিভিউ ও স্টার রেটিং', 'User Ratings & Reviews')}</span>
+                    <span>{bi('রিভিউ ও ফিডব্যাক', 'Reviews & Feedback')}</span>
                   </span>
                 </button>
 
@@ -528,7 +556,7 @@ const FilterBar: React.FC<FilterBarProps> = ({
                         size={16}
                         className="text-emerald-600 dark:text-emerald-400 shrink-0"
                       />
-                      <span>{bi('চ্যাট লিস্ট ও মতামত', 'Chat List & Feedback')}</span>
+                      <span>{bi('চ্যাট', 'Chat')}</span>
                     </span>
                     {unreadChatCount > 0 && (
                       <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-rose-600 text-white tabular-nums">
@@ -628,12 +656,18 @@ const FilterBar: React.FC<FilterBarProps> = ({
 
                 <button
                   type="button"
-                  onClick={() => setLang(lang === 'bn' ? 'en' : 'bn')}
+                  onClick={toggleLang}
                   className="w-full min-h-[44px] px-3 py-2 rounded-xl flex items-center justify-between gap-3 text-sm font-medium text-zinc-800 dark:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
                 >
                   <span className="flex items-center gap-3">
                     <Languages size={16} className="text-indigo-500 shrink-0" />
-                    <span>{bi('ভাষা: বাংলা (English এ যান)', 'Language: English (Switch to বাংলা)')}</span>
+                    <span>
+                      {bi(
+                        'ভাষা: বাংলা (English / Português)',
+                        'Language: English (Português / বাংলা)',
+                        'Idioma: Português (বাংলা / English)'
+                      )}
+                    </span>
                   </span>
                 </button>
 
@@ -655,6 +689,12 @@ const FilterBar: React.FC<FilterBarProps> = ({
                     </span>
                   </span>
                 </button>
+
+                <SocialLinksRow
+                  socialLinks={socialLinks}
+                  variant="drawer"
+                  onLinkClick={() => setIsMenuOpen(false)}
+                />
 
                 {user && onSignOut && (
                   <button

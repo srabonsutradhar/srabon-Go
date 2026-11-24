@@ -65,10 +65,10 @@ const COMMUNITY_ROOMS: {
 }[] = [
   {
     id: 'general',
-    titleBn: 'সবার মতামত',
-    titleEn: 'Open Feedback',
-    subtitleBn: 'অ্যাপের সব ইউজার একে অপরের সাথে মতামত শেয়ার করুন',
-    subtitleEn: 'Share feedback and chat with all app users',
+    titleBn: 'সাধারণ আড্ডা',
+    titleEn: 'General Chat',
+    subtitleBn: 'অ্যাপের সব ইউজার একে অপরের সাথে চ্যাট করুন',
+    subtitleEn: 'Chat live with all app users',
     badgeBn: 'সাধারণ',
     badgeEn: 'General',
   },
@@ -76,8 +76,8 @@ const COMMUNITY_ROOMS: {
     id: 'studio',
     titleBn: 'Voice Studio আড্ডা',
     titleEn: 'Voice Studio Chat',
-    subtitleBn: 'ভয়েস স্টুডিও ইউজারদের অভিজ্ঞতা ও টিপস',
-    subtitleEn: 'Tips and experiences from Voice Studio users',
+    subtitleBn: 'ভয়েস স্টুডিও ইউজারদের লাইভ আড্ডা ও টিপস',
+    subtitleEn: 'Live chat and tips from Voice Studio users',
     badgeBn: 'ভয়েস স্টুডিও',
     badgeEn: 'Voice Studio',
   },
@@ -85,8 +85,8 @@ const COMMUNITY_ROOMS: {
     id: 'salon',
     titleBn: 'Jagannath Salon আড্ডা',
     titleEn: 'Jagannath Salon Chat',
-    subtitleBn: 'সেলুন সার্ভিস ও গ্রুমিং নিয়ে গ্রাহকদের মতামত',
-    subtitleEn: 'Customer feedback on salon grooming services',
+    subtitleBn: 'সেলুন সার্ভিস ও গ্রুমিং নিয়ে গ্রাহকদের আড্ডা',
+    subtitleEn: 'Customer chat on salon grooming services',
     badgeBn: 'সেলুন',
     badgeEn: 'Salon',
   },
@@ -95,7 +95,8 @@ const COMMUNITY_ROOMS: {
 function formatChatTime(ts: any, lang: AppLanguage): string {
   const ms = typeof ts?.toMillis === 'function' ? ts.toMillis() : null;
   if (!ms) return '';
-  return new Date(ms).toLocaleTimeString(lang === 'bn' ? 'bn-BD' : 'en-US', {
+  const locale = lang === 'bn' ? 'bn-BD' : lang === 'pt' ? 'pt-BR' : 'en-US';
+  return new Date(ms).toLocaleTimeString(locale, {
     hour: '2-digit',
     minute: '2-digit',
   });
@@ -115,15 +116,15 @@ function getOriginBadgeLabel(
 ): string {
   switch (origin) {
     case 'studio':
-      return lang === 'bn' ? 'ভয়েস স্টুডিও' : 'Voice Studio';
+      return lang === 'bn' ? 'ভয়েস স্টুডিও' : lang === 'pt' ? 'Estúdio de Voz' : 'Voice Studio';
     case 'salon':
-      return lang === 'bn' ? 'সেলুন' : 'Salon';
+      return lang === 'bn' ? 'সেলুন' : lang === 'pt' ? 'Salão' : 'Salon';
     case 'ideas':
-      return lang === 'bn' ? 'আইডিয়া' : 'Ideas';
+      return lang === 'bn' ? 'আইডিয়া' : lang === 'pt' ? 'Ideias' : 'Ideas';
     case 'library':
-      return lang === 'bn' ? 'লাইব্রেরি' : 'Library';
+      return lang === 'bn' ? 'লাইব্রেরি' : lang === 'pt' ? 'Biblioteca' : 'Library';
     default:
-      return lang === 'bn' ? 'হোম' : 'Home';
+      return lang === 'bn' ? 'হোম' : lang === 'pt' ? 'Início' : 'Home';
   }
 }
 
@@ -231,7 +232,13 @@ const ChatHubModal: React.FC<ChatHubModalProps> = ({
 
   // Subscribe to selected Admin Thread messages
   useEffect(() => {
-    if (selectedChat.kind !== 'admin' || !selectedAdminThreadId || !selectedAdminThreadExists || !user.emailVerified) {
+    if (
+      selectedChat.kind !== 'admin' ||
+      !selectedAdminThreadId ||
+      !selectedAdminThreadExists ||
+      !user.emailVerified ||
+      !safeUid
+    ) {
       setAdminMessages([]);
       setLoadingAdminMessages(false);
       return;
@@ -239,8 +246,11 @@ const ChatHubModal: React.FC<ChatHubModalProps> = ({
 
     setLoadingAdminMessages(true);
     const msgRef = collection(db, 'adminFeedbackThreads', selectedAdminThreadId, 'messages');
+    const msgQuery = isAdmin
+      ? msgRef
+      : query(msgRef, where('threadOwnerUid', '==', safeUid));
     const unsubscribe = onSnapshot(
-      msgRef,
+      msgQuery,
       (snapshot) => {
         const list: AdminFeedbackMessage[] = snapshot.docs.map((d) => ({
           id: d.id,
@@ -265,7 +275,7 @@ const ChatHubModal: React.FC<ChatHubModalProps> = ({
     );
 
     return () => unsubscribe();
-  }, [selectedChat.kind, selectedAdminThreadId, selectedAdminThreadExists, user.emailVerified]);
+  }, [selectedChat.kind, selectedAdminThreadId, selectedAdminThreadExists, user.emailVerified, isAdmin, safeUid]);
 
   // Mark thread as read when opened
   useEffect(() => {
@@ -342,12 +352,12 @@ const ChatHubModal: React.FC<ChatHubModalProps> = ({
       {
         scope: 'studio',
         label: bi('Voice Studio → অ্যাডমিন', 'Voice Studio → Admin'),
-        subtitle: bi('ভয়েস স্টুডিও নিয়ে আপনার মতামত', 'Your feedback on Voice Studio'),
+        subtitle: bi('ভয়েস স্টুডিও নিয়ে অ্যাডমিনের সাথে সরাসরি চ্যাট', 'Direct chat with Admin about Voice Studio'),
       },
       {
         scope: 'salon',
         label: bi(`${salonName} → অ্যাডমিন`, `${salonName} → Admin`),
-        subtitle: bi('সেলুন বুকিং নিয়ে আপনার মতামত', 'Your feedback on salon bookings'),
+        subtitle: bi('সেলুন বুকিং নিয়ে অ্যাডমিনের সাথে সরাসরি চ্যাট', 'Direct chat with Admin about salon bookings'),
       },
     ];
     return scopes.map((item) => {
@@ -545,7 +555,7 @@ const ChatHubModal: React.FC<ChatHubModalProps> = ({
                   id="chat-hub-title"
                   className="text-lg sm:text-xl font-serif font-medium text-zinc-900 dark:text-white truncate"
                 >
-                  {bi('চ্যাট লিস্ট · মতামত ও আলোচনা', 'Chat List · Feedback & Community')}
+                  {bi('চ্যাট · অ্যাডমিন ও কমিউনিটি', 'Chat · Admin & Community')}
                 </h2>
                 {totalAdminUnread > 0 && (
                   <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-600 text-white tabular-nums">
@@ -555,8 +565,8 @@ const ChatHubModal: React.FC<ChatHubModalProps> = ({
               </div>
               <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 truncate leading-relaxed">
                 {bi(
-                  'অ্যাডমিনের সাথে সরাসরি মতামত ও পাশেই ইউজারদের নিজেদের মধ্যে আলোচনা',
-                  'Direct admin feedback and open user-to-user community channels'
+                  'অ্যাডমিনের সাথে সরাসরি চ্যাট ও ইউজারদের নিজেদের মধ্যে আড্ডা',
+                  'Direct chat with Admin and live community chat rooms'
                 )}
               </p>
             </div>
@@ -667,8 +677,8 @@ const ChatHubModal: React.FC<ChatHubModalProps> = ({
                     filteredAdminThreads.length === 0 ? (
                       <p className="text-xs text-zinc-500 dark:text-zinc-400 text-center py-6 px-3 leading-relaxed">
                         {bi(
-                          'এখনও কোনো গ্রাহক অ্যাডমিনকে মতামত পাঠাননি।',
-                          'No customer feedback messages received yet.'
+                          'এখনও কোনো গ্রাহক অ্যাডমিনের সাথে চ্যাট শুরু করেননি।',
+                          'No customer chats started yet.'
                         )}
                       </p>
                     ) : (
@@ -780,7 +790,7 @@ const ChatHubModal: React.FC<ChatHubModalProps> = ({
                     <span>{bi('ইউজারদের চ্যাট', 'Community Chat')}</span>
                   </span>
                   <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">
-                    {bi('ইউজার একে অপরের সাথে মতামত শেয়ার', 'Share feedback with other users')}
+                    {bi('ইউজার একে অপরের সাথে লাইভ চ্যাট করুন', 'Chat live with other users')}
                   </p>
                 </div>
 
@@ -844,8 +854,8 @@ const ChatHubModal: React.FC<ChatHubModalProps> = ({
                           {isAdmin
                             ? bi(`${selectedChat.customerName} ↔ অ্যাডমিন`, `${selectedChat.customerName} ↔ Admin`)
                             : selectedChat.pageScope === 'salon'
-                            ? bi(`${salonName} · অ্যাডমিন মতামত`, `${salonName} · Admin Feedback`)
-                            : bi('Voice Studio · অ্যাডমিন মতামত', 'Voice Studio · Admin Feedback')}
+                            ? bi(`${salonName} · অ্যাডমিন চ্যাট`, `${salonName} · Admin Chat`)
+                            : bi('Voice Studio · অ্যাডমিন চ্যাট', 'Voice Studio · Admin Chat')}
                         </h3>
                         <span className="px-2.5 py-0.5 rounded-md text-xs font-bold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300">
                           {bi('প্রাইভেট অ্যাডমিন চ্যাট', 'Private Admin Chat')}
@@ -853,8 +863,8 @@ const ChatHubModal: React.FC<ChatHubModalProps> = ({
                       </div>
                       <p className="text-xs text-zinc-500 dark:text-zinc-400 truncate leading-relaxed">
                         {isAdmin
-                          ? bi('এই গ্রাহকের সরাসরি মতামতে উত্তর দিন', 'Reply directly to this customer’s feedback')
-                          : bi('এখানে পাঠানো মতামত সরাসরি অ্যাডমিনের কাছে পৌঁছাবে', 'Messages sent here go straight to the admin')}
+                          ? bi('এই গ্রাহকের চ্যাটে সরাসরি উত্তর দিন', 'Reply directly in this customer chat')
+                          : bi('এখানে পাঠানো মেসেজ সরাসরি অ্যাডমিনের কাছে পৌঁছাবে', 'Messages sent here go straight to the admin')}
                       </p>
                     </>
                   ) : (
@@ -892,12 +902,12 @@ const ChatHubModal: React.FC<ChatHubModalProps> = ({
                     <p className="text-xs text-zinc-500 dark:text-zinc-400">
                       {selectedChat.pageScope === 'salon'
                         ? bi(
-                            'সেলুন বুকিং বা সার্ভিস নিয়ে আপনার মতামত লিখে অ্যাডমিনকে পাঠান।',
-                            'Write your feedback about salon bookings or services for the admin.'
+                            'সেলুন বুকিং বা সার্ভিস নিয়ে অ্যাডমিনের সাথে সরাসরি চ্যাট শুরু করুন।',
+                            'Start a direct chat with the admin about salon bookings or services.'
                           )
                         : bi(
-                            'ভয়েস স্টুডিও নিয়ে আপনার মতামত বা পরামর্শ লিখে অ্যাডমিনকে পাঠান।',
-                            'Write your feedback or suggestions about Voice Studio for the admin.'
+                            'ভয়েস স্টুডিও নিয়ে অ্যাডমিনের সাথে সরাসরি চ্যাট শুরু করুন।',
+                            'Start a direct chat with the admin about Voice Studio.'
                           )}
                     </p>
                   </div>
@@ -941,12 +951,12 @@ const ChatHubModal: React.FC<ChatHubModalProps> = ({
                 <div className="py-12 text-center space-y-2 max-w-sm mx-auto">
                   <Users size={22} className="mx-auto text-emerald-500" />
                   <p className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
-                    {bi('আলোচনা শুরু করুন', 'Start the Conversation')}
+                    {bi('চ্যাট শুরু করুন', 'Start Chatting')}
                   </p>
                   <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">
                     {bi(
-                      'অন্যান্য ইউজারদের সাথে আপনার অভিজ্ঞতা ও মতামত শেয়ার করতে নিচে লিখুন।',
-                      'Type below to share your experience and feedback with other users.'
+                      'অন্যান্য ইউজারদের সাথে চ্যাট করতে নিচে মেসেজ লিখুন।',
+                      'Type below to chat live with other users.'
                     )}
                   </p>
                 </div>
@@ -1019,8 +1029,8 @@ const ChatHubModal: React.FC<ChatHubModalProps> = ({
                   maxLength={1000}
                   placeholder={
                     selectedChat.kind === 'admin'
-                      ? bi('অ্যাডমিনের কাছে আপনার মতামত লিখুন...', 'Write your feedback for the admin...')
-                      : bi('অন্য ইউজারদের সাথে আপনার মতামত শেয়ার করুন...', 'Share your thoughts with the community...')
+                      ? bi('সরাসরি চ্যাটে মেসেজ লিখুন...', 'Write a chat message...')
+                      : bi('কমিউনিটি চ্যাটে মেসেজ লিখুন...', 'Write a message in community chat...')
                   }
                   className="flex-1 rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-3.5 py-2.5 text-sm text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:focus:ring-indigo-900"
                 />
