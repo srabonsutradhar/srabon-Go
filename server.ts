@@ -6,8 +6,121 @@ import express from "express";
 import path from "path";
 import fs from "fs";
 import crypto from "crypto";
+import { spawn, ChildProcess } from "child_process";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
+
+const PY_ENGINE_PORT = Number(process.env.PY_ENGINE_PORT) || 8765;
+const PY_ENGINE_URL = `http://127.0.0.1:${PY_ENGINE_PORT}`;
+let pyProcess: ChildProcess | null = null;
+let pyEngineReady = false;
+let pyRestartCount = 0;
+
+function startPythonSmartEngine(): void {
+  const scriptPath = path.join(process.cwd(), "backend_py", "smart_engine.py");
+  if (!fs.existsSync(scriptPath)) {
+    return;
+  }
+  const pyBin = process.env.PYTHON_BIN || "python3";
+  try {
+    const child = spawn(pyBin, [scriptPath, "--host", "127.0.0.1", "--port", String(PY_ENGINE_PORT)], {
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    pyProcess = child;
+
+    child.stdout?.on("data", (chunk) => {
+      const line = chunk.toString().trim();
+      if (line) console.log(line);
+      if (line.includes("Listening on")) {
+        pyEngineReady = true;
+        pyRestartCount = 0;
+      }
+    });
+
+    child.stderr?.on("data", (chunk) => {
+      const line = chunk.toString().trim();
+      if (line) console.warn(`[Python Smart Engine] ${line}`);
+    });
+
+    child.on("error", (err) => {
+      pyEngineReady = false;
+      pyProcess = null;
+      console.warn("[Python Smart Engine] Unavailable:", err?.message || err);
+    });
+
+    child.on("exit", (code) => {
+      pyEngineReady = false;
+      pyProcess = null;
+      if (code !== 0 && code !== null && pyRestartCount < 3) {
+        pyRestartCount += 1;
+        setTimeout(startPythonSmartEngine, 1500);
+      }
+    });
+  } catch {
+    pyEngineReady = false;
+  }
+}
+
+function stopPythonSmartEngine(): void {
+  if (pyProcess && !pyProcess.killed) {
+    try {
+      pyProcess.kill("SIGTERM");
+    } catch {}
+    pyProcess = null;
+  }
+}
+
+process.once("SIGINT", stopPythonSmartEngine);
+process.once("SIGTERM", stopPythonSmartEngine);
+process.once("exit", stopPythonSmartEngine);
+
+async function proxyToPythonSmart(endpoint: string, body?: unknown): Promise<any | null> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 3500);
+  try {
+    const res = await fetch(`${PY_ENGINE_URL}${endpoint}`, {
+      method: body === undefined ? "GET" : "POST",
+      headers: body === undefined ? undefined : { "Content-Type": "application/json" },
+      body: body === undefined ? undefined : JSON.stringify(body),
+      signal: controller.signal,
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    pyEngineReady = true;
+    return data;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function fallbackAnalyzeScript(rawPayload: any) {
+  const text = typeof rawPayload?.text === "string" ? rawPayload.text.trim() : "";
+  const maxChars = typeof rawPayload?.maxChars === "number" && rawPayload.maxChars > 0 ? rawPayload.maxChars : 5000;
+  const words = text ? text.split(/\s+/).filter(Boolean) : [];
+  const bnMatches = (text.match(/[\u0980-\u09FF]/g) || []).length;
+  const alphaMatches = (text.match(/[a-zA-Z\u0980-\u09FF]/g) || []).length || 1;
+  const bnPct = Math.round((bnMatches / alphaMatches) * 100);
+  const primary = bnPct >= 65 ? "bn" : bnPct >= 20 ? "mixed" : "en";
+  return {
+    engine: "node-fallback",
+    charCount: text.length,
+    wordCount: words.length,
+    sentenceCount: text ? Math.max(1, text.split(/[।.!?]+/).filter((s: string) => s.trim()).length) : 0,
+    estimatedSeconds: words.length ? Math.max(1, Math.round((words.length / (bnPct >= 45 ? 125 : 145)) * 60)) : 0,
+    estimatedTokens: text ? estimateTtsTokens(text, "") : 0,
+    language: { primary, bengaliPercent: bnPct, latinPercent: 100 - bnPct },
+    recommendedStyle: {
+      presetId: "calm",
+      stylePrompt: "Calm, steady, crisp studio narration",
+      language: primary,
+    },
+    chunkCount: text ? Math.ceil(text.length / 1200) : 0,
+    chunks: text ? [text.slice(0, 1200)] : [],
+    overLimit: text.length > maxChars,
+  };
+}
 
 class BoundedMap<K, V> extends Map<K, V> {
   maxEntries: number;
@@ -470,6 +583,7 @@ function aiRateLimitMiddleware(req: any, res: any, next: any) {
 }
 
 async function startServer() {
+  startPythonSmartEngine();
   const app = express();
   app.disable("x-powered-by");
   app.set("trust proxy", 2);
@@ -522,12 +636,14 @@ async function startServer() {
     return next();
   });
 
-  app.get("/api/health", (_req, res) => {
+  app.get("/api/health", async (_req, res) => {
     const now = Date.now();
     pruneTtsWindow(now);
+    const pyHealth = pyEngineReady ? { status: "ok" } : await proxyToPythonSmart("/health");
     res.json({
       status: "ok",
       configured: Boolean(getServerApiKey()),
+      pythonEngine: Boolean(pyHealth?.status === "ok"),
       ttsCacheEntries: ttsCache.size,
       limits: {
         rpm: TTS_RPM_LIMIT,
@@ -540,6 +656,48 @@ async function startServer() {
         rpdUsed: ttsDailyCount,
       },
     });
+  });
+
+  app.get("/api/smart/health", async (_req, res) => {
+    const pyHealth = await proxyToPythonSmart("/health");
+    if (pyHealth) {
+      return res.json(pyHealth);
+    }
+    return res.json({ status: "fallback", engine: "node-fallback" });
+  });
+
+  app.post("/api/smart/analyze-script", async (req, res) => {
+    const pyResult = await proxyToPythonSmart("/analyze-script", req.body || {});
+    if (pyResult) {
+      return res.json(pyResult);
+    }
+    return res.json(fallbackAnalyzeScript(req.body || {}));
+  });
+
+  app.post("/api/smart/salon-insights", async (req, res) => {
+    const pyResult = await proxyToPythonSmart("/salon-insights", req.body || {});
+    if (pyResult) {
+      return res.json(pyResult);
+    }
+    const timeSlots = Array.isArray(req.body?.timeSlots) ? req.body.timeSlots : [];
+    return res.json({
+      engine: "node-fallback",
+      bookingDate: String(req.body?.bookingDate || ""),
+      activeQueueCount: 0,
+      estimatedQueueWaitMins: 0,
+      bestSlot: timeSlots[0] || null,
+      bestSlotBookedCount: 0,
+      openSlotsCount: timeSlots.length,
+      slots: [],
+    });
+  });
+
+  app.post("/api/smart/audio-inspect", async (req, res) => {
+    const pyResult = await proxyToPythonSmart("/audio-inspect", req.body || {});
+    if (pyResult) {
+      return res.status(pyResult.error ? 400 : 200).json(pyResult);
+    }
+    return res.status(503).json({ error: "Python DSP audio inspector unavailable." });
   });
 
   app.use("/api/tts", aiRateLimitMiddleware);
@@ -1036,7 +1194,8 @@ async function startServer() {
       }
       return res.sendFile(path.join(distPath, "index.html"));
     });
-    app.use(express.static(distPath));
+    app.use("/assets", express.static(path.join(distPath, "assets"), { maxAge: "7d", immutable: true }));
+    app.use(express.static(distPath, { maxAge: "1h" }));
     app.use((_req, res) => {
       res.sendFile(path.join(distPath, "index.html"));
     });

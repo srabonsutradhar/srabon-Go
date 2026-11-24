@@ -1172,7 +1172,13 @@ export function extractTimestampMillis(ts: any): number | null {
 export function formatBookingCreatedTimestamp(
   createdAt: any,
   lang: AppLanguage
-): { dateTimeLabel: string; timeLabel: string } | null {
+): {
+  dateTimeLabel: string;
+  shortDateTimeLabel: string;
+  dateLabel: string;
+  timeLabel: string;
+  localDateKey: string;
+} | null {
   const ms = extractTimestampMillis(createdAt);
   if (!ms) return null;
   const date = new Date(ms);
@@ -1188,9 +1194,19 @@ export function formatBookingCreatedTimestamp(
     month: 'short',
     year: 'numeric',
   });
+  const shortDateLabel = date.toLocaleDateString(locale, {
+    day: 'numeric',
+    month: 'short',
+  });
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
   return {
     dateTimeLabel: `${dateLabel}, ${timeLabel}`,
+    shortDateTimeLabel: `${shortDateLabel}, ${timeLabel}`,
+    dateLabel,
     timeLabel,
+    localDateKey: `${yyyy}-${mm}-${dd}`,
   };
 }
 

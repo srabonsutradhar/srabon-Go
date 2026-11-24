@@ -23,6 +23,7 @@ import {
   CalendarDays,
   Share2,
   RotateCcw,
+  Clock,
 } from 'lucide-react';
 import { normalizeApiBaseUrl, setDynamicApiBaseUrl, testApiHealthAtUrl } from '../utils/audio';
 import {
@@ -53,6 +54,7 @@ import {
 import { SALON_SERVICES, formatSalonPrice, isBookingTimeExpired } from '../utils/salon';
 import { DEFAULT_SOCIAL_LINKS, normalizeSocialUrlInput } from '../utils/socialLinks';
 import {
+  extractTimestampMillis,
   formatBookingCreatedTimestamp,
   isCustomSalonServiceTitle,
   localizeBookingStatus,
@@ -322,13 +324,13 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
       (snapshot) => {
         const list: SalonBooking[] = snapshot.docs.map((d) => ({
           id: d.id,
-          ...(d.data() as Omit<SalonBooking, 'id'>),
+          ...(d.data({ serverTimestamps: 'estimate' }) as Omit<SalonBooking, 'id'>),
         }));
         list.sort((a, b) => {
           if (a.status === 'pending' && b.status !== 'pending') return -1;
           if (a.status !== 'pending' && b.status === 'pending') return 1;
-          const at = a.createdAt?.toMillis?.() ?? 0;
-          const bt = b.createdAt?.toMillis?.() ?? 0;
+          const at = extractTimestampMillis(a.createdAt) ?? 0;
+          const bt = extractTimestampMillis(b.createdAt) ?? 0;
           return bt - at;
         });
         setSalonBookings(list);
@@ -1912,12 +1914,13 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                               ? localizeSalonService(b.serviceKey, lang, salonConfig, b.serviceTitle).primaryTitle
                               : b.serviceTitle}
                           </strong>{' '}
-                          · {b.bookingDate} ({b.timeSlot}) · {bi('বিল:', 'Bill:')}{' '}
+                          · {bi('নির্ধারিত স্লট:', 'Slot:', 'Horário:')} {b.bookingDate} ({b.timeSlot}) ·{' '}
+                          {bi('বিল:', 'Bill:', 'Valor:')}{' '}
                           {formatSalonPrice(b.totalPrice, currencySymbol || salonConfig.currencySymbol)}
                           {typeof b.discountAmount === 'number' && b.discountAmount > 0 && (
                             <span className="text-emerald-600 dark:text-emerald-400">
                               {' '}
-                              ({bi('ছাড়:', 'Discount:')} -
+                              ({bi('ছাড়:', 'Discount:', 'Desconto:')} -
                               {formatSalonPrice(
                                 b.discountAmount,
                                 currencySymbol || salonConfig.currencySymbol
@@ -1928,13 +1931,24 @@ const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                         </p>
                         {(() => {
                           const bookedStamp = formatBookingCreatedTimestamp(b.createdAt, lang);
+                          const bookedEarlierDay = Boolean(
+                            bookedStamp && bookedStamp.localDateKey < b.bookingDate
+                          );
                           return (
-                            <p className="text-xs sm:text-sm text-amber-700 dark:text-amber-300 font-medium tabular-nums leading-relaxed">
-                              {bi('বুকিং করার সময়:', 'Booked At:')}{' '}
-                              <span className="font-semibold text-zinc-900 dark:text-white">
-                                {bookedStamp ? bookedStamp.dateTimeLabel : bi('এইমাত্র', 'Just now')}
+                            <div className="inline-flex flex-wrap items-center gap-x-2 gap-y-1 px-3 py-1.5 rounded-xl bg-amber-50/90 dark:bg-amber-950/35 border border-amber-200/80 dark:border-amber-800/60 text-xs sm:text-sm tabular-nums">
+                              <Clock size={14} className="text-amber-600 dark:text-amber-400 shrink-0" />
+                              <span className="font-medium text-amber-800 dark:text-amber-200">
+                                {bi('বুকিং করার তারিখ ও সময়:', 'Booked Date & Time:', 'Data e Hora da Reserva:')}
                               </span>
-                            </p>
+                              <span className="font-semibold text-zinc-900 dark:text-white">
+                                {bookedStamp ? bookedStamp.dateTimeLabel : bi('এইমাত্র', 'Just now', 'Agora mesmo')}
+                              </span>
+                              {bookedEarlierDay && (
+                                <span className="text-xs font-semibold text-amber-700 dark:text-amber-300">
+                                  ({bi('আগের দিন বুকিং', 'Booked day before', 'Reservado antes')})
+                                </span>
+                              )}
+                            </div>
                           );
                         })()}
                         {b.notes && (

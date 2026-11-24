@@ -3,26 +3,29 @@
  * SPDX-License-Identifier: Apache-2.0
 */
 
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { Suspense, lazy, useState, useMemo, useEffect, useRef } from 'react';
 import { VOICE_DATA } from './constants';
-import Carousel3D from './components/Carousel3D';
-import GridView from './components/GridView';
 import FilterBar from './components/FilterBar';
-import VoiceFinder from './components/VoiceFinder';
-import AiResultCard from './components/AiResultCard';
-import TtsStudio from './components/TtsStudio';
-import TrendingIdeas from './components/TrendingIdeas';
-import HomePage from './components/HomePage';
-import SalonBookingPage from './components/SalonBookingPage';
 import GoogleLoginGate from './components/GoogleLoginGate';
-import ProUpgradeModal from './components/ProUpgradeModal';
-import AdminPanelModal, { AdminPanelTab } from './components/AdminPanelModal';
-import AdminNotificationsBox from './components/AdminNotificationsBox';
-import ChatHubModal from './components/ChatHubModal';
-import SiteLegalModal, { LegalTab } from './components/SiteLegalModal';
-import CustomVoiceCloneStudio from './components/CustomVoiceCloneStudio';
-import VoiceComparisonModal from './components/VoiceComparisonModal';
 import OfflineIndicator from './components/OfflineIndicator';
+import type { AdminPanelTab } from './components/AdminPanelModal';
+import type { LegalTab } from './components/SiteLegalModal';
+
+const Carousel3D = lazy(() => import('./components/Carousel3D'));
+const GridView = lazy(() => import('./components/GridView'));
+const VoiceFinder = lazy(() => import('./components/VoiceFinder'));
+const AiResultCard = lazy(() => import('./components/AiResultCard'));
+const TtsStudio = lazy(() => import('./components/TtsStudio'));
+const TrendingIdeas = lazy(() => import('./components/TrendingIdeas'));
+const HomePage = lazy(() => import('./components/HomePage'));
+const SalonBookingPage = lazy(() => import('./components/SalonBookingPage'));
+const ProUpgradeModal = lazy(() => import('./components/ProUpgradeModal'));
+const AdminPanelModal = lazy(() => import('./components/AdminPanelModal'));
+const AdminNotificationsBox = lazy(() => import('./components/AdminNotificationsBox'));
+const ChatHubModal = lazy(() => import('./components/ChatHubModal'));
+const SiteLegalModal = lazy(() => import('./components/SiteLegalModal'));
+const CustomVoiceCloneStudio = lazy(() => import('./components/CustomVoiceCloneStudio'));
+const VoiceComparisonModal = lazy(() => import('./components/VoiceComparisonModal'));
 import { AppIssueRecord, AppViewMode, CustomVoiceProfile, FilterState, AiRecommendation, BillingConfig, ProPackageType, SalonConfig, SocialLinksConfig, UserPlan } from './types';
 import { Info, Heart, Loader2, Bell, AlertTriangle, X, MessageSquare, ArrowLeftRight } from 'lucide-react';
 import { onAuthStateChanged, User } from 'firebase/auth';
@@ -1199,6 +1202,13 @@ const App: React.FC = () => {
         />
 
         <main className="flex-1 relative flex flex-col overflow-hidden">
+          <Suspense
+            fallback={
+              <div className="flex-1 flex items-center justify-center p-8 text-slate-500 dark:text-slate-400">
+                <Loader2 size={24} className="animate-spin text-indigo-600 dark:text-amber-400" />
+              </div>
+            }
+          >
               {viewMode === 'home' ? (
                 <HomePage
                   user={user}
@@ -1429,155 +1439,192 @@ const App: React.FC = () => {
                       </button>
                   </div>
               )}
+          </Suspense>
         </main>
       </div>
 
       {/* Modals are rendered outside the aria-hidden container */}
-      {showVoiceFinder && (
-        <VoiceFinder 
-            voices={VOICE_DATA}
-            onRecommendation={(rec) => {
-                if (rec) {
-                    setAiResult(rec);
-                    setIsAiCardVisible(true);
-                    setFilters(prev => ({ ...prev, search: '' })); 
-                }
-                setShowVoiceFinder(false);
-            }}
-            onClose={() => setShowVoiceFinder(false)}
-            onBeforeGenerate={consumeAiQuota}
+      <Suspense fallback={null}>
+        {showVoiceFinder && (
+          <VoiceFinder 
+              voices={VOICE_DATA}
+              onRecommendation={(rec) => {
+                  if (rec) {
+                      setAiResult(rec);
+                      setIsAiCardVisible(true);
+                      setFilters(prev => ({ ...prev, search: '' })); 
+                  }
+                  setShowVoiceFinder(false);
+              }}
+              onClose={() => setShowVoiceFinder(false)}
+              onBeforeGenerate={consumeAiQuota}
+              isAdmin={isAdmin}
+          />
+        )}
+
+        {showProModal && user && (
+          <ProUpgradeModal
+            user={user}
+            userPlan={effectiveUserPlan}
+            proPackageType={proPackageType}
+            proExpiresAtMs={proExpiresAtMs}
+            usedToday={effectiveUsedToday}
+            billingConfig={billingConfig}
             isAdmin={isAdmin}
-        />
-      )}
+            referralCode={referralCode}
+            bonusCredits={bonusCredits}
+            referralCount={referralCount}
+            alreadyClaimedReferral={alreadyClaimedReferral}
+            onReferralClaimed={() => setAlreadyClaimedReferral(true)}
+            initialTab={proModalTab}
+            initialPackage={proSelectedPackage}
+            onClose={() => setShowProModal(false)}
+          />
+        )}
 
-      {showProModal && user && (
-        <ProUpgradeModal
-          user={user}
-          userPlan={effectiveUserPlan}
-          proPackageType={proPackageType}
-          proExpiresAtMs={proExpiresAtMs}
-          usedToday={effectiveUsedToday}
-          billingConfig={billingConfig}
-          isAdmin={isAdmin}
-          referralCode={referralCode}
-          bonusCredits={bonusCredits}
-          referralCount={referralCount}
-          alreadyClaimedReferral={alreadyClaimedReferral}
-          onReferralClaimed={() => setAlreadyClaimedReferral(true)}
-          initialTab={proModalTab}
-          initialPackage={proSelectedPackage}
-          onClose={() => setShowProModal(false)}
-        />
-      )}
+        {showAdminPanel && isAdmin && (
+          <AdminPanelModal
+            billingConfig={billingConfig}
+            salonConfig={salonConfig}
+            socialLinks={socialLinks}
+            initialTab={adminInitialTab}
+            onClose={() => setShowAdminPanel(false)}
+          />
+        )}
 
-      {showAdminPanel && isAdmin && (
-        <AdminPanelModal
-          billingConfig={billingConfig}
-          salonConfig={salonConfig}
-          socialLinks={socialLinks}
-          initialTab={adminInitialTab}
-          onClose={() => setShowAdminPanel(false)}
-        />
-      )}
+        {aiResult && isAiCardVisible && (
+            <div 
+              className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-zinc-900/60 backdrop-blur-sm animate-fade-in"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="ai-result-title"
+            >
+               <div className="absolute inset-0" onClick={clearAiResult}></div>
+               <div className="relative w-full max-w-5xl animate-slide-up max-h-[90vh] overflow-hidden rounded-2xl">
+                    <AiResultCard 
+                      result={aiResult} 
+                      voices={filteredVoices} 
+                      onClose={clearAiResult}
+                      onBeforeGenerate={consumeAiQuota}
+                      isAdmin={isAdmin}
+                   />
+               </div>
+            </div>
+        )}
 
-      {aiResult && isAiCardVisible && (
-          <div 
-            className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-zinc-900/60 backdrop-blur-sm animate-fade-in"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="ai-result-title"
+        {showAdminNotifications && isAdmin && (
+          <AdminNotificationsBox
+            issues={allAdminIssues}
+            onClose={() => setShowAdminNotifications(false)}
+          />
+        )}
+
+        {/* Separate Admin-only Floating Issue Notification Box */}
+        {isAdmin && unreadIssuesCount > 0 && !showAdminNotifications && !floatingNoticeHidden && (
+          <aside
+            aria-label={bi('অ্যাডমিন সমস্যা নোটিফিকেশন', 'Admin Issue Notification')}
+            className="fixed bottom-16 sm:bottom-5 right-4 sm:right-5 z-[80] w-[calc(100%-2rem)] max-w-md rounded-2xl bg-white dark:bg-zinc-900 border border-rose-200 dark:border-rose-900 shadow-2xl p-5 space-y-4 animate-slide-up"
           >
-             <div className="absolute inset-0" onClick={clearAiResult}></div>
-             <div className="relative w-full max-w-5xl animate-slide-up max-h-[90vh] overflow-hidden rounded-2xl">
-                  <AiResultCard 
-                    result={aiResult} 
-                    voices={filteredVoices} 
-                    onClose={clearAiResult}
-                    onBeforeGenerate={consumeAiQuota}
-                    isAdmin={isAdmin}
-                 />
-             </div>
-          </div>
-      )}
-
-      {showAdminNotifications && isAdmin && (
-        <AdminNotificationsBox
-          issues={allAdminIssues}
-          onClose={() => setShowAdminNotifications(false)}
-        />
-      )}
-
-      {/* Separate Admin-only Floating Issue Notification Box */}
-      {isAdmin && unreadIssuesCount > 0 && !showAdminNotifications && !floatingNoticeHidden && (
-        <aside
-          aria-label={bi('অ্যাডমিন সমস্যা নোটিফিকেশন', 'Admin Issue Notification')}
-          className="fixed bottom-16 sm:bottom-5 right-4 sm:right-5 z-[80] w-[calc(100%-2rem)] max-w-md rounded-2xl bg-white dark:bg-zinc-900 border border-rose-200 dark:border-rose-900 shadow-2xl p-5 space-y-4 animate-slide-up"
-        >
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="w-10 h-10 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0">
-                <Bell size={18} />
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-10 h-10 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0">
+                  <Bell size={18} />
+                </div>
+                <div className="min-w-0 space-y-0.5">
+                  <p className="text-sm font-bold text-zinc-900 dark:text-white leading-snug">
+                    {bi(
+                      `অ্যাডমিন নোটিফিকেশন বক্স (${unreadIssuesCount})`,
+                      `Admin Notification Box (${unreadIssuesCount})`
+                    )}
+                  </p>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">
+                    {bi(
+                      'অ্যাপে নতুন সমস্যা পাওয়া গেছে (শুধু আপনি দেখছেন)',
+                      'New app issue detected (visible to Admin only)'
+                    )}
+                  </p>
+                </div>
               </div>
-              <div className="min-w-0 space-y-0.5">
-                <p className="text-sm font-bold text-zinc-900 dark:text-white leading-snug">
-                  {bi(
-                    `অ্যাডমিন নোটিফিকেশন বক্স (${unreadIssuesCount})`,
-                    `Admin Notification Box (${unreadIssuesCount})`
-                  )}
+              <button
+                type="button"
+                onClick={() => setFloatingNoticeHidden(true)}
+                className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors shrink-0"
+                aria-label={bi('নোটিফিকেশন প্রিভিউ লুকান', 'Hide notification preview')}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-rose-50/70 dark:bg-rose-950/30 border border-rose-100 dark:border-rose-900/60 text-sm text-rose-800 dark:text-rose-200 flex items-start gap-2.5">
+              <AlertTriangle size={16} className="shrink-0 mt-0.5" />
+              <div className="min-w-0 space-y-1">
+                <p className="font-semibold text-xs uppercase tracking-wider opacity-85">
+                  {unreadIssues[0].source}
                 </p>
-                <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">
-                  {bi(
-                    'অ্যাপে নতুন সমস্যা পাওয়া গেছে (শুধু আপনি দেখছেন)',
-                    'New app issue detected (visible to Admin only)'
-                  )}
-                </p>
+                <p className="text-sm leading-relaxed line-clamp-2 break-words">{unreadIssues[0].message}</p>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={() => setFloatingNoticeHidden(true)}
-              className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors shrink-0"
-              aria-label={bi('নোটিফিকেশন প্রিভিউ লুকান', 'Hide notification preview')}
-            >
-              <X size={16} />
-            </button>
-          </div>
 
-          <div className="p-3.5 rounded-xl bg-rose-50/70 dark:bg-rose-950/30 border border-rose-100 dark:border-rose-900/60 text-sm text-rose-800 dark:text-rose-200 flex items-start gap-2.5">
-            <AlertTriangle size={16} className="shrink-0 mt-0.5" />
-            <div className="min-w-0 space-y-1">
-              <p className="font-semibold text-xs uppercase tracking-wider opacity-85">
-                {unreadIssues[0].source}
-              </p>
-              <p className="text-sm leading-relaxed line-clamp-2 break-words">{unreadIssues[0].message}</p>
+            <div className="flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setFloatingNoticeHidden(true)}
+                className="px-3.5 py-2 rounded-xl text-sm font-medium text-zinc-600 hover:text-zinc-900 dark:text-zinc-300 dark:hover:text-white transition-colors"
+              >
+                {bi('পরে দেখুন', 'Later')}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowAdminNotifications(true)}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-sm font-semibold transition-colors"
+              >
+                {bi('নোটিফিকেশন বক্স খুলুন', 'Open Notification Box')}
+              </button>
             </div>
-          </div>
+          </aside>
+        )}
 
-          <div className="flex items-center justify-end gap-2.5">
-            <button
-              type="button"
-              onClick={() => setFloatingNoticeHidden(true)}
-              className="px-3.5 py-2 rounded-xl text-sm font-medium text-zinc-600 hover:text-zinc-900 dark:text-zinc-300 dark:hover:text-white transition-colors"
-            >
-              {bi('পরে দেখুন', 'Later')}
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowAdminNotifications(true)}
-              className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-sm font-semibold transition-colors"
-            >
-              {bi('নোটিফিকেশন বক্স খুলুন', 'Open Notification Box')}
-            </button>
-          </div>
-        </aside>
-      )}
+        {legalTab && (
+          <SiteLegalModal
+            initialTab={legalTab}
+            onClose={() => setLegalTab(null)}
+          />
+        )}
 
-      {legalTab && (
-        <SiteLegalModal
-          initialTab={legalTab}
-          onClose={() => setLegalTab(null)}
-        />
-      )}
+        {showChatHub && user && (
+          <ChatHubModal
+            user={user}
+            isAdmin={isAdmin}
+            currentViewMode={viewMode}
+            salonName={salonConfig.salonName}
+            onClose={() => setShowChatHub(false)}
+          />
+        )}
+
+        {showCompareModal && (() => {
+          const [initialA, initialB] = getInitialComparePair();
+          return (
+            <VoiceComparisonModal
+              voices={VOICE_DATA}
+              initialVoiceA={initialA}
+              initialVoiceB={initialB}
+              favorites={favorites}
+              onToggleFavorite={toggleFavorite}
+              onUseInStudio={(voiceName) => {
+                setShowCompareModal(false);
+                handleUseInStudio(voiceName);
+              }}
+              onSyncPair={(a, b) => {
+                setCompareVoices((prev) =>
+                  prev[0] === a && prev[1] === b ? prev : [a, b]
+                );
+              }}
+              onClose={() => setShowCompareModal(false)}
+              isDarkMode={isDarkMode}
+            />
+          );
+        })()}
+      </Suspense>
 
       {/* App-wide Floating Chat Launcher */}
       {!showChatHub && (
@@ -1599,40 +1646,6 @@ const App: React.FC = () => {
           )}
         </button>
       )}
-
-      {showChatHub && user && (
-        <ChatHubModal
-          user={user}
-          isAdmin={isAdmin}
-          currentViewMode={viewMode}
-          salonName={salonConfig.salonName}
-          onClose={() => setShowChatHub(false)}
-        />
-      )}
-
-      {showCompareModal && (() => {
-        const [initialA, initialB] = getInitialComparePair();
-        return (
-          <VoiceComparisonModal
-            voices={VOICE_DATA}
-            initialVoiceA={initialA}
-            initialVoiceB={initialB}
-            favorites={favorites}
-            onToggleFavorite={toggleFavorite}
-            onUseInStudio={(voiceName) => {
-              setShowCompareModal(false);
-              handleUseInStudio(voiceName);
-            }}
-            onSyncPair={(a, b) => {
-              setCompareVoices((prev) =>
-                prev[0] === a && prev[1] === b ? prev : [a, b]
-              );
-            }}
-            onClose={() => setShowCompareModal(false)}
-            isDarkMode={isDarkMode}
-          />
-        );
-      })()}
 
       <OfflineIndicator />
     </div>

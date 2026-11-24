@@ -238,6 +238,7 @@ export interface WhatsAppBookingPayload {
   serviceTitle: string;
   bookingDate: string;
   timeSlot: string;
+  bookedAtLabel?: string;
   couponCode?: string;
   discountLabel?: string;
   totalPriceLabel?: string;
@@ -257,8 +258,9 @@ export function buildSalonWhatsAppUrl(payload: WhatsAppBookingPayload): string |
           `• Nome do Cliente: ${payload.customerName.trim() || 'Convidado'}`,
           ...(payload.customerPhone?.trim() ? [`• Celular: ${payload.customerPhone.trim()}`] : []),
           `• Serviço: ${payload.serviceTitle}`,
-          `• Data: ${payload.bookingDate}`,
+          `• Data do Horário: ${payload.bookingDate}`,
           `• Horário: ${payload.timeSlot}`,
+          ...(payload.bookedAtLabel ? [`• Reservado em: ${payload.bookedAtLabel}`] : []),
           ...(payload.couponCode
             ? [`• Cupom IA: ${payload.couponCode}${payload.discountLabel ? ` (${payload.discountLabel})` : ''}`]
             : []),
@@ -272,8 +274,9 @@ export function buildSalonWhatsAppUrl(payload: WhatsAppBookingPayload): string |
           `• Customer Name: ${payload.customerName.trim() || 'Guest'}`,
           ...(payload.customerPhone?.trim() ? [`• Mobile Number: ${payload.customerPhone.trim()}`] : []),
           `• Service: ${payload.serviceTitle}`,
-          `• Date: ${payload.bookingDate}`,
-          `• Time: ${payload.timeSlot}`,
+          `• Slot Date: ${payload.bookingDate}`,
+          `• Slot Time: ${payload.timeSlot}`,
+          ...(payload.bookedAtLabel ? [`• Booked At: ${payload.bookedAtLabel}`] : []),
           ...(payload.couponCode
             ? [`• AI Coupon: ${payload.couponCode}${payload.discountLabel ? ` (${payload.discountLabel})` : ''}`]
             : []),
@@ -286,8 +289,9 @@ export function buildSalonWhatsAppUrl(payload: WhatsAppBookingPayload): string |
           `• কাস্টমারের নাম: ${payload.customerName.trim() || 'Guest'}`,
           ...(payload.customerPhone?.trim() ? [`• মোবাইল নম্বর: ${payload.customerPhone.trim()}`] : []),
           `• সার্ভিস: ${payload.serviceTitle}`,
-          `• তারিখ: ${payload.bookingDate}`,
-          `• সময়: ${payload.timeSlot}`,
+          `• নির্ধারিত তারিখ: ${payload.bookingDate}`,
+          `• নির্ধারিত সময়: ${payload.timeSlot}`,
+          ...(payload.bookedAtLabel ? [`• বুকিং করার সময়: ${payload.bookedAtLabel}`] : []),
           ...(payload.couponCode
             ? [`• AI কুপন: ${payload.couponCode}${payload.discountLabel ? ` (${payload.discountLabel})` : ''}`]
             : []),

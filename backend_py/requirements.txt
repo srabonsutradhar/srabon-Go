@@ -1,0 +1,3 @@
+# Srabon Go Python Smart Engine uses only Python 3.11 standard library modules
+# (http.server, json, re, math, unicodedata, wave, struct, base64, threading)
+# so it runs reliably with zero external pip package overhead.

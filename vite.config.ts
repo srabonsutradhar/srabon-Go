@@ -1,6 +1,7 @@
 import path from 'path';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig(() => {
@@ -18,9 +19,18 @@ export default defineConfig(() => {
           main: path.resolve(__dirname, 'index.html'),
           salon: path.resolve(__dirname, 'salon.html'),
         },
+        output: {
+          manualChunks: {
+            'vendor-react': ['react', 'react-dom'],
+            'vendor-firebase': ['firebase/app', 'firebase/auth', 'firebase/firestore'],
+            'vendor-icons': ['lucide-react'],
+            'vendor-motion': ['framer-motion'],
+          },
+        },
       },
     },
     plugins: [
+      tailwindcss(),
       react(),
       VitePWA({
         registerType: 'autoUpdate',

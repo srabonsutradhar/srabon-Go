@@ -70,6 +70,7 @@ import { generateAiSalonCoupon } from '../utils/salonCoupon';
 import { STUDIO_MEDIA } from '../utils/studioAlbums';
 import {
   copyTextSafely,
+  extractTimestampMillis,
   formatBookingCreatedTimestamp,
   localizeBookingStatus,
   localizeSalonService,
@@ -77,6 +78,7 @@ import {
 } from '../utils/i18n';
 import CompletionSignatureModal from './CompletionSignatureModal';
 import PWAInstallButton from './PWAInstallButton';
+import { fetchSalonSmartInsights, SmartSalonInsights } from '../utils/smartEngine';
 
 interface SalonBookingPageProps {
   user: User;
@@ -156,6 +158,7 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
   const [loadingQueue, setLoadingQueue] = useState(true);
   const [autoCancelNotice, setAutoCancelNotice] = useState<string | null>(null);
   const [signingBooking, setSigningBooking] = useState<SalonBooking | null>(null);
+  const [smartInsights, setSmartInsights] = useState<SmartSalonInsights | null>(null);
   const [notifPermission, setNotifPermission] = useState<NotificationPermission | 'unsupported'>(() =>
     typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'unsupported'
   );
@@ -270,11 +273,11 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
       (snapshot) => {
         const list: SalonBooking[] = snapshot.docs.map((d) => ({
           id: d.id,
-          ...(d.data() as Omit<SalonBooking, 'id'>),
+          ...(d.data({ serverTimestamps: 'estimate' }) as Omit<SalonBooking, 'id'>),
         }));
         list.sort((a, b) => {
-          const at = a.createdAt?.toMillis?.() ?? 0;
-          const bt = b.createdAt?.toMillis?.() ?? 0;
+          const at = extractTimestampMillis(a.createdAt) ?? 0;
+          const bt = extractTimestampMillis(b.createdAt) ?? 0;
           return bt - at;
         });
         setMyBookings(list);
@@ -318,7 +321,7 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
       (snapshot) => {
         const list: SalonQueueTicket[] = snapshot.docs.map((d) => ({
           id: d.id,
-          ...(d.data() as Omit<SalonQueueTicket, 'id'>),
+          ...(d.data({ serverTimestamps: 'estimate' }) as Omit<SalonQueueTicket, 'id'>),
         }));
         list.sort((a, b) => a.serialNumber - b.serialNumber);
         setQueueTickets(list);
@@ -352,7 +355,7 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
       (snapshot) => {
         const list: SalonQueueTicket[] = snapshot.docs.map((d) => ({
           id: d.id,
-          ...(d.data() as Omit<SalonQueueTicket, 'id'>),
+          ...(d.data({ serverTimestamps: 'estimate' }) as Omit<SalonQueueTicket, 'id'>),
         }));
         list.sort((a, b) => a.serialNumber - b.serialNumber);
         setSeparateTodayTickets(list);
@@ -454,6 +457,43 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
     const myTicketsOnDate = queueTickets.filter((t) => t.uid === user.uid);
     return { total, completed, cancelled, active, currentServing, myTicketsOnDate };
   }, [queueTickets, queueSummary, user.uid]);
+
+  const nowMinuteBucket = Math.floor(nowMs / 60000);
+  useEffect(() => {
+    const controller = new AbortController();
+    const nowDateObj = new Date(nowMs);
+    const nowMinutes = nowDateObj.getHours() * 60 + nowDateObj.getMinutes();
+    const activeDateTickets =
+      queueDate === bookingDate
+        ? queueTickets
+        : bookingDate === todayStr
+        ? separateTodayTickets
+        : [];
+
+    const timer = window.setTimeout(() => {
+      fetchSalonSmartInsights({
+        bookingDate,
+        todayDate: todayStr,
+        nowMinutes,
+        timeSlots: SALON_TIME_SLOTS,
+        tickets: activeDateTickets.map((t) => ({
+          timeSlot: t.timeSlot,
+          status: t.status,
+          serviceKey: t.serviceKey,
+        })),
+        signal: controller.signal,
+      }).then((res) => {
+        if (!controller.signal.aborted && isMountedRef.current && res) {
+          setSmartInsights(res);
+        }
+      });
+    }, 250);
+
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [bookingDate, todayStr, nowMinuteBucket, queueDate, queueTickets, separateTodayTickets]);
 
   useEffect(() => {
     const activeTodayBookings = myBookings.filter(
@@ -819,6 +859,7 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
           serviceTitle: `${localizedSelected.primaryTitle} (Serial #${assignedSerial})`,
           bookingDate,
           timeSlot,
+          bookedAtLabel: formatBookingCreatedTimestamp(Date.now(), lang)?.dateTimeLabel,
           couponCode: usingCouponNow && coupon ? coupon.code : undefined,
           discountLabel:
             usingCouponNow && coupon
@@ -1381,6 +1422,7 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
                   );
                   const previousTicket = earlierTickets[earlierTickets.length - 1] || null;
                   const localizedSvc = localizeSalonService(myTicket.serviceKey, lang, salonConfig).primaryTitle;
+                  const myBookedStamp = formatBookingCreatedTimestamp(myTicket.createdAt, lang);
 
                   return (
                     <div
@@ -1391,7 +1433,7 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
                         <div className="flex items-center gap-2">
                           <span className="inline-flex items-center gap-1 text-base font-bold text-amber-700 dark:text-amber-300 tabular-nums">
                             <Hash size={15} />
-                            {bi(`সিরিয়াল ${myTicket.serialNumber}`, `Serial ${myTicket.serialNumber}`)}
+                            {bi(`সিরিয়াল ${myTicket.serialNumber}`, `Serial ${myTicket.serialNumber}`, `Senha ${myTicket.serialNumber}`)}
                           </span>
                           <span className="text-xs text-zinc-500 dark:text-zinc-400">·</span>
                           <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
@@ -1404,6 +1446,17 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
                       </div>
 
                       <div className="text-xs text-zinc-700 dark:text-zinc-300 space-y-1">
+                        <p className="tabular-nums font-medium text-amber-800 dark:text-amber-200">
+                          {bi('বুকিং করা হয়েছে:', 'Booked At:', 'Reservado em:')}{' '}
+                          <span className="font-semibold text-zinc-900 dark:text-white">
+                            {myBookedStamp ? myBookedStamp.dateTimeLabel : bi('এইমাত্র', 'Just now', 'Agora mesmo')}
+                          </span>
+                          {myBookedStamp && myBookedStamp.localDateKey < myTicket.bookingDate && (
+                            <span className="ml-1.5 text-amber-700 dark:text-amber-300">
+                              ({bi('আগের দিন বুকিং', 'Booked day before', 'Reserva antecipada')})
+                            </span>
+                          )}
+                        </p>
                         {!previousTicket ? (
                           <p className="font-medium text-emerald-700 dark:text-emerald-300">
                             {bi(
@@ -1475,6 +1528,7 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
                   const isMine = t.uid === user.uid;
                   const svcTitle = localizeSalonService(t.serviceKey, lang, salonConfig).primaryTitle;
                   const isSignedEither = t.hasCompletionSignature || t.hasShopSignature;
+                  const ticketBookedStamp = formatBookingCreatedTimestamp(t.createdAt, lang);
                   return (
                     <div
                       key={t.id}
@@ -1487,11 +1541,21 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
                       <div className="min-w-0 space-y-1">
                         <p className="font-semibold text-zinc-900 dark:text-white truncate tabular-nums leading-snug">
                           #{t.serialNumber} · {t.timeSlot}
-                          {isMine ? bi(' (আপনি)', ' (You)') : ''}
+                          {isMine ? bi(' (আপনি)', ' (You)', ' (Você)') : ''}
                         </p>
                         <p className="text-xs text-zinc-500 dark:text-zinc-400 truncate leading-snug">
                           {svcTitle}
-                          {isSignedEither ? bi(' · স্বাক্ষরিত ✓', ' · Signed ✓') : ''}
+                          {isSignedEither ? bi(' · স্বাক্ষরিত ✓', ' · Signed ✓', ' · Assinado ✓') : ''}
+                        </p>
+                        <p className="text-xs font-medium text-amber-700 dark:text-amber-300 truncate tabular-nums leading-snug">
+                          {bi('বুকিং:', 'Booked:', 'Reservado:')}{' '}
+                          {ticketBookedStamp
+                            ? `${ticketBookedStamp.shortDateTimeLabel}${
+                                ticketBookedStamp.localDateKey < t.bookingDate
+                                  ? bi(' (আগের দিন)', ' (Day before)', ' (Dia anterior)')
+                                  : ''
+                              }`
+                            : bi('এইমাত্র', 'Just now', 'Agora mesmo')}
                         </p>
                       </div>
                       <span
@@ -1658,9 +1722,45 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
                     )}
                   </span>
                 </div>
+                {smartInsights && smartInsights.bestSlot && smartInsights.bookingDate === bookingDate && (
+                  <div className="flex flex-wrap items-center justify-between gap-2 pb-2 text-xs text-zinc-600 dark:text-zinc-300 tabular-nums">
+                    <span>
+                      {bi('সেরা সময়:', 'Best open slot:', 'Melhor horário:')}{' '}
+                      <strong className="text-zinc-900 dark:text-white">{smartInsights.bestSlot}</strong>
+                      {' · '}
+                      {smartInsights.bestSlotBookedCount === 0
+                        ? bi('এখনো খালি', 'No wait', 'Sem espera')
+                        : bi(
+                            `${smartInsights.bestSlotBookedCount} জন বুকড`,
+                            `${smartInsights.bestSlotBookedCount} booked`,
+                            `${smartInsights.bestSlotBookedCount} agendado(s)`
+                          )}
+                      {smartInsights.activeQueueCount > 0
+                        ? ` · ${bi(
+                            `সক্রিয় সিরিয়াল ${smartInsights.activeQueueCount}`,
+                            `Active queue ${smartInsights.activeQueueCount}`,
+                            `Fila ativa ${smartInsights.activeQueueCount}`
+                          )}`
+                        : ''}
+                    </span>
+                    {timeSlot !== smartInsights.bestSlot && (
+                      <button
+                        type="button"
+                        onClick={() => setTimeSlot(smartInsights.bestSlot!)}
+                        className="font-semibold text-amber-700 dark:text-amber-400 hover:underline"
+                      >
+                        {bi('এই স্লট নিন', 'Use best slot', 'Usar este horário')}
+                      </button>
+                    )}
+                  </div>
+                )}
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-2 gap-2.5">
                   {SALON_TIME_SLOTS.map((slot) => {
                     const isExpiredSlot = isBookingTimeExpired(bookingDate, slot, nowMs, 0);
+                    const slotInsight =
+                      smartInsights?.bookingDate === bookingDate
+                        ? smartInsights.slots.find((s) => s.timeSlot === slot)
+                        : undefined;
                     return (
                       <button
                         key={slot}
@@ -1675,7 +1775,12 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
                             : 'bg-zinc-50 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border-zinc-200 dark:border-zinc-700 hover:border-zinc-400'
                         }`}
                       >
-                        {slot}
+                        <span>{slot}</span>
+                        {!isExpiredSlot && slotInsight && slotInsight.bookedCount > 0 && (
+                          <span className="ml-1.5 text-xs opacity-75">
+                            ({slotInsight.bookedCount})
+                          </span>
+                        )}
                       </button>
                     );
                   })}
@@ -1905,17 +2010,26 @@ const SalonBookingPage: React.FC<SalonBookingPageProps> = ({
                       )}
                     </div>
                     <p className="text-xs sm:text-sm text-zinc-600 dark:text-zinc-300 tabular-nums leading-relaxed">
-                      {bi('তারিখ:', 'Date:')} {b.bookingDate} · {bi('সময়:', 'Time:')} {b.timeSlot} ({bi('শেষ সীমা:', 'Cutoff:')} {cutoffLabel}) · {bi('ফোন:', 'Phone:')} {b.customerPhone}
+                      {bi('নির্ধারিত স্লট:', 'Appointment Slot:', 'Horário marcado:')} {b.bookingDate} · {b.timeSlot} ({bi('শেষ সীমা:', 'Cutoff:', 'Limite:')} {cutoffLabel}) · {bi('ফোন:', 'Phone:', 'Telefone:')} {b.customerPhone}
                     </p>
                     {(() => {
                       const bookedStamp = formatBookingCreatedTimestamp(b.createdAt, lang);
+                      const bookedEarlierDay = Boolean(bookedStamp && bookedStamp.localDateKey < b.bookingDate);
                       return (
-                        <p className="text-xs sm:text-sm text-amber-700 dark:text-amber-300 font-medium tabular-nums leading-relaxed">
-                          {bi('বুকিং করার সময়:', 'Booked At:')}{' '}
-                          <span className="font-semibold text-zinc-900 dark:text-white">
-                            {bookedStamp ? bookedStamp.dateTimeLabel : bi('এইমাত্র', 'Just now')}
+                        <div className="inline-flex flex-wrap items-center gap-x-2 gap-y-1 px-3 py-1.5 rounded-xl bg-amber-50/90 dark:bg-amber-950/35 border border-amber-200/80 dark:border-amber-800/60 text-xs sm:text-sm tabular-nums">
+                          <Clock size={14} className="text-amber-600 dark:text-amber-400 shrink-0" />
+                          <span className="font-medium text-amber-800 dark:text-amber-200">
+                            {bi('বুকিং করার তারিখ ও সময়:', 'Booked Date & Time:', 'Data e Hora da Reserva:')}
                           </span>
-                        </p>
+                          <span className="font-semibold text-zinc-900 dark:text-white">
+                            {bookedStamp ? bookedStamp.dateTimeLabel : bi('এইমাত্র', 'Just now', 'Agora mesmo')}
+                          </span>
+                          {bookedEarlierDay && (
+                            <span className="text-xs font-semibold text-amber-700 dark:text-amber-300">
+                              ({bi('আগের দিন বুকিং', 'Booked day before', 'Reservado antes')})
+                            </span>
+                          )}
+                        </div>
                       );
                     })()}
                     <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 tabular-nums leading-relaxed">

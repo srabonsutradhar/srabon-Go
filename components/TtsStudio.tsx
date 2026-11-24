@@ -58,6 +58,12 @@ import {
 import { getVoiceAlbumVisual } from '../utils/studioAlbums';
 import { renderCalibratedAudioBytes } from '../utils/voiceClone';
 import {
+  analyzeScriptSmart,
+  inspectAudioSmart,
+  SmartAudioInspection,
+  SmartScriptAnalysis,
+} from '../utils/smartEngine';
+import {
   localizeDate,
   localizeGender,
   localizePitch,
@@ -186,6 +192,8 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
   const [downloaded, setDownloaded] = useState(false);
   const [backendAvailable, setBackendAvailable] = useState<boolean | null>(null);
   const [isUsingDeviceSpeech, setIsUsingDeviceSpeech] = useState(false);
+  const [scriptAnalysis, setScriptAnalysis] = useState<SmartScriptAnalysis | null>(null);
+  const [audioInspection, setAudioInspection] = useState<SmartAudioInspection | null>(null);
 
   const audioContextRef = useRef<AudioContext | null>(null);
   const sourceNodeRef = useRef<AudioBufferSourceNode | null>(null);
@@ -282,6 +290,35 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
     : selectedVoiceName;
   const requestKey = `${calibrationKey}::boost:${effectiveBoost ? 1 : 0}::${effectiveTtsStyle}::${text.trim()}`;
   const isOverCharLimit = text.length > caps.maxScriptChars;
+
+  useEffect(() => {
+    setAudioInspection(null);
+  }, [requestKey]);
+
+  useEffect(() => {
+    const trimmed = text.trim();
+    if (!trimmed) {
+      setScriptAnalysis(null);
+      return;
+    }
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      analyzeScriptSmart({
+        text: trimmed,
+        maxChars: caps.maxScriptChars,
+        signal: controller.signal,
+      }).then((res) => {
+        if (!controller.signal.aborted && isMountedRef.current && res) {
+          setScriptAnalysis(res);
+        }
+      });
+    }, 350);
+
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [text, caps.maxScriptChars]);
 
   const clearLoopTimer = () => {
     if (loopTimerRef.current !== null) {
@@ -623,6 +660,11 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
       if (!isMountedRef.current || activeRunIdRef.current !== runId) return;
       setCachedBytes(bytes);
       setCachedKey(requestKey);
+      inspectAudioSmart(bytes).then((stats) => {
+        if (isMountedRef.current && stats) {
+          setAudioInspection(stats);
+        }
+      });
 
       await playBytes(bytes, runId);
     } catch (err: any) {
@@ -700,6 +742,11 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
         if (isMountedRef.current) {
           setCachedBytes(bytesToDownload);
           setCachedKey(requestKey);
+          inspectAudioSmart(bytesToDownload).then((stats) => {
+            if (isMountedRef.current && stats) {
+              setAudioInspection(stats);
+            }
+          });
         }
       } catch (err: any) {
         const msg = err?.message || 'Failed to generate audio for download.';
@@ -1031,6 +1078,53 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
                     )}
                   </div>
                 </div>
+                {scriptAnalysis && scriptAnalysis.wordCount > 0 && (() => {
+                  const detectedLabel =
+                    scriptAnalysis.language.primary === 'bn'
+                      ? bi('বাংলা', 'Bengali', 'Bengali')
+                      : scriptAnalysis.language.primary === 'pt'
+                      ? bi('পর্তুগিজ', 'Portuguese', 'Português')
+                      : scriptAnalysis.language.primary === 'mixed'
+                      ? bi('মিশ্র ভাষা', 'Mixed', 'Misto')
+                      : bi('ইংরেজি', 'English', 'Inglês');
+                  const recPreset = STUDIO_STYLE_PRESETS.find(
+                    (p) => p.id === scriptAnalysis.recommendedStyle.presetId
+                  );
+                  const canApplyRec =
+                    Boolean(recPreset) &&
+                    recPreset!.value !== style &&
+                    (recPreset!.tier !== 'yearly' || caps.allowExtraStyles);
+                  const recLabel = recPreset
+                    ? localizeStudioPresetLabel(recPreset.id, recPreset.label, lang)
+                    : '';
+                  return (
+                    <div className="flex flex-wrap items-center justify-between gap-2 px-1 pt-0.5 text-xs text-zinc-500 dark:text-zinc-400 tabular-nums">
+                      <span>
+                        {detectedLabel} · {scriptAnalysis.wordCount}{' '}
+                        {bi('শব্দ', 'words', 'palavras')} · ~{scriptAnalysis.estimatedSeconds}s
+                        {scriptAnalysis.chunkCount > 1
+                          ? ` · ${scriptAnalysis.chunkCount} ${bi('অংশ', 'parts', 'partes')}`
+                          : ''}
+                      </span>
+                      {canApplyRec && recPreset && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (isPlaying) stopPlayback();
+                            setStyle(recPreset.value);
+                          }}
+                          className="font-medium text-indigo-600 dark:text-indigo-400 hover:underline"
+                        >
+                          {bi(
+                            `সাজেস্টেড স্টাইল: ${recLabel}`,
+                            `Apply smart tone: ${recLabel}`,
+                            `Aplicar tom sugerido: ${recLabel}`
+                          )}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Saved Custom Scripts Shelf */}
@@ -1459,6 +1553,14 @@ const TtsStudio: React.FC<TtsStudioProps> = ({
                   </div>
                 )}
               </div>
+
+              {audioInspection && cachedKey === requestKey && !isUsingDeviceSpeech && (
+                <p className="text-xs text-zinc-500 dark:text-zinc-400 tabular-nums text-center">
+                  {bi('অডিও আউটপুট:', 'Audio output:', 'Saída de áudio:')}{' '}
+                  {(audioInspection.sampleRate / 1000).toFixed(0)} kHz ·{' '}
+                  {audioInspection.durationSeconds.toFixed(1)}s · {audioInspection.rmsDbfs} dBFS
+                </p>
+              )}
 
               {userNotice && (
                 <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-xs text-amber-800 dark:text-amber-200 flex items-start gap-2">
